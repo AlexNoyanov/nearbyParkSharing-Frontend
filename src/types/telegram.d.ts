@@ -1,0 +1,33 @@
+declare global {
+  interface TelegramWebApp {
+    ready: () => void
+    expand: () => void
+    setBackgroundColor: (color: string) => void
+    setHeaderColor: (color: string) => void
+  BackButton: {
+    show: () => void
+    hide: () => void
+    onClick: (handler: () => void) => void
+    offClick: (handler: () => void) => void
+  }
+    themeParams?: Record<string, string>
+    initDataUnsafe?: {
+      user?: {
+        id?: number
+        first_name?: string
+        last_name?: string
+        username?: string
+        language_code?: string
+      }
+    }
+  }
+
+  interface Window {
+    Telegram?: {
+      WebApp?: TelegramWebApp
+    }
+  }
+}
+
+export {}
+

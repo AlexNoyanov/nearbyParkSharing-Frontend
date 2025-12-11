@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+    <meta
+      http-equiv="Cache-Control"
+      content="no-cache, no-store, must-revalidate, max-age=0"
+    />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <meta name="telegram-web-app-cache" content="no-cache" />
+    <title>parksharing</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+      // Force cache clear for Telegram WebView
+      (function () {
+        const APP_VERSION = document.querySelector('meta[name="app-version"]')?.getAttribute('content') || Date.now();
+        const STORAGE_KEY = 'parksharing_app_version';
+        
+        // Check if version changed and force reload
+        const storedVersion = localStorage.getItem(STORAGE_KEY);
+        if (storedVersion && storedVersion !== APP_VERSION) {
+          console.log('App version changed, clearing cache and reloading...');
+          localStorage.clear();
+          sessionStorage.clear();
+          
+          // Clear service worker cache if exists
+          if ("serviceWorker" in navigator) {
+            navigator.serviceWorker
+              .getRegistrations()
+              .then(function (registrations) {
+                for (let registration of registrations) {
+                  registration.unregister();
+                }
+              });
+          }
+          
+          // Clear cache storage
+          if ("caches" in window) {
+            caches.keys().then(function (names) {
+              for (let name of names) caches.delete(name);
+            });
+          }
+          
+          // Force reload in Telegram WebView
+          if (window.Telegram && window.Telegram.WebApp) {
+            try {
+              // Try to reload the WebApp
+              if (window.Telegram.WebApp.reload) {
+                window.Telegram.WebApp.reload();
+              } else {
+                // Fallback to window reload
+                setTimeout(() => window.location.reload(true), 100);
+              }
+            } catch (e) {
+              setTimeout(() => window.location.reload(true), 100);
+            }
+          } else {
+            setTimeout(() => window.location.reload(true), 100);
+          }
+          return;
+        }
+        
+        // Store current version
+        localStorage.setItem(STORAGE_KEY, APP_VERSION);
+        
+        // Clear service worker cache if exists
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker
+            .getRegistrations()
+            .then(function (registrations) {
+              for (let registration of registrations) {
+                registration.unregister();
+              }
+            });
+        }
+        
+        // Clear cache storage
+        if ("caches" in window) {
+          caches.keys().then(function (names) {
+            for (let name of names) caches.delete(name);
+          });
+        }
+        
+        // Initialize Telegram WebApp
+        if (window.Telegram && window.Telegram.WebApp) {
+          window.Telegram.WebApp.ready();
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
