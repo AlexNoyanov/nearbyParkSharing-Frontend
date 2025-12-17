@@ -22,6 +22,7 @@ const emit = defineEmits<{
 const mapContainer = ref<HTMLElement | null>(null)
 const filterSheetOpen = ref(false)
 const filterSheetHeight = ref(0) // Start closed
+const selectedPreviewLocation = ref<Location | null>(null)
 const isDragging = ref(false)
 const dragStartY = ref(0)
 const dragStartHeight = ref(0)
@@ -241,7 +242,10 @@ onMounted(() => {
           }).addTo(map!)
 
           marker.on('click', () => {
-            emit('select-location', location)
+            // Открываем предпросмотр в шторке вместо перехода на полный экран
+            selectedPreviewLocation.value = location
+            filterSheetOpen.value = true
+            filterSheetHeight.value = 500
           })
 
           markers.push(marker)
@@ -307,6 +311,24 @@ const handleFilterTouchMove = (e: TouchEvent) => {
 
 const handleFilterTouchEnd = () => {
   isDragging.value = false
+
+  // Если шторку утащили достаточно вниз — сворачиваем до конца
+  if (filterSheetHeight.value < 300) {
+    filterSheetOpen.value = false
+    filterSheetHeight.value = 0
+    selectedPreviewLocation.value = null
+    return
+  }
+
+  // Если тянут почти до максимума и есть выбранное место — открываем полный предпросмотр
+  if (selectedPreviewLocation.value && filterSheetHeight.value > 580) {
+    emit('select-location', selectedPreviewLocation.value)
+    return
+  }
+
+  // Иначе фиксируем в среднем раскрытом состоянии
+  filterSheetOpen.value = true
+  filterSheetHeight.value = 500
 }
 
 // Toggle filter sheet
@@ -379,15 +401,74 @@ watch(monthlyRent, (isMonthly) => {
       v-if="filterSheetOpen"
       class="rent-out-map__filter-sheet"
       :style="{ height: filterSheetHeight + 'px' }"
-      @touchstart="handleFilterTouchStart"
-      @touchmove="handleFilterTouchMove"
-      @touchend="handleFilterTouchEnd"
     >
-      <div class="rent-out-map__filter-handle" @click="toggleFilterSheet">
+      <div 
+        class="rent-out-map__filter-handle" 
+        @click="toggleFilterSheet"
+        @touchstart.stop.prevent="handleFilterTouchStart"
+        @touchmove.stop.prevent="handleFilterTouchMove"
+        @touchend.stop.prevent="handleFilterTouchEnd"
+    >
         <div class="rent-out-map__handle-bar"></div>
       </div>
       
       <div class="rent-out-map__filter-content">
+        <!-- Preview mode inside sheet -->
+        <div v-if="selectedPreviewLocation" class="rent-out-map__preview">
+          <div class="rent-out-map__preview-header">
+            <h3 class="rent-out-map__preview-title">Предпросмотр места</h3>
+            <button
+              type="button"
+              class="rent-out-map__preview-close"
+              @click="selectedPreviewLocation = null"
+            >
+              ✕
+            </button>
+          </div>
+          
+          <div class="rent-out-map__preview-card">
+            <div class="rent-out-map__preview-address">
+              <span class="rent-out-map__preview-address-main">
+                {{ selectedPreviewLocation.address }}
+              </span>
+            </div>
+            <div class="rent-out-map__preview-prices">
+              <div class="rent-out-map__preview-price">
+                <span class="rent-out-map__preview-price-label">Час</span>
+                <span class="rent-out-map__preview-price-value">
+                  {{ selectedPreviewLocation.priceHour }}
+                </span>
+              </div>
+              <div class="rent-out-map__preview-price">
+                <span class="rent-out-map__preview-price-label">День</span>
+                <span class="rent-out-map__preview-price-value">
+                  {{ selectedPreviewLocation.priceDay }}
+                </span>
+              </div>
+              <div class="rent-out-map__preview-price">
+                <span class="rent-out-map__preview-price-label">Месяц</span>
+                <span class="rent-out-map__preview-price-value">
+                  {{ selectedPreviewLocation.priceMonth }}
+                </span>
+              </div>
+            </div>
+            <p class="rent-out-map__preview-hint">
+              Потяните фильтр вверх до конца, чтобы открыть полное описание места.
+            </p>
+          </div>
+          
+          <button
+            v-if="selectedPreviewLocation"
+            type="button"
+            class="rent-out-map__preview-open-button"
+            @click="emit('select-location', selectedPreviewLocation)"
+          >
+            Открыть
+          </button>
+        </div>
+
+        <!-- Filters content (default mode) -->
+        <template v-else>
         <!-- Available Now Section -->
         <div class="rent-out-map__filter-section">
           <div class="rent-out-map__filter-row">
@@ -533,6 +614,7 @@ watch(monthlyRent, (isMonthly) => {
             <span>Применить фильтры</span>
           </button>
         </div>
+        </template>
       </div>
     </div>
   </section>
@@ -722,6 +804,110 @@ watch(monthlyRent, (isMonthly) => {
   padding: 0 24px 24px;
   padding-bottom: calc(24px + env(safe-area-inset-bottom));
   background: #f8fafc;
+}
+
+.rent-out-map__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rent-out-map__preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rent-out-map__preview-title {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  font-weight: 600;
+  font-size: 16px;
+  color: #1f2937;
+}
+
+.rent-out-map__preview-close {
+  border: none;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: #6b7280;
+}
+
+.rent-out-map__preview-card {
+  padding: 16px;
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rent-out-map__preview-address-main {
+  font-family: Inter, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.rent-out-map__preview-prices {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.rent-out-map__preview-price {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: Inter, sans-serif;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.rent-out-map__preview-price-value {
+  font-weight: 600;
+  font-size: 14px;
+  color: #2563eb;
+}
+
+.rent-out-map__preview-hint {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.rent-out-map__preview-open-button {
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: none;
+  background: #2563EB;
+  color: #ffffff;
+  font-family: Inter, sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
+}
+
+.rent-out-map__preview-open-button:hover {
+  background: #1D4ED8;
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.45);
+}
+
+.rent-out-map__preview-open-button:active {
+  background: #1E40AF;
+  box-shadow: 0 1px 4px rgba(37, 99, 235, 0.35);
+  transform: translateY(1px);
 }
 
 .rent-out-map__filter-section {

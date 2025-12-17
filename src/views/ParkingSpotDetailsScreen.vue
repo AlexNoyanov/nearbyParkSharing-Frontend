@@ -22,11 +22,15 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'back'): void
   (e: 'select-dates'): void
+  (e: 'open-full-map'): void
 }>()
 
 const mapContainer = ref<HTMLElement | null>(null)
+const galleryContainer = ref<HTMLElement | null>(null)
+
+const photos = [parkingLotImage, parkingLotImage, parkingLotImage]
+const currentPhotoIndex = ref(0)
 let map: L.Map | null = null
-let marker: L.Marker | null = null
 
 // Fix Leaflet default icon issue
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -80,7 +84,7 @@ onMounted(() => {
 
       // Add marker at location
       const locationIcon = createLocationIcon()
-      marker = L.marker([props.location.lat, props.location.lng], {
+      L.marker([props.location.lat, props.location.lng], {
         icon: locationIcon,
       }).addTo(map)
 
@@ -97,11 +101,18 @@ onBeforeUnmount(() => {
     map.remove()
     map = null
   }
-  marker = null
 })
 
 const copyAddress = () => {
   navigator.clipboard.writeText(props.location.address)
+}
+
+const handleGalleryScroll = () => {
+  if (!galleryContainer.value) return
+  const container = galleryContainer.value
+  const width = container.offsetWidth || 1
+  const index = Math.round(container.scrollLeft / width)
+  currentPhotoIndex.value = Math.max(0, Math.min(photos.length - 1, index))
 }
 </script>
 
@@ -121,11 +132,25 @@ const copyAddress = () => {
     <div class="parking-details__content">
       <!-- Gallery -->
       <div class="parking-details__gallery">
-        <div class="parking-details__main-photo">
-          <img :src="parkingLotImage" alt="Парковочное место" class="parking-details__photo-image" />
-          <div class="parking-details__photo-overlay">
-            <span>1 / 3</span>
+        <div
+          ref="galleryContainer"
+          class="parking-details__main-photo-container"
+          @scroll.passive="handleGalleryScroll"
+        >
+          <div
+            v-for="(photo, index) in photos"
+            :key="index"
+            class="parking-details__main-photo"
+          >
+            <img
+              :src="photo"
+              alt="Парковочное место"
+              class="parking-details__photo-image"
+            />
           </div>
+        </div>
+        <div class="parking-details__photo-overlay">
+          <span>{{ currentPhotoIndex + 1 }} / {{ photos.length }}</span>
         </div>
       </div>
 
@@ -171,7 +196,7 @@ const copyAddress = () => {
       </div>
 
       <!-- Description Section -->
-      <div class="parking-details__section parking-details__description-section">
+      <div v-if="false" class="parking-details__section parking-details__description-section">
         <h3 class="parking-details__description-title">Описание</h3>
         <p class="parking-details__description">
           Удобное парковочное место рядом с главным входом в ТЦ "Галерея". Место хорошо освещено, есть охрана. Въезд с ул. Тверская, место №15 во втором ряду от входа. Ориентир - красная колонна.
@@ -179,7 +204,7 @@ const copyAddress = () => {
       </div>
 
       <!-- Features Section -->
-      <div class="parking-details__section">
+      <div v-if="false" class="parking-details__section">
         <h3 class="parking-details__section-title">Особенности</h3>
         <div class="parking-details__features">
           <div class="parking-details__feature">
@@ -234,9 +259,9 @@ const copyAddress = () => {
       </div>
 
       <!-- Location Section -->
-      <div class="parking-details__section">
+      <div v-if="false" class="parking-details__section">
         <h3 class="parking-details__section-title">Местоположение</h3>
-        <div class="parking-details__map-container">
+        <div class="parking-details__map-container" @click="emit('open-full-map')">
           <div ref="mapContainer" class="parking-details__map"></div>
         </div>
         <button type="button" class="parking-details__route-button">
@@ -314,14 +339,27 @@ const copyAddress = () => {
 }
 
 .parking-details__gallery {
-  margin: 0 -18px;
+  margin: 0;
+  position: relative;
+}
+
+.parking-details__main-photo-container {
+  width: 100%;
+  height: 192px;
+  overflow-x: auto;
+  display: flex;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  column-gap: 8px;
 }
 
 .parking-details__main-photo {
   width: 100%;
-  height: 192px;
+  height: 100%;
   position: relative;
-  border-radius: 0;
+  flex-shrink: 0;
+  scroll-snap-align: center;
+  border-radius: 16px;
   overflow: hidden;
 }
 
@@ -330,12 +368,13 @@ const copyAddress = () => {
   height: 100%;
   object-fit: cover;
   display: block;
+  border-radius: 8px;
 }
 
 .parking-details__photo-overlay {
   position: absolute;
   bottom: 12px;
-  right: 12px;
+  right: 24px;
   background: rgba(0, 0, 0, 0.5);
   color: white;
   padding: 0.5px 6px;
@@ -531,6 +570,16 @@ const copyAddress = () => {
 
 .parking-details__map-container {
   margin-bottom: 8px;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.parking-details__map-container:hover {
+  opacity: 0.9;
+}
+
+.parking-details__map-container:active {
+  opacity: 0.8;
 }
 
 .parking-details__map {

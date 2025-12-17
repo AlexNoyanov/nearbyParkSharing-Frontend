@@ -1,12 +1,26 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { ParkingSpot } from '../data/parkings'
 import type { User } from '../services/mockAuth'
 import searchIconUrl from '../assets/icons/icon-search.svg?url'
 
+type Booking = {
+  id: string
+  address: string
+  startDate: string
+  endDate: string
+  startTime: string
+  endTime: string
+  rentalType: 'hourly' | 'daily' | 'monthly'
+  createdAt: Date
+  status: 'awaiting' | 'confirmed' | 'active' | 'completed'
+}
+
 const props = defineProps<{ 
   userName?: string
   currentUser?: User | null
+  bookingsCount?: number
+  bookings?: Booking[]
 }>()
 
 const emit = defineEmits<{
@@ -14,6 +28,7 @@ const emit = defineEmits<{
   (e: 'open-rent-out'): void
   (e: 'open-booking', parking: ParkingSpot): void
   (e: 'open-history'): void
+  (e: 'open-chat'): void
 }>()
 
 type QuickAction = {
@@ -37,7 +52,7 @@ type StatCard = {
 }
 
 const stats: StatCard[] = props.currentUser ? [
-  { id: 'bookings', label: 'Мои брони', caption: 'Активные аренды', count: 2, tone: 'violet' },
+  { id: 'bookings', label: 'Мои брони', caption: 'Активные аренды', count: props.bookingsCount || 0, tone: 'violet' },
   { id: 'spaces', label: 'Мои места', caption: 'Сдаются сейчас', count: 1, tone: 'mint' },
 ] : [
   { id: 'bookings', label: 'Мои брони', caption: 'Активные аренды', count: 0, tone: 'violet' },
@@ -48,11 +63,13 @@ type ActivityEntry = {
   id: string
   title: string
   period: string
-  meta: string
+  meta?: string
   statusLabel: string
   statusTone: 'success' | 'neutral'
   statusMeta?: string
   parking: ParkingSpot | null
+  booking?: never
+  address?: never
 }
 
 // Commented out activity items to show empty list message
@@ -92,11 +109,70 @@ const activityFilters = ref([
   { id: 'sharing', label: 'Сдача мест', icon: 'key', isActive: true },
 ])
 
+// Automatically switch to "Аренда мест" filter if there are bookings
+watch(() => props.bookings, (bookings) => {
+  if (bookings && bookings.length > 0) {
+    const hasActiveBookings = bookings.some(b => b.status === 'awaiting' || b.status === 'confirmed' || b.status === 'active')
+    if (hasActiveBookings) {
+      activityFilters.value = activityFilters.value.map(filter => ({
+        ...filter,
+        isActive: filter.id === 'rentals'
+      }))
+    }
+  }
+}, { immediate: true })
+
 const handleFilterClick = (filterId: string) => {
   activityFilters.value = activityFilters.value.map(filter => ({
     ...filter,
     isActive: filter.id === filterId
   }))
+}
+
+// Computed property to get activities based on active filter
+const displayedActivities = computed(() => {
+  const activeFilter = activityFilters.value.find(f => f.isActive)
+  
+  if (activeFilter?.id === 'rentals') {
+    // Show bookings when "Аренда мест" filter is active
+    return (props.bookings || []).map(booking => ({
+      id: booking.id,
+      title: 'Запрос на бронирование',
+      address: booking.address,
+      period: formatBookingPeriod(booking),
+      statusLabel: booking.status === 'awaiting' ? 'Ожидает' : '',
+      statusMeta: booking.status === 'awaiting' ? 'начала аренды' : '',
+      statusTone: 'success' as const,
+      booking,
+      parking: null as ParkingSpot | null
+    })).reverse() // Show newest bookings first
+  } else {
+    // Show sharing activities (currently empty)
+    return recentActivities
+  }
+})
+
+const formatBookingPeriod = (booking: Booking): string => {
+  // Format date and time for display
+  const startDate = new Date(`${booking.startDate}T${booking.startTime}`)
+  const endDate = new Date(`${booking.endDate}T${booking.endTime}`)
+  
+  // Format date - use abbreviated month name
+  const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    month: 'short'
+  })
+  
+  const timeFormatter = new Intl.DateTimeFormat('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+  
+  if (booking.startDate === booking.endDate) {
+    return `${dateFormatter.format(startDate)}, ${timeFormatter.format(startDate)} — ${timeFormatter.format(endDate)}`
+  } else {
+    return `${dateFormatter.format(startDate)} — ${dateFormatter.format(endDate)}`
+  }
 }
 </script>
 
@@ -225,7 +301,7 @@ const handleFilterClick = (filterId: string) => {
           </button>
         </div>
 
-        <div v-if="recentActivities.length === 0" class="home__activity-empty">
+        <div v-if="displayedActivities.length === 0" class="home__activity-empty">
           <div class="home__activity-empty-icon">
             <svg width="46" height="37" viewBox="0 0 46 37" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M4.64062 17.0156C4.64062 15.75 4.85156 14.4844 5.20312 13.2891L28.125 30.9375C26.3672 31.4297 24.5391 31.6406 22.6406 31.6406C19.8984 31.6406 17.3672 31.1484 15.0469 30.3047C13.3594 31.7109 9.84375 33.8906 5.20312 33.8906C4.92188 33.8906 4.78125 33.8203 4.64062 33.6094C4.57031 33.3984 4.64062 33.1172 4.78125 32.9766C4.78125 32.9062 7.73438 29.7422 8.64844 26.2266C6.11719 23.6953 4.64062 20.5312 4.64062 17.0156ZM44.6484 32.4141C45.1406 32.7656 45.2812 33.4688 44.8594 33.9609L43.5234 35.7188C43.1016 36.2109 42.3984 36.2812 41.9062 35.9297L0.5625 3.9375C0.0703125 3.58594 0 2.88281 0.351562 2.39062L1.75781 0.632812C2.10938 0.140625 2.8125 0 3.30469 0.421875L10.6875 6.11719C13.8516 3.86719 18 2.39062 22.6406 2.39062C32.5547 2.39062 40.6406 9 40.6406 17.0156C40.6406 20.5312 39.0938 23.6953 36.6328 26.1562L44.6484 32.4141Z" fill="#D1D5DB"/>
@@ -235,15 +311,19 @@ const handleFilterClick = (filterId: string) => {
         </div>
 
         <ul v-else class="home__activity-list">
-          <li v-for="entry in recentActivities" :key="entry.id">
+          <li v-for="entry in displayedActivities" :key="entry.id">
             <button
               type="button"
               class="home__activity-item"
-              :disabled="!entry.parking"
-              @click="entry.parking && emit('open-booking', entry.parking)"
+              :class="{ 'home__activity-item--booking': entry.booking }"
+              :disabled="entry.booking ? false : !entry.parking"
+              @click="entry.booking ? emit('open-chat') : (entry.parking && emit('open-booking', entry.parking))"
             >
-              <span class="home__activity-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24">
+              <span class="home__activity-icon" :class="{ 'home__activity-icon--booking': entry.booking }" aria-hidden="true">
+                <svg v-if="entry.booking" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M16 5.53125C16 8.5625 13.5312 11 10.5 11C10.125 11 9.78125 10.9688 9.46875 10.9062L8.71875 11.75C8.5625 11.9062 8.375 12 8.15625 12H7V13.25C7 13.6875 6.65625 14 6.25 14H5V15.25C5 15.6875 4.65625 16 4.25 16H0.75C0.3125 16 0 15.6875 0 15.25V12.8125C0 12.625 0.0625 12.4375 0.21875 12.2812L5.25 7.25C5.09375 6.6875 5 6.125 5 5.5C5 2.46875 7.4375 0.03125 10.4688 0C13.5312 0 16 2.46875 16 5.53125ZM10.5 4C10.5 4.84375 11.1562 5.5 12 5.5C12.8125 5.5 13.5 4.84375 13.5 4C13.5 3.1875 12.8125 2.5 12 2.5C11.1562 2.5 10.5 3.1875 10.5 4Z" fill="#16A34A"/>
+                </svg>
+                <svg v-else viewBox="0 0 24 24">
                   <circle cx="10" cy="10" r="5" stroke="currentColor" stroke-width="1.6" />
                   <circle cx="10" cy="10" r="1.5" fill="currentColor" />
                   <path
@@ -258,11 +338,12 @@ const handleFilterClick = (filterId: string) => {
 
               <div class="home__activity-content">
                 <h3 class="home__activity-title">{{ entry.title }}</h3>
-                <p class="home__activity-period">{{ entry.period }}</p>
-                <p class="home__activity-meta">{{ entry.meta }}</p>
+                <p v-if="'address' in entry && entry.address" class="home__activity-address">{{ entry.address }}</p>
+                <p v-if="entry.period" class="home__activity-period">{{ entry.period }}</p>
+                <p v-if="'meta' in entry && entry.meta" class="home__activity-meta">{{ entry.meta }}</p>
               </div>
 
-              <div class="home__activity-status">
+              <div v-if="entry.statusLabel" class="home__activity-status">
                 <span
                   class="home__activity-status-label"
                   :class="{
@@ -297,6 +378,8 @@ const handleFilterClick = (filterId: string) => {
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
+  overflow-x: hidden;
+  min-width: 0;
 }
 
 .home__greeting {
@@ -608,6 +691,8 @@ const handleFilterClick = (filterId: string) => {
   padding: 16px;
   display: grid;
   gap: 16px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .home__activity-filters {
@@ -682,6 +767,8 @@ const handleFilterClick = (filterId: string) => {
   padding: 0;
   display: grid;
   gap: 12px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .home__activity-item {
@@ -699,6 +786,13 @@ const handleFilterClick = (filterId: string) => {
   transition: transform 0.2s ease;
   font: inherit;
   color: inherit;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.home__activity-item--booking {
+ /* border-color: #374151; */
+  border-width: 1px;
 }
 
 .home__activity-item:hover:not(:disabled) {
@@ -722,6 +816,21 @@ const handleFilterClick = (filterId: string) => {
   flex-shrink: 0;
 }
 
+.home__activity-icon--booking {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: #dcfce7;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.home__activity-icon--booking svg {
+  width: 16px;
+  height: 16px;
+}
+
 .home__activity-icon svg {
   width: 26px;
   height: 26px;
@@ -732,6 +841,21 @@ const handleFilterClick = (filterId: string) => {
   flex-direction: column;
   gap: 6px;
   flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.home__activity-address {
+  margin: 0;
+  font-size: 13.2px;
+  color: #4b5563;
+  font-weight: 400;
+  line-height: 1.4;
+  min-width: 0;
+  max-width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .home__activity-title {
@@ -739,6 +863,11 @@ const handleFilterClick = (filterId: string) => {
   font-size: 15.4px;
   font-weight: 600;
   color: #1f2937;
+  min-width: 0;
+  max-width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .home__activity-period {
@@ -746,12 +875,20 @@ const handleFilterClick = (filterId: string) => {
   font-size: 13.2px;
   color: #4b5563;
   font-weight: 500;
+  min-width: 0;
+  max-width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .home__activity-meta {
   margin: 0;
   font-size: 12.2px;
   color: #6b7280;
+  min-width: 0;
+  max-width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .home__activity-status {
@@ -760,15 +897,27 @@ const handleFilterClick = (filterId: string) => {
   align-items: flex-end;
   gap: 6px;
   flex-shrink: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .home__activity-status-label {
   padding: 4px 12px;
   border-radius: 9999px;
-  font-size: 12.8px;
+  font-size: 11px;
   font-weight: 600;
   background-color: #e5e7eb;
   color: #4b5563;
+}
+
+.home__activity-item--booking .home__activity-status-label {
+  background-color: transparent;
+  color: #16a34a;
+  padding: 0;
+  border-radius: 0;
+  font-size: 13.2px;
+  font-weight: 600;
 }
 
 .home__activity-status-label--success {
@@ -782,9 +931,47 @@ const handleFilterClick = (filterId: string) => {
 }
 
 .home__activity-status-meta {
-  font-size: 12px;
+  font-size: 11px;
   color: #6b7280;
   font-weight: 500;
+}
+
+.home__activity-item--booking .home__activity-status-meta {
+  color: #22C55E;
+  font-weight: 600;
+  font-size: 13.2px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.home__activity-item--booking .home__activity-status {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 0;
+  max-width: 100px;
+  flex-shrink: 1;
+}
+
+.home__activity-item--booking .home__activity-status-label {
+  white-space: normal;
+  word-wrap: break-word;
+  word-break: break-word;
+  max-width: 100%;
+  text-align: right;
+  color: #22C55E;
+  background-color: transparent;
+  padding: 0;
+  overflow-wrap: break-word;
+  min-width: 0;
+}
+
+.home__activity-item--booking .home__activity-status-meta {
+  color: #22C55E;
+  font-weight: 600;
 }
 
 .home__activity-empty {
@@ -868,8 +1055,81 @@ const handleFilterClick = (filterId: string) => {
     align-items: flex-start;
   }
 
+  .home__activity-item--booking {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .home__activity-item--booking .home__activity-content {
+    flex: 1;
+    min-width: 0;
+    gap: 4px;
+    overflow: hidden;
+  }
+
+  .home__activity-item--booking .home__activity-title {
+    font-size: 14px;
+    line-height: 1.3;
+    max-width: 100%;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  .home__activity-item--booking .home__activity-address {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .home__activity-item--booking .home__activity-period {
+    font-size: 11px;
+  }
+
   .home__activity-status {
     align-items: flex-start;
+  }
+
+  .home__activity-item--booking .home__activity-status {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    flex-shrink: 1;
+    text-align: right;
+    gap: 0;
+    min-width: 0;
+    max-width: 90px;
+  }
+
+  .home__activity-item--booking .home__activity-status-label {
+    font-size: 11px;
+    line-height: 1.3;
+    white-space: normal;
+    word-wrap: break-word;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    max-width: 100%;
+    color: #22C55E;
+    background-color: transparent;
+    padding: 0;
+    min-width: 0;
+  }
+
+  .home__activity-item--booking .home__activity-status-meta {
+    font-size: 11px;
+    line-height: 1.3;
+    color: #22C55E;
+    font-weight: 600;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .home__activity-item--booking .home__activity-icon--booking {
+    width: 48px;
+    height: 48px;
+    flex-shrink: 0;
   }
 }
 

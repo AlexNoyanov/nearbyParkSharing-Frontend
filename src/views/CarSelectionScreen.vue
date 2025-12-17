@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, nextTick } from 'vue'
 
 type Car = {
   id: string
@@ -52,6 +52,17 @@ const handleSelectButton = () => {
     }
   }
 }
+
+// Прокручиваем страницу к верху при монтировании компонента
+onMounted(async () => {
+  await nextTick()
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+  // Также прокручиваем контейнер контента, если он есть
+  const contentElement = document.querySelector('.car-selection__content')
+  if (contentElement) {
+    contentElement.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+})
 </script>
 
 <template>
@@ -132,6 +143,7 @@ const handleSelectButton = () => {
 }
 
 .car-selection__back {
+  /* margin-top: 20px; */
   width: 30px;
   height: 30px;
   border-radius: 50%;
@@ -151,8 +163,8 @@ const handleSelectButton = () => {
   font-size: 20px;
   line-height: 1.2;
   color: #1F2937;
-  flex: 1;
   text-align: center;
+  flex: 1;
 }
 
 .car-selection__header-spacer {
@@ -186,7 +198,7 @@ const handleSelectButton = () => {
 .car-selection__cars-list {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 8px;
 }
 
 .car-selection__car-card {
@@ -200,18 +212,7 @@ const handleSelectButton = () => {
   cursor: pointer;
   transition: all 0.2s ease;
   position: relative;
-  margin-bottom: 0;
   width: 100%;
-}
-
-.car-selection__car-card:not(:last-child) {
-  margin-bottom: 0;
-  border-bottom: none;
-  border-radius: 12px 12px 0 0;
-}
-
-.car-selection__car-card:last-child {
-  border-radius: 0 0 12px 12px;
 }
 
 .car-selection__car-card--selected {
@@ -359,6 +360,9 @@ const handleSelectButton = () => {
   padding-bottom: calc(13px + env(safe-area-inset-bottom));
   background: white;
   border-top: 1px solid #E2E8F0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .car-selection__select-button {
@@ -376,6 +380,7 @@ const handleSelectButton = () => {
   box-shadow: 0px 4px 6px -4px rgba(0, 0, 0, 0.1), 0px 10px 15px -3px rgba(0, 0, 0, 0.1);
   transition: all 0.2s ease;
 }
+
 
 .car-selection__select-button:disabled {
   background: #9CA3AF;

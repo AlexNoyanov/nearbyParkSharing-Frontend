@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import TimePickerScroll from '../components/TimePickerScroll.vue'
 
 type Location = {
   id: string
@@ -20,27 +21,170 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'back'): void
-  (e: 'book'): void
+  (e: 'book', bookingData: {
+    address: string
+    startDate: string
+    endDate: string
+    startTime: string
+    endTime: string
+    rentalType: 'hourly' | 'daily' | 'monthly'
+  }): void
   (e: 'add-car'): void
   (e: 'change-car'): void
   (e: 'change-payment-card'): void
 }>()
 
 const rentalType = ref<'hourly' | 'daily' | 'monthly'>('hourly')
-const selectedDate = ref('12/12/2024')
+// Инициализируем даты текущей датой
+const today = new Date().toISOString().split('T')[0]
+const startDate = ref(today)
+const endDate = ref(today)
 const startTime = ref('10:00')
 const endTime = ref('12:00')
 
+const canBook = computed(() => {
+  return !!(props.userCar && props.paymentCard)
+})
+
+// Вычисляем продолжительность на основе дат и времени
 const duration = computed(() => {
-  // Simple calculation - in real app would calculate from dates/times
-  return '2 часа 10 минут'
+  if (!startDate.value || !endDate.value) return '0 минут'
+  
+  // Для помесячной аренды считаем дни и месяцы
+  if (rentalType.value === 'monthly') {
+    const start = new Date(startDate.value)
+    const end = new Date(endDate.value)
+    
+    if (end <= start) return '0 дней'
+    
+    // Вычисляем разницу в месяцах и днях
+    let months = 0
+    let days = 0
+    
+    const startYear = start.getFullYear()
+    const startMonth = start.getMonth()
+    const startDay = start.getDate()
+    
+    const endYear = end.getFullYear()
+    const endMonth = end.getMonth()
+    const endDay = end.getDate()
+    
+    // Считаем месяцы
+    months = (endYear - startYear) * 12 + (endMonth - startMonth)
+    
+    // Считаем дни
+    if (endDay >= startDay) {
+      days = endDay - startDay
+    } else {
+      // Если день окончания меньше дня начала, берем предыдущий месяц
+      months--
+      const daysInPrevMonth = new Date(endYear, endMonth, 0).getDate()
+      days = daysInPrevMonth - startDay + endDay
+    }
+    
+    // Форматируем результат
+    if (months === 0) {
+      if (days === 0) {
+        return '0 дней'
+      }
+      if (days === 1) {
+        return '1 день'
+      }
+      return `${days} ${days < 5 ? 'дня' : 'дней'}`
+    }
+    
+    if (days === 0) {
+      if (months === 1) {
+        return '1 месяц'
+      }
+      if (months < 5) {
+        return `${months} месяца`
+      }
+      return `${months} месяцев`
+    }
+    
+    const monthText = months === 1 ? 'месяц' : months < 5 ? 'месяца' : 'месяцев'
+    const dayText = days === 1 ? 'день' : days < 5 ? 'дня' : 'дней'
+    
+    return `${months} ${monthText} ${days} ${dayText}`
+  }
+  
+  // Для почасовой и посуточной аренды считаем время
+  const start = new Date(`${startDate.value}T${startTime.value}`)
+  const end = new Date(`${endDate.value}T${endTime.value}`)
+  
+  if (end <= start) return '0 минут'
+  
+  const diffMs = end.getTime() - start.getTime()
+  const diffMinutes = Math.floor(diffMs / (1000 * 60))
+  
+  if (diffMinutes < 60) {
+    return `${diffMinutes} минут`
+  }
+  
+  const hours = Math.floor(diffMinutes / 60)
+  const minutes = diffMinutes % 60
+  
+  if (hours < 24) {
+    if (minutes === 0) {
+      return `${hours} ${hours === 1 ? 'час' : hours < 5 ? 'часа' : 'часов'}`
+    }
+    return `${hours} ${hours === 1 ? 'час' : hours < 5 ? 'часа' : 'часов'} ${minutes} ${minutes === 1 ? 'минута' : minutes < 5 ? 'минуты' : 'минут'}`
+  }
+  
+  const days = Math.floor(hours / 24)
+  const remainingHours = hours % 24
+  
+  if (days === 1) {
+    if (remainingHours === 0) {
+      return '1 день'
+    }
+    return `1 день ${remainingHours} ${remainingHours === 1 ? 'час' : remainingHours < 5 ? 'часа' : 'часов'}`
+  }
+  
+  if (remainingHours === 0) {
+    return `${days} ${days < 5 ? 'дня' : 'дней'}`
+  }
+  
+  return `${days} ${days < 5 ? 'дня' : 'дней'} ${remainingHours} ${remainingHours === 1 ? 'час' : remainingHours < 5 ? 'часа' : 'часов'}`
+})
+
+// Валидация: для почасовой аренды дата окончания должна быть равна дате начала
+watch([startDate, rentalType], () => {
+  if (rentalType.value === 'hourly' && startDate.value) {
+    endDate.value = startDate.value
+  }
+})
+
+// При изменении типа аренды на почасовую, синхронизируем даты
+watch(rentalType, (newType) => {
+  if (newType === 'hourly' && startDate.value) {
+    endDate.value = startDate.value
+  }
+})
+
+// Валидация времени: если время начала больше времени окончания, устанавливаем время окончания равным времени начала
+watch([startTime, endTime, startDate, endDate], () => {
+  // Если даты одинаковые или для почасовой аренды
+  if (startDate.value === endDate.value || rentalType.value === 'hourly') {
+    if (startTime.value > endTime.value) {
+      endTime.value = startTime.value
+    }
+  }
 })
 
 const totalPrice = computed(() => {
   if (rentalType.value === 'hourly') {
-    const price = parseInt(props.location.priceHour.replace('₽/ч', '').trim())
-    // Simple calculation - in real app would calculate from duration
-    return `₽${price * 2}`
+    const pricePerHour = parseInt(props.location.priceHour.replace('₽/ч', '').trim())
+    // Вычисляем количество часов из продолжительности
+    const start = new Date(`${startDate.value}T${startTime.value}`)
+    const end = new Date(`${endDate.value}T${endTime.value}`)
+    if (end <= start) return `₽0`
+    
+    const diffMs = end.getTime() - start.getTime()
+    const diffHours = Math.ceil(diffMs / (1000 * 60 * 60)) // Округляем вверх до целых часов
+    const total = pricePerHour * diffHours
+    return `₽${total}`
   } else if (rentalType.value === 'daily') {
     return props.location.priceDay
   } else {
@@ -53,6 +197,17 @@ const getRentalTypePrice = (type: 'hourly' | 'daily' | 'monthly') => {
   if (type === 'daily') return props.location.priceDay
   return props.location.priceMonth
 }
+
+// При открытии экрана всегда прокручиваем контейнер приложения к началу,
+// чтобы в видимой области был заголовок booking-dates__header
+onMounted(() => {
+  const appContent = document.querySelector('.app__content') as HTMLElement | null
+  if (appContent) {
+    appContent.scrollTop = 0
+  }
+  // На всякий случай сбрасываем и scroll окна (в Telegram WebApp)
+  window.scrollTo(0, 0)
+})
 </script>
 
 <template>
@@ -124,35 +279,88 @@ const getRentalTypePrice = (type: 'hourly' | 'daily' | 'monthly') => {
       <div class="booking-dates__section">
         <label class="booking-dates__label">Когда планируете парковаться?</label>
         <div class="booking-dates__date-time">
-          <div class="booking-dates__date-field">
-            <input
-              v-model="selectedDate"
-              type="text"
-              class="booking-dates__date-input"
-              placeholder="12/12/2024"
-            />
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg" class="booking-dates__calendar-icon">
-              <path d="M3.75 0V3.75H11.25V0H12.5V3.75H13.75C14.5625 3.75 15.25 4.4375 15.25 5.25V13.75C15.25 14.5938 14.5625 15.25 13.75 15.25H1.25C0.40625 15.25 0 14.5938 0 13.75V5.25C0 4.4375 0.40625 3.75 1.25 3.75H2.5V0H3.75ZM1.25 5.25V13.75H13.75V5.25H1.25Z" fill="#4B5563"/>
-            </svg>
-          </div>
-          <div class="booking-dates__time-fields">
-            <div class="booking-dates__time-field">
-              <label class="booking-dates__time-label">Время начала</label>
-              <select v-model="startTime" class="booking-dates__time-select">
-                <option value="10:00">10:00</option>
-                <option value="11:00">11:00</option>
-                <option value="12:00">12:00</option>
-              </select>
+          <!-- Для почасовой аренды - одно поле даты и время -->
+          <template v-if="rentalType === 'hourly'">
+            <div class="booking-dates__date-fields">
+              <div class="booking-dates__date-field">
+                <label class="booking-dates__date-label">Дата</label>
+                <input
+                  v-model="startDate"
+                  type="date"
+                  class="booking-dates__date-input"
+                  :min="today"
+                />
+              </div>
             </div>
-            <div class="booking-dates__time-field">
-              <label class="booking-dates__time-label">Время окончания</label>
-              <select v-model="endTime" class="booking-dates__time-select">
-                <option value="12:00">12:00</option>
-                <option value="13:00">13:00</option>
-                <option value="14:00">14:00</option>
-              </select>
+            <div class="booking-dates__time-fields">
+              <div class="booking-dates__time-field">
+                <label class="booking-dates__time-label">Время начала</label>
+                <TimePickerScroll v-model="startTime" />
+              </div>
+              <div class="booking-dates__time-field">
+                <label class="booking-dates__time-label">Время окончания</label>
+                <TimePickerScroll v-model="endTime" />
+              </div>
             </div>
-          </div>
+          </template>
+
+          <!-- Для помесячной аренды - только даты без времени -->
+          <template v-else-if="rentalType === 'monthly'">
+            <div class="booking-dates__date-fields">
+              <div class="booking-dates__date-field">
+                <label class="booking-dates__date-label">С даты</label>
+                <input
+                  v-model="startDate"
+                  type="date"
+                  class="booking-dates__date-input"
+                  :min="today"
+                />
+              </div>
+              <div class="booking-dates__date-field">
+                <label class="booking-dates__date-label">По дату</label>
+                <input
+                  v-model="endDate"
+                  type="date"
+                  class="booking-dates__date-input"
+                  :min="startDate || today"
+                />
+              </div>
+            </div>
+          </template>
+
+          <!-- Для посуточной аренды - даты и время -->
+          <template v-else>
+            <div class="booking-dates__date-fields">
+              <div class="booking-dates__date-field">
+                <label class="booking-dates__date-label">С даты</label>
+                <input
+                  v-model="startDate"
+                  type="date"
+                  class="booking-dates__date-input"
+                  :min="today"
+                />
+              </div>
+              <div class="booking-dates__date-field">
+                <label class="booking-dates__date-label">По дату</label>
+                <input
+                  v-model="endDate"
+                  type="date"
+                  class="booking-dates__date-input"
+                  :min="startDate || today"
+                />
+              </div>
+            </div>
+            <div class="booking-dates__time-fields">
+              <div class="booking-dates__time-field">
+                <label class="booking-dates__time-label">Время начала</label>
+                <TimePickerScroll v-model="startTime" />
+              </div>
+              <div class="booking-dates__time-field">
+                <label class="booking-dates__time-label">Время окончания</label>
+                <TimePickerScroll v-model="endTime" />
+              </div>
+            </div>
+          </template>
         </div>
       </div>
 
@@ -174,6 +382,21 @@ const getRentalTypePrice = (type: 'hourly' | 'daily' | 'monthly') => {
           <path d="M8 0C3.58 0 0 3.58 0 8C0 12.42 3.58 16 8 16C12.42 16 16 12.42 16 8C16 3.58 12.42 0 8 0ZM8 12C7.45 12 7 11.55 7 11C7 10.45 7.45 10 8 10C8.55 10 9 10.45 9 11C9 11.55 8.55 12 8 12ZM9 9H7V4H9V9Z" fill="#16A34A"/>
         </svg>
         <span>Бесплатная отмена до начала бронирования</span>
+      </div>
+
+      <!-- Rental Type Info -->
+      <div v-if="rentalType === 'daily'" class="booking-dates__info">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M8 0C3.58 0 0 3.58 0 8C0 12.42 3.58 16 8 16C12.42 16 16 12.42 16 8C16 3.58 12.42 0 8 0ZM8 12C7.45 12 7 11.55 7 11C7 10.45 7.45 10 8 10C8.55 10 9 10.45 9 11C9 11.55 8.55 12 8 12ZM9 9H7V4H9V9Z" fill="#16A34A"/>
+        </svg>
+        <span>Суточный тариф- оплата за полные сутки, даже если вы приедете и уедете ранее</span>
+      </div>
+
+      <div v-if="rentalType === 'monthly'" class="booking-dates__info">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M8 0C3.58 0 0 3.58 0 8C0 12.42 3.58 16 8 16C12.42 16 16 12.42 16 8C16 3.58 12.42 0 8 0ZM8 12C7.45 12 7 11.55 7 11C7 10.45 7.45 10 8 10C8.55 10 9 10.45 9 11C9 11.55 8.55 12 8 12ZM9 9H7V4H9V9Z" fill="#16A34A"/>
+        </svg>
+        <span>Предоплата производится за один месяц. Далее списание по месяц. Не полный месяц оплачивается полностью</span>
       </div>
 
       <!-- Car Selection -->
@@ -226,10 +449,11 @@ const getRentalTypePrice = (type: 'hourly' | 'daily' | 'monthly') => {
               </div>
             </div>
           </div>
-          <button type="button" class="booking-dates__change-button" @click="emit('change-payment-card')">
-            Изменить
-          </button>
         </div>
+        <button v-if="paymentCard" type="button" class="booking-dates__change-button" @click="emit('change-payment-card')">
+          <div class="booking-dates__change-icon">+</div>
+          <span>Изменить карту</span>
+        </button>
         <button v-else type="button" class="booking-dates__change-button" @click="emit('change-payment-card')">
           <div class="booking-dates__change-icon">+</div>
           <span>Выбрать карту</span>
@@ -239,7 +463,20 @@ const getRentalTypePrice = (type: 'hourly' | 'daily' | 'monthly') => {
 
     <!-- Footer Button -->
     <footer class="booking-dates__footer">
-      <button type="button" class="booking-dates__book-button" @click="emit('book')">
+      <button 
+        type="button" 
+        class="booking-dates__book-button"
+        :class="{ 'booking-dates__book-button--disabled': !canBook }"
+        :disabled="!canBook"
+        @click="emit('book', {
+          address: location.address,
+          startDate: String(startDate || today),
+          endDate: String(endDate || today),
+          startTime: String(startTime || '10:00'),
+          endTime: String(endTime || '12:00'),
+          rentalType: rentalType as 'hourly' | 'daily' | 'monthly'
+        })"
+      >
         Забронировать
       </button>
     </footer>
@@ -253,15 +490,20 @@ const getRentalTypePrice = (type: 'hourly' | 'daily' | 'monthly') => {
   min-height: 100vh;
   background: #FFFFFF;
   overflow-y: auto;
+  padding-top: 0;
+  margin-top: 0;
 }
 
 .booking-dates__header {
   display: flex;
   align-items: center;
   gap: 20px;
-  padding: 12px 18px;
+  padding: calc(env(safe-area-inset-top) + 12px) 18px 12px;
   background: white;
   border-bottom: 1px solid #E2E8F0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .booking-dates__back {
@@ -281,7 +523,7 @@ const getRentalTypePrice = (type: 'hourly' | 'daily' | 'monthly') => {
   margin: 0;
   font-family: Inter, sans-serif;
   font-weight: 700;
-  font-size: 13.2px;
+  font-size: 18px;
   line-height: 1.5;
   color: #1F2937;
   flex: 1;
@@ -381,27 +623,46 @@ const getRentalTypePrice = (type: 'hourly' | 'daily' | 'monthly') => {
   gap: 9.5px;
 }
 
+.booking-dates__date-fields {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+/* Для одной даты (почасовая аренда) */
+.booking-dates__date-fields:has(.booking-dates__date-field:only-child) {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
 .booking-dates__date-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3.5px;
   position: relative;
+}
+
+.booking-dates__date-label {
+  font-family: Inter, sans-serif;
+  font-weight: 400;
+  font-size: 10.4px;
+  line-height: 1.92;
+  color: #4B5563;
 }
 
 .booking-dates__date-input {
   width: 100%;
-  padding: 10px 40px 10px 17px;
+  padding: 10px 16px;
   border: 1px solid #D1D5DB;
   border-radius: 12px;
   background: white;
   font-family: Inter, sans-serif;
   font-size: 12.8px;
   color: #000000;
-}
-
-.booking-dates__calendar-icon {
-  position: absolute;
-  right: 17px;
-  top: 50%;
-  transform: translateY(-50%);
-  pointer-events: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .booking-dates__time-fields {
@@ -424,7 +685,7 @@ const getRentalTypePrice = (type: 'hourly' | 'daily' | 'monthly') => {
   color: #4B5563;
 }
 
-.booking-dates__time-select {
+.booking-dates__time-input {
   width: 100%;
   padding: 10px 28px 10px 16px;
   border: 1px solid #D1D5DB;
@@ -551,6 +812,7 @@ const getRentalTypePrice = (type: 'hourly' | 'daily' | 'monthly') => {
 }
 
 .booking-dates__change-button {
+  margin-top: 10px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -591,7 +853,7 @@ const getRentalTypePrice = (type: 'hourly' | 'daily' | 'monthly') => {
 .booking-dates__book-button {
   width: 100%;
   padding: 16px 0 16px;
-  background: #9CA3AF;
+  background: #3B60F4;
   border: none;
   border-radius: 12px;
   color: white;
@@ -600,33 +862,46 @@ const getRentalTypePrice = (type: 'hourly' | 'daily' | 'monthly') => {
   font-size: 13.2px;
   cursor: pointer;
   box-shadow: 0px 4px 6px -4px rgba(0, 0, 0, 0.1), 0px 10px 15px -3px rgba(0, 0, 0, 0.1);
+  transition: background-color 0.2s ease;
 }
 
 .booking-dates__book-button:active {
-  background: #6B7280;
+  background: #254ED8;
+}
+
+.booking-dates__book-button--disabled {
+  background: #9CA3AF;
+  cursor: not-allowed;
+}
+
+.booking-dates__book-button--disabled:active {
+  background: #9CA3AF;
 }
 
 .booking-dates__card-selected {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 16px;
-  background-color: #ffffff;
+  gap: 12px;
+  padding: 12px;
+  background: white;
+  border: 1px solid #D1D5DB;
   border-radius: 12px;
-  border: 1px solid #e5e7eb;
+  margin-bottom: 8px;
 }
 
 .booking-dates__card-info {
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 12px;
   flex: 1;
 }
 
 .booking-dates__card-icon {
-  width: 48px;
-  height: 32px;
-  border-radius: 8px;
+  width: 40px;
+  height: 40px;
+  background: #F3F4F6;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -634,17 +909,22 @@ const getRentalTypePrice = (type: 'hourly' | 'daily' | 'monthly') => {
 }
 
 .booking-dates__card-icon-visa {
-  background-color: #2563eb;
-  width: 100%;
-  height: 100%;
+  background-color: transparent;
+  width: 21px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+}
+
+.booking-dates__card-icon-visa svg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .booking-dates__card-icon-mastercard {
-  background-color: #ea580c;
+  /* background-color: #ea580c; */
   width: 100%;
   height: 100%;
   display: flex;
@@ -654,7 +934,7 @@ const getRentalTypePrice = (type: 'hourly' | 'daily' | 'monthly') => {
 }
 
 .booking-dates__card-icon-mir {
-  background-color: #10b981;
+  /* background-color: #10b981; */
   width: 100%;
   height: 100%;
   display: flex;
@@ -669,21 +949,26 @@ const getRentalTypePrice = (type: 'hourly' | 'daily' | 'monthly') => {
 }
 
 .booking-dates__card-details {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  flex: 1;
+  gap: 2px;
+  align-items: center;
+  text-align: center;
 }
 
 .booking-dates__card-name {
-  font-size: 16px;
-  font-weight: 700;
-  color: #111827;
+  font-family: Inter, sans-serif;
+  font-weight: 400;
+  font-size: 10.4px;
+  color: #1F2937;
 }
 
 .booking-dates__card-number {
-  font-size: 14px;
-  color: #6b7280;
+  font-family: Inter, sans-serif;
+  font-weight: 400;
+  font-size: 10.4px;
+  color: #1F2937;
 }
 </style>
 

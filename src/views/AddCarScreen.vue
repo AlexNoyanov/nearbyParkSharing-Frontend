@@ -333,6 +333,7 @@ const saveCar = () => {
 }
 
 .add-car__back {
+  /* margin-top: 20px; */
   width: 30px;
   height: 30px;
   border-radius: 50%;
@@ -423,8 +424,10 @@ const saveCar = () => {
   border-radius: 12px;
   background: white;
   font-family: Inter, sans-serif;
-  font-size: 11.3px;
+  font-size: 16px;
   color: #000000;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .add-car__input::placeholder {
@@ -492,10 +495,12 @@ const saveCar = () => {
   border-radius: 12px;
   background: white;
   font-family: Inter, sans-serif;
-  font-size: 11.6px;
+  font-size: 16px;
   color: #000000;
   text-transform: uppercase;
   transition: border-color 0.2s ease;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .add-car__number-input--error {

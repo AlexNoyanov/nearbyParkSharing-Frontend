@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick, onMounted } from 'vue'
 
 type PaymentCard = {
   id: string
@@ -15,13 +15,15 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'back'): void
-  (e: 'add-card'): void
+  (e: 'add-card', card?: PaymentCard): void
   (e: 'edit-card', card: PaymentCard): void
   (e: 'select-card', cardId: string): void
   (e: 'confirm', card: PaymentCard): void
 }>()
 
 const selectedCardId = ref<string | null>(null)
+const editingCardId = ref<string | null>(null)
+const editingCardName = ref<string>('')
 
 // Используем переданные карты или дефолтные для демо
 const cards = ref<PaymentCard[]>(props.cards || [
@@ -64,21 +66,80 @@ const handleCardClick = (card: PaymentCard) => {
   emit('select-card', card.id)
 }
 
+// Обработчик добавления карты оставлен намеренно пустым (UI-кнопка без действия)
+
 const handleConfirm = () => {
+  // Находим выбранную карту по selectedCardId (который синхронизирован с активной картой)
   const selectedCard = cards.value.find(c => c.id === selectedCardId.value)
-  if (selectedCard) {
-    emit('confirm', selectedCard)
+  if (!selectedCard) {
+    // Если карта не найдена по ID, ищем активную карту
+    const activeCard = cards.value.find(c => c.isActive === true)
+    if (activeCard) {
+      emit('confirm', { ...activeCard })
+      return
+    }
+    return
   }
+  
+  // Передаем полную копию карты со всеми актуальными данными
+  emit('confirm', {
+    id: selectedCard.id,
+    name: selectedCard.name,
+    type: selectedCard.type,
+    lastFour: selectedCard.lastFour,
+    isActive: selectedCard.isActive
+  })
 }
 
 const canConfirm = computed(() => {
   return selectedCardId.value !== null
 })
 
-const handleEditCard = (card: PaymentCard, event: Event) => {
+const handleEditCard = async (card: PaymentCard, event: Event) => {
   event.stopPropagation()
-  emit('edit-card', card)
+  editingCardId.value = card.id
+  editingCardName.value = card.name
+  await nextTick()
+  // Находим input по классу и фокусируем его
+  const input = document.querySelector(`.payment-cards__card-name-input`) as HTMLInputElement
+  if (input) {
+    input.focus()
+    input.select()
+  }
 }
+
+const handleSaveCardName = (card: PaymentCard) => {
+  if (editingCardName.value.trim()) {
+    card.name = editingCardName.value.trim()
+    emit('edit-card', card)
+  }
+  editingCardId.value = null
+  editingCardName.value = ''
+}
+
+const handleCancelEdit = () => {
+  editingCardId.value = null
+  editingCardName.value = ''
+}
+
+const handleNameInputKeydown = (event: KeyboardEvent, card: PaymentCard) => {
+  if (event.key === 'Enter') {
+    handleSaveCardName(card)
+  } else if (event.key === 'Escape') {
+    handleCancelEdit()
+  }
+}
+
+// При открытии экрана всегда прокручиваем контейнер приложения к началу,
+// чтобы в видимой области был заголовок payment-cards__header
+onMounted(() => {
+  const appContent = document.querySelector('.app__content') as HTMLElement | null
+  if (appContent) {
+    appContent.scrollTop = 0
+  }
+  // На всякий случай сбрасываем и scroll окна (в Telegram WebApp)
+  window.scrollTo(0, 0)
+})
 </script>
 
 <template>
@@ -130,7 +191,16 @@ const handleEditCard = (card: PaymentCard, event: Event) => {
 
           <!-- Информация о карте -->
           <div class="payment-cards__card-info">
-            <div class="payment-cards__card-name">{{ card.name }}</div>
+            <input
+              v-if="editingCardId === card.id"
+              v-model="editingCardName"
+              type="text"
+              class="payment-cards__card-name-input"
+              @blur="handleSaveCardName(card)"
+              @keydown="handleNameInputKeydown($event, card)"
+              @click.stop
+            />
+            <div v-else class="payment-cards__card-name">{{ card.name }}</div>
             <div class="payment-cards__card-number">
               {{ card.type === 'visa' ? 'VISA' : card.type === 'mastercard' ? 'MasterCard' : 'МИР' }} •••• {{ card.lastFour }}
             </div>
@@ -150,8 +220,8 @@ const handleEditCard = (card: PaymentCard, event: Event) => {
         </button>
       </div>
 
-      <!-- Кнопка добавления новой карты -->
-      <button type="button" class="payment-cards__add-card" @click="emit('add-card')">
+      <!-- Кнопка добавления новой карты (пока без действия по клику) -->
+      <button type="button" class="payment-cards__add-card">
         <div class="payment-cards__add-icon">+</div>
         <div class="payment-cards__add-content">
           <div class="payment-cards__add-title">Добавить новую карту</div>
@@ -212,6 +282,7 @@ const handleEditCard = (card: PaymentCard, event: Event) => {
       >
         Выбрать карту
       </button>
+      <p class="payment-cards__footer-text">Активная карта используется для автоматических платежей</p>
     </footer>
   </section>
 </template>
@@ -234,11 +305,12 @@ const handleEditCard = (card: PaymentCard, event: Event) => {
 }
 
 .payment-cards__back {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  background-color: #ffffff;
+  /* margin-top: 20px; */
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #E2E8F0;
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -329,7 +401,7 @@ const handleEditCard = (card: PaymentCard, event: Event) => {
 }
 
 .payment-cards__icon-visa {
-  background-color: #2563eb;
+  /* background-color: #2563eb; */
   width: 100%;
   height: 100%;
   display: flex;
@@ -339,7 +411,7 @@ const handleEditCard = (card: PaymentCard, event: Event) => {
 }
 
 .payment-cards__icon-mastercard {
-  background-color: #ea580c;
+  /* background-color: #ea580c; */
   width: 100%;
   height: 100%;
   display: flex;
@@ -349,7 +421,7 @@ const handleEditCard = (card: PaymentCard, event: Event) => {
 }
 
 .payment-cards__icon-mir {
-  background-color: #10b981;
+  /* background-color: #10b981; */
   width: 100%;
   height: 100%;
   display: flex;
@@ -512,6 +584,448 @@ const handleEditCard = (card: PaymentCard, event: Event) => {
 
 .payment-cards__info-text--security {
   color: #111827;
+}
+
+.payment-cards__footer {
+  padding: 16px 24px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  background-color: #ffffff;
+  border-top: 1px solid #e5e7eb;
+}
+
+.payment-cards__confirm-button {
+  width: 100%;
+  padding: 16px;
+  background-color: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 12px;
+}
+
+.payment-cards__confirm-button:hover:not(:disabled) {
+  background-color: #1d4ed8;
+}
+
+.payment-cards__confirm-button--disabled {
+  background-color: #d1d5db;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.payment-cards__footer-text {
+  font-size: 14px;
+  color: #6b7280;
+  text-align: center;
+  margin: 0;
+}
+
+/* Адаптивные стили для планшетов и десктопов */
+@media (min-width: 768px) {
+  .payment-cards {
+    max-width: 100%;
+    padding-left: calc(env(safe-area-inset-left) + 24px);
+    padding-right: calc(env(safe-area-inset-right) + 24px);
+  }
+
+  .payment-cards__content {
+    max-width: 600px;
+    margin: 0 auto;
+  }
+}
+
+@media (min-width: 1024px) {
+  .payment-cards__content {
+    max-width: 700px;
+  }
+}
+
+@media (min-width: 1440px) {
+  .payment-cards {
+    max-width: 600px;
+    margin: 0 auto;
+    border-radius: 24px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+
+  .payment-cards__content {
+    max-width: 100%;
+  }
+}
+</style>
+
+<style scoped>
+.payment-cards {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: #ffffff;
+  padding-top: calc(env(safe-area-inset-top) + 24px);
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+
+.payment-cards__header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 24px 24px;
+}
+
+.payment-cards__back {
+  /* margin-top: 20px; */
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #E2E8F0;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.payment-cards__title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+  flex: 1;
+}
+
+.payment-cards__header-spacer {
+  width: 44px;
+  flex-shrink: 0;
+}
+
+.payment-cards__content {
+  flex: 1;
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.payment-cards__cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.payment-cards__card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background-color: #ffffff;
+  border-radius: 16px;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: all 0.2s;
+}
+
+.payment-cards__card:hover {
+  opacity: 0.9;
+}
+
+.payment-cards__card--active {
+  border: 2px solid #2563eb;
+}
+
+.payment-cards__radio {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid #d1d5db;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.payment-cards__card--active .payment-cards__radio {
+  border-color: #2563eb;
+  background-color: #2563eb;
+}
+
+.payment-cards__radio-inner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: #ffffff;
+}
+
+.payment-cards__card-icon {
+  width: 48px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.payment-cards__icon-visa {
+  /* background-color: #2563eb; */
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.payment-cards__icon-mastercard {
+  /* background-color: #ea580c; */
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.payment-cards__icon-mir {
+  /* background-color: #10b981; */
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.payment-cards__card-icon svg {
+  width: 100%;
+  height: auto;
+}
+
+.payment-cards__card-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.payment-cards__card-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.payment-cards__card-name-input {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+  background: transparent;
+  border: 2px solid #2563eb;
+  border-radius: 4px;
+  padding: 2px 6px;
+  width: 100%;
+  font-family: Inter, sans-serif;
+  outline: none;
+}
+
+.payment-cards__card-name-input:focus {
+  border-color: #2563eb;
+  background-color: #f9fafb;
+}
+
+.payment-cards__card-number {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.payment-cards__edit-button {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.payment-cards__edit-button:hover {
+  opacity: 0.7;
+}
+
+.payment-cards__add-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 24px;
+  background-color: #f9fafb;
+  border: 2px dashed #d1d5db;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+}
+
+.payment-cards__add-card:hover {
+  border-color: #9ca3af;
+  background-color: #f3f4f6;
+}
+
+.payment-cards__add-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 300;
+  color: #374151;
+}
+
+.payment-cards__add-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.payment-cards__add-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  text-align: center;
+}
+
+.payment-cards__add-subtitle {
+  font-size: 14px;
+  color: #6b7280;
+  text-align: center;
+}
+
+.payment-cards__add-logos {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.payment-cards__add-logos svg {
+  height: 18px;
+  width: auto;
+}
+
+.payment-cards__info-box {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  background-color: #f3f4f6;
+  border-radius: 12px;
+}
+
+.payment-cards__info-icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  padding-top: 2px;
+}
+
+.payment-cards__info-icon--security {
+  align-items: center;
+  padding-top: 0;
+}
+
+.payment-cards__info-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.payment-cards__info-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #2563eb;
+}
+
+.payment-cards__info-title--security {
+  color: #111827;
+}
+
+.payment-cards__info-text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #2563eb;
+}
+
+.payment-cards__info-text--security {
+  color: #111827;
+}
+
+.payment-cards__footer {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+
+.payment-cards__add-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 24px;
+  background-color: #3B60F4;
+  border: none;
+  border-radius: 9999px;
+  color: white;
+  font-family: Inter, sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0px 4px 6px -4px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.payment-cards__add-button:hover {
+  background-color: #2B4FE4;
+  box-shadow: 0px 6px 8px -4px rgba(0, 0, 0, 0.15);
+}
+
+.payment-cards__add-button:active {
+  background-color: #1B3ED4;
+  transform: translateY(1px);
+}
+
+.payment-cards__add-button svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.payment-cards__footer-text {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  font-size: 14px;
+  color: #6b7280;
+  text-align: center;
+  line-height: 1.5;
 }
 
 /* Адаптивные стили для планшетов и десктопов */

@@ -21,12 +21,15 @@ import RentOutMapScreen from './views/RentOutMapScreen.vue'
 import MapSelectionScreen from './views/MapSelectionScreen.vue'
 import SearchScreen from './views/SearchScreen.vue'
 import ChatScreen from './views/ChatScreen.vue'
+import ChatListScreen from './views/ChatListScreen.vue'
 import ParkingSpotDetailsScreen from './views/ParkingSpotDetailsScreen.vue'
 import BookingDatesScreen from './views/BookingDatesScreen.vue'
 import AddCarScreen from './views/AddCarScreen.vue'
 import CarSelectionScreen from './views/CarSelectionScreen.vue'
 import CarChangedScreen from './views/CarChangedScreen.vue'
 import PaymentCardsScreen from './views/PaymentCardsScreen.vue'
+import BookingConfirmationScreen from './views/BookingConfirmationScreen.vue'
+import FullScreenMapScreen from './views/FullScreenMapScreen.vue'
 import type { User } from './services/mockAuth'
 import { featureToggles, type FeatureKey } from './services/featureToggles'
 import chatIconSvg from './assets/icons/bottom-nav-chat.svg?raw'
@@ -57,9 +60,12 @@ type Stage =
   | 'rent-add-car'
   | 'car-selection'
   | 'car-changed'
+  | 'booking-confirmation'
   | 'map-selection'
+  | 'full-screen-map'
   | 'profile'
   | 'chat'
+  | 'chat-list'
   | 'payment-cards'
   | 'placeholder'
 
@@ -73,12 +79,30 @@ const authName = ref<string>('')
 const isRegistrationFlow = ref<boolean>(false)
 const selectedAddress = ref<string>('')
 const selectedLocation = ref<{ id: string; address: string; lat: number; lng: number; priceHour: string; priceDay: string; priceMonth: string; availability: 'hourly' | 'daily' | 'monthly' } | null>(null)
+const fullScreenMapLocation = ref<{ lat: number; lng: number; address?: string } | null>(null)
 const userCar = ref<{ id: string; brand: string; model: string; number: string; region?: string; color?: string; isForeign: boolean } | null>(null)
 const userCars = ref<Array<{ id: string; brand: string; model: string; number: string; region?: string; color?: string; isForeign: boolean }>>([])
 const selectedCarId = ref<string | null>(null)
 const addCarSource = ref<'booking' | 'selection'>('booking')
 const previousStage = ref<Stage | null>(null)
 const selectedPaymentCard = ref<{ id: string; name: string; type: 'visa' | 'mastercard' | 'mir'; lastFour: string; isActive: boolean } | null>(null)
+const loadingMessage = ref<string>('Обрабатываем запрос')
+const loadingSubtitle = ref<string>('')
+const bookingsCount = ref<number>(0)
+
+type Booking = {
+  id: string
+  address: string
+  startDate: string
+  endDate: string
+  startTime: string
+  endTime: string
+  rentalType: 'hourly' | 'daily' | 'monthly'
+  createdAt: Date
+  status: 'awaiting' | 'confirmed' | 'active' | 'completed'
+}
+
+const bookings = ref<Booking[]>([])
 
 // Feature toggle states - will be updated as features are checked
 const featureStates = ref<Record<FeatureKey, boolean | null>>({
@@ -164,8 +188,11 @@ const isNavVisible = computed(() =>
   stage.value !== 'rent-success' &&
   stage.value !== 'car-selection' &&
   stage.value !== 'car-changed' &&
+  stage.value !== 'booking-confirmation' &&
+  stage.value !== 'full-screen-map' &&
   stage.value !== 'payment-cards' &&
-  stage.value !== 'placeholder'
+  stage.value !== 'placeholder' &&
+  stage.value !== 'chat'
 )
 
 const ensureParkingSelected = () => {
@@ -281,10 +308,18 @@ const handleNavSelect = async (value: string) => {
     return
   }
 
-  if (value === 'rent' || value === 'profile' || value === 'chat') {
+  if (value === 'rent' || value === 'profile') {
     const featureKey = value as FeatureKey
     await checkFeatureAndNavigate(value as Stage, featureKey)
     if (stage.value === value) {
+      navSelection.value = value as typeof navSelection.value
+    }
+  }
+
+  if (value === 'chat') {
+    const featureKey = value as FeatureKey
+    await checkFeatureAndNavigate('chat-list' as Stage, featureKey)
+    if (stage.value === 'chat-list') {
       navSelection.value = value as typeof navSelection.value
     }
   }
@@ -329,6 +364,27 @@ const openHistoryFromHome = async () => {
   }
 }
 
+const handleOpenChat = async () => {
+  await checkFeatureAndNavigate('chat-list', 'chat')
+  if (stage.value === 'chat-list') {
+    navSelection.value = 'chat'
+  }
+}
+
+const handleOpenChatFromList = (booking: Booking) => {
+  // Определяем имя контакта на основе статуса бронирования
+  // Если статус awaiting - пользователь арендует, контакт - владелец места
+  // Иначе - пользователь сдает, контакт - арендатор
+  if (booking.status === 'awaiting') {
+    selectedChatName.value = 'Михаил' // Владелец места
+  } else {
+    selectedChatName.value = 'Елена' // Арендатор
+  }
+  stage.value = 'chat'
+}
+
+const selectedChatName = ref<string | undefined>(undefined)
+
 const handleOpenDetails = async (parking: ParkingSpot) => {
   selectedParking.value = parking
   await checkFeatureAndNavigate('details', 'details')
@@ -348,16 +404,9 @@ const handleConfirm = async () => {
 const handleAddCar = () => {
   // Сохраняем текущий экран перед переходом
   previousStage.value = stage.value
-  // Если автомобилей нет, открываем экран создания
-  if (!userCars.value || userCars.value.length === 0) {
-    selectedCarId.value = null
-    addCarSource.value = 'booking'
-    stage.value = 'rent-add-car'
-  } else {
-    // Если автомобили есть, но основной не выбран, открываем экран выбора
-    selectedCarId.value = userCar.value?.id || null
-    stage.value = 'car-selection'
-  }
+  // Всегда открываем экран выбора автомобиля (со списком)
+  selectedCarId.value = userCar.value?.id || null
+  stage.value = 'car-selection'
 }
 
 const handleChangeCar = () => {
@@ -445,7 +494,14 @@ const handlePaymentCardsBack = () => {
 }
 
 const handlePaymentCardConfirm = (card: { id: string; name: string; type: 'visa' | 'mastercard' | 'mir'; lastFour: string; isActive: boolean }) => {
-  selectedPaymentCard.value = card
+  // Создаем полную копию карты со всеми данными
+  selectedPaymentCard.value = {
+    id: card.id,
+    name: card.name,
+    type: card.type,
+    lastFour: card.lastFour,
+    isActive: card.isActive
+  }
   const prevStage = previousStage.value
   if (prevStage) {
     stage.value = prevStage
@@ -453,6 +509,103 @@ const handlePaymentCardConfirm = (card: { id: string; name: string; type: 'visa'
     stage.value = 'rent-booking-dates'
   }
   previousStage.value = null
+}
+
+const handleAddPaymentCard = (card?: { id: string; name: string; type: 'visa' | 'mastercard' | 'mir'; lastFour: string; isActive: boolean }) => {
+  // Если передана выбранная карта, используем её данные
+  if (card) {
+    selectedPaymentCard.value = {
+      id: card.id,
+      name: card.name,
+      type: card.type,
+      lastFour: card.lastFour,
+      isActive: card.isActive
+    }
+  } else {
+    // Иначе создаем новую карту по умолчанию
+    const newCard: { id: string; name: string; type: 'visa' | 'mastercard' | 'mir'; lastFour: string; isActive: boolean } = {
+      id: Date.now().toString(),
+      name: 'Новая карта',
+      type: 'visa',
+      lastFour: '4532',
+      isActive: true
+    }
+    selectedPaymentCard.value = newCard
+  }
+  
+  // Возвращаемся на экран бронирования
+  const prevStage = previousStage.value
+  if (prevStage) {
+    stage.value = prevStage
+  } else {
+    stage.value = 'rent-booking-dates'
+  }
+  previousStage.value = null
+}
+
+const handleBook = async (bookingData: {
+  address: string
+  startDate: string
+  endDate: string
+  startTime: string
+  endTime: string
+  rentalType: 'hourly' | 'daily' | 'monthly'
+}) => {
+  if (!selectedLocation.value || !userCar.value || !selectedPaymentCard.value) {
+    return
+  }
+  
+  // Показываем экран загрузки с текстом "Направляем запрос на оплату"
+  loadingMessage.value = 'Направляем запрос'
+  loadingSubtitle.value = 'на оплату'
+  stage.value = 'loading'
+  
+  // Через 2 секунды меняем текст на "Оплата успешна"
+  setTimeout(() => {
+    loadingMessage.value = 'Оплата успешна'
+    loadingSubtitle.value = ''
+  }, 2000)
+  
+  // Через 3 секунды переходим на главный экран, создаем бронирование и увеличиваем счетчик
+  setTimeout(() => {
+    const newBooking: Booking = {
+      id: Date.now().toString(),
+      address: bookingData.address,
+      startDate: bookingData.startDate,
+      endDate: bookingData.endDate,
+      startTime: bookingData.startTime,
+      endTime: bookingData.endTime,
+      rentalType: bookingData.rentalType,
+      createdAt: new Date(),
+      status: 'awaiting'
+    }
+    bookings.value.push(newBooking)
+    bookingsCount.value = bookings.value.length
+    stage.value = 'home'
+    navSelection.value = 'home'
+  }, 3000)
+}
+
+const handleBookingConfirmation = () => {
+  // Переходим на главный экран
+  stage.value = 'home'
+  navSelection.value = 'home'
+}
+
+const handleOpenFullScreenMap = () => {
+  if (selectedLocation.value) {
+    fullScreenMapLocation.value = {
+      lat: selectedLocation.value.lat,
+      lng: selectedLocation.value.lng,
+      address: selectedLocation.value.address
+    }
+    stage.value = 'full-screen-map'
+  }
+}
+
+const handleCloseFullScreenMap = () => {
+  stage.value = 'rent-map-details'
+  fullScreenMapLocation.value = null
 }
 
 const handleSaveCar = (car: { brand: string; model: string; number: string; region?: string; color?: string; isForeign: boolean }) => {
@@ -534,7 +687,12 @@ onMounted(async () => {
       :on-login="goToLogin"
     />
 
-    <LoadingScreen v-else-if="stage === 'loading'" :user-name="userName" />
+    <LoadingScreen 
+      v-else-if="stage === 'loading'" 
+      :user-name="userName"
+      :message="loadingMessage"
+      :subtitle="loadingSubtitle"
+    />
 
     <OnboardingScreen
       v-else-if="stage === 'onboarding-final'"
@@ -581,10 +739,13 @@ onMounted(async () => {
           v-if="stage === 'home'"
           :user-name="userName"
           :current-user="currentUser"
+          :bookings-count="bookingsCount"
+          :bookings="bookings"
           @open-search="openSearchFromHome"
           @open-rent-out="openRentFromHome"
           @open-booking="handleReserve"
           @open-history="openHistoryFromHome"
+          @open-chat="handleOpenChat"
         />
 
         <SearchScreen
@@ -625,6 +786,7 @@ onMounted(async () => {
           :location="selectedLocation"
           @back="() => stage = 'rent-map'"
           @select-dates="() => { if (selectedLocation) { stage = 'rent-booking-dates'; } }"
+          @open-full-map="handleOpenFullScreenMap"
         />
         
         <BookingDatesScreen
@@ -633,7 +795,7 @@ onMounted(async () => {
           :user-car="userCar"
           :payment-card="selectedPaymentCard"
           @back="() => stage = 'rent-map-details'"
-          @book="() => { if (selectedLocation) { selectedAddress = selectedLocation.address; stage = 'rent'; } }"
+          @book="(bookingData) => handleBook(bookingData)"
           @add-car="handleAddCar"
           @change-car="handleChangeCar"
           @change-payment-card="handleChangePaymentCard"
@@ -663,10 +825,21 @@ onMounted(async () => {
         <PaymentCardsScreen
           v-else-if="stage === 'payment-cards'"
           @back="handlePaymentCardsBack"
-          @add-card="() => {}"
+          @add-card="handleAddPaymentCard"
           @edit-card="() => {}"
           @select-card="() => {}"
           @confirm="handlePaymentCardConfirm"
+        />
+
+        <FullScreenMapScreen
+          v-else-if="stage === 'full-screen-map' && fullScreenMapLocation"
+          :location="fullScreenMapLocation"
+          @close="handleCloseFullScreenMap"
+        />
+
+        <BookingConfirmationScreen
+          v-else-if="stage === 'booking-confirmation'"
+          @confirm="handleBookingConfirmation"
         />
 
         <RentOutScreen
@@ -691,9 +864,23 @@ onMounted(async () => {
           description="Здесь будут храниться ваши брони, история поездок и персональные настройки."
         />
 
+        <ChatListScreen
+          v-else-if="stage === 'chat-list' && featureStates['chat'] !== false"
+          :bookings="bookings"
+          @back="goHome"
+          @open-chat="handleOpenChatFromList"
+        />
+
+        <PlaceholderScreen
+          v-else-if="stage === 'chat-list'"
+          title="Чаты запускаем позже"
+          description="Команда работает над единым центром общения с арендаторами и службой поддержки."
+        />
+
         <ChatScreen
           v-else-if="stage === 'chat' && featureStates['chat'] !== false"
-          @back="goHome"
+          :contact-name="selectedChatName"
+          @back="() => { stage = 'chat-list'; selectedChatName = undefined; }"
         />
 
         <PlaceholderScreen
@@ -720,6 +907,10 @@ onMounted(async () => {
   background-color: #f8fafc;
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .app__content {
@@ -728,7 +919,14 @@ onMounted(async () => {
   flex-direction: column;
   padding-bottom: calc(116px + env(safe-area-inset-bottom));
   width: 100%;
+  max-width: 100%;
   overflow-x: hidden;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.app__content:has(.chat) {
+  padding-bottom: 0;
 }
 
 .app__nav {

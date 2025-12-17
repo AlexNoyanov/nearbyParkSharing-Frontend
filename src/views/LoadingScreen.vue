@@ -3,11 +3,18 @@ import { computed } from 'vue'
 
 const props = defineProps<{
   userName?: string
+  message?: string
+  subtitle?: string
 }>()
 
-const loadingMessage = computed(() =>
-  props.userName ? `Загружаем лучшие места для ${props.userName}` : 'Загружаем для вас лучшие места',
-)
+const loadingMessage = computed(() => {
+  if (props.message) {
+    return props.message
+  }
+  return props.userName ? `Загружаем лучшие места для ${props.userName}` : 'Загружаем для вас лучшие места'
+})
+
+const loadingSubtitle = computed(() => props.subtitle || '')
 </script>
 
 <template>
@@ -27,8 +34,8 @@ const loadingMessage = computed(() =>
 
         <!-- Loading Message -->
         <div class="loading-screen__message">
-          <h2 class="loading-screen__message-title">Обрабатываем запрос</h2>
-          <p class="loading-screen__message-subtitle">{{ loadingMessage }}</p>
+          <h2 class="loading-screen__message-title">{{ loadingMessage }}</h2>
+          <p v-if="loadingSubtitle" class="loading-screen__message-subtitle">{{ loadingSubtitle }}</p>
         </div>
 
         <!-- Animated Dots -->

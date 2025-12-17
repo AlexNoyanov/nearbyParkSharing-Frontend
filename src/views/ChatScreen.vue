@@ -11,8 +11,17 @@ interface Message {
   delivered?: boolean
 }
 
+type BookingData = {
+  address?: string
+  date?: string
+  time?: string
+  price?: string
+  status?: string
+}
+
 const props = defineProps<{
   contactName?: string
+  booking?: BookingData
 }>()
 
 const emit = defineEmits<{
@@ -21,34 +30,30 @@ const emit = defineEmits<{
 
 const defaultContactName = computed(() => props.contactName ?? 'Елена Смирнова')
 
-const conversation = ref<Message[]>([
-  {
-    id: 'm-01',
-    from: 'guest',
-    text: 'Здравствуйте! Забронировала ваше место на сегодня. Подскажите, ворота открыты автоматически?',
-    time: '09:12',
-  },
-  {
-    id: 'm-02',
-    from: 'host',
-    text: 'Добрый день! Да, открываются по номеру. Для подстраховки пришлю доступ в домофон.',
-    time: '09:14',
-    delivered: true,
-  },
-  {
-    id: 'm-03',
-    from: 'guest',
-    text: 'Отлично, спасибо. Буду в 17:40, если нужно — могу написать заранее.',
-    time: '09:16',
-  },
-  {
-    id: 'm-04',
-    from: 'host',
-    text: 'Ок, жду вас. Я буду на связи, если будут уточнения по заезду.',
-    time: '09:17',
-    delivered: true,
-  },
-])
+// Форматируем дату для отображения
+const formatDate = (dateStr?: string): string => {
+  if (!dateStr) return '15 декабря'
+  try {
+    const date = new Date(dateStr)
+    return new Intl.DateTimeFormat('ru-RU', {
+      day: 'numeric',
+      month: 'long'
+    }).format(date)
+  } catch {
+    return '15 декабря'
+  }
+}
+
+// Получаем данные о бронировании
+const bookingData = computed(() => ({
+  address: props.booking?.address || 'ул. Тверская, 15, Москва',
+  date: props.booking?.date ? formatDate(props.booking.date) : '15 декабря',
+  time: props.booking?.time || '10:00 - 12:00',
+  price: props.booking?.price || '₽160',
+  status: props.booking?.status || 'Ожидает подтверждения'
+}))
+
+const conversation = ref<Message[]>([])
 
 const composerValue = ref('')
 const isSubmitting = ref(false)
@@ -149,7 +154,7 @@ onBeforeUnmount(() => {
         <div class="chat__status">На связи · Сдаёт место на ул. Мира</div>
       </div>
 
-      <div class="chat__header-actions">
+      <div class="chat__header-actions" v-if="false">
         <button type="button" class="chat__action" aria-label="Позвонить">
           <svg viewBox="0 0 20 20" aria-hidden="true">
             <path
@@ -183,6 +188,38 @@ onBeforeUnmount(() => {
         <span>Сегодня · {{ todayLabel }}</span>
       </div>
 
+      <!-- Booking info message -->
+      <div class="chat__booking-message">
+        <div class="chat__booking-header">
+          <svg width="14" height="16" viewBox="0 0 14 16" fill="none" xmlns="http://www.w3.org/2000/svg" class="chat__booking-icon">
+            <path d="M0.375 6H13.625C13.8125 6 14 6.1875 14 6.375V14.5C14 15.3438 13.3125 16 12.5 16H1.5C0.65625 16 0 15.3438 0 14.5V6.375C0 6.1875 0.15625 6 0.375 6ZM14 4.625C14 4.84375 13.8125 5 13.625 5H0.375C0.15625 5 0 4.84375 0 4.625V3.5C0 2.6875 0.65625 2 1.5 2H3V0.375C3 0.1875 3.15625 0 3.375 0H4.625C4.8125 0 5 0.1875 5 0.375V2H9V0.375C9 0.1875 9.15625 0 9.375 0H10.625C10.8125 0 11 0.1875 11 0.375V2H12.5C13.3125 2 14 2.6875 14 3.5V4.625Z" fill="white"/>
+          </svg>
+          <span class="chat__booking-title">Запрос на бронирование</span>
+        </div>
+        <div class="chat__booking-content">
+          <div class="chat__booking-row">
+            <span class="chat__booking-label">Место:</span>
+            <span class="chat__booking-value">{{ bookingData.address }}</span>
+          </div>
+          <div class="chat__booking-row">
+            <span class="chat__booking-label">Дата:</span>
+            <span class="chat__booking-value">{{ bookingData.date }}</span>
+          </div>
+          <div class="chat__booking-row">
+            <span class="chat__booking-label">Время:</span>
+            <span class="chat__booking-value">{{ bookingData.time }}</span>
+          </div>
+          <div class="chat__booking-row">
+            <span class="chat__booking-label">Стоимость:</span>
+            <span class="chat__booking-value chat__booking-value--price">{{ bookingData.price }}</span>
+          </div>
+        </div>
+        <div class="chat__booking-footer">
+          <div class="chat__booking-status-indicator"></div>
+          <span class="chat__booking-status">{{ bookingData.status }}</span>
+        </div>
+      </div>
+
       <ul class="chat__message-list">
         <li
           v-for="message in conversation"
@@ -214,20 +251,12 @@ onBeforeUnmount(() => {
 
     <footer class="chat__composer">
       <form class="chat__composer-form" @submit="handleSubmit">
-        <button type="button" class="chat__composer-attach" aria-label="Прикрепить файл">
-          <svg viewBox="0 0 20 20" aria-hidden="true">
-            <path
-              d="M6.5 8.75v4.375a3.125 3.125 0 0 0 6.25 0V7.5c0-1.035-.84-1.875-1.875-1.875s-1.875.84-1.875 1.875v5a.625.625 0 0 0 1.25 0v-5a.625.625 0 1 1 1.25 0v5.625a1.875 1.875 0 0 1-3.75 0V7.5a3.125 3.125 0 0 1 6.25 0v5.625a4.375 4.375 0 0 1-8.75 0V8.75"
-            />
-          </svg>
-        </button>
-
         <label class="chat__composer-field">
           <span class="sr-only">Сообщение</span>
           <textarea
             v-model="composerValue"
             class="chat__composer-input"
-            placeholder="Напишите сообщение"
+            placeholder="Написать сообщение..."
             rows="1"
             @keydown.enter.exact.prevent="handleSubmit"
           />
@@ -236,12 +265,11 @@ onBeforeUnmount(() => {
         <button
           type="submit"
           class="chat__composer-send"
-          :disabled="isSubmitting || !composerValue.trim()"
+          :disabled="true"
           aria-label="Отправить сообщение"
         >
-          <svg viewBox="0 0 20 20" aria-hidden="true">
-            <path d="m3.125 16.875 14.375-6.25L3.125 4.375l1.875 6.25-1.875 6.25Z" />
-            <path d="m5 10.625 1.875 1.25-.625 3.125 3.125-3.125L5 10.625Z" />
+          <svg width="17" height="17" viewBox="0 0 17 17" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M15.0625 0.3125C15.5938 0 16.2812 0.4375 16.1562 1.0625L13.9062 14.5625C13.8438 15.0625 13.3125 15.3438 12.875 15.1562L9 13.5L7 15.9375C6.5625 16.4688 5.6875 16.1875 5.6875 15.4375V12.9062L13.1875 3.75C13.3438 3.5625 13.0938 3.34375 12.9375 3.5L3.96875 11.4062L0.625 10C0.0625 9.78125 0 8.96875 0.5625 8.65625L15.0625 0.3125Z" fill="white"/>
           </svg>
         </button>
       </form>
@@ -253,7 +281,11 @@ onBeforeUnmount(() => {
 .chat {
   display: grid;
   grid-template-rows: auto auto 1fr auto;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
+  overflow: hidden;
   background: #f8fafc;
   color: #1f2937;
 }
@@ -263,12 +295,11 @@ onBeforeUnmount(() => {
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 16px;
-  padding: 24px 24px 20px;
+  padding: 20px 20px 16px;
   background: linear-gradient(90deg, #9333ea 0%, #2563eb 100%);
   color: #f8fafc;
-  border-bottom-left-radius: 24px;
-  border-bottom-right-radius: 24px;
   box-shadow: 0 18px 32px -28px rgba(15, 23, 42, 0.5);
+  flex-shrink: 0;
 }
 
 .chat__back {
@@ -306,12 +337,12 @@ onBeforeUnmount(() => {
 }
 
 .chat__title {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
 }
 
 .chat__status {
-  font-size: 13px;
+  font-size: 12px;
   color: rgba(248, 250, 252, 0.8);
 }
 
@@ -357,29 +388,30 @@ onBeforeUnmount(() => {
 
 .chat__meta {
   display: grid;
-  gap: 16px;
-  padding: 20px 24px 12px;
+  gap: 12px;
+  padding: 16px 20px 10px;
+  flex-shrink: 0;
 }
 
 .chat__summary-card {
   display: grid;
-  gap: 6px;
-  padding: 18px 20px;
-  border-radius: 18px;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 16px;
   background: #ffffff;
   box-shadow: 0 16px 28px -28px rgba(15, 23, 42, 0.4);
   border: 1px solid rgba(99, 102, 241, 0.1);
 }
 
 .chat__summary-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: #1f2937;
 }
 
 .chat__summary-description {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   color: #4b5563;
 }
 
@@ -392,10 +424,10 @@ onBeforeUnmount(() => {
 .chat__chip {
   display: inline-flex;
   align-items: center;
-  padding: 8px 14px;
+  padding: 6px 12px;
   border-radius: 9999px;
   background: #e5e7eb;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
   color: #374151;
 }
@@ -408,10 +440,13 @@ onBeforeUnmount(() => {
 .chat__messages {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 0 24px 24px;
+  gap: 14px;
+  padding: 0 20px 16px;
   overflow-y: auto;
+  overflow-x: hidden;
   scroll-behavior: smooth;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 .chat__date-divider {
@@ -430,6 +465,107 @@ onBeforeUnmount(() => {
   color: #4338ca;
   font-size: 12.5px;
   font-weight: 600;
+}
+
+.chat__booking-message {
+  display: flex;
+  flex-direction: column;
+  gap: 6.5px;
+  padding: 12px 15px 15px;
+  margin: 16px auto;
+  max-width: 271.5px;
+  background: #9333EA;
+  border-radius: 24px 8px 24px 24px;
+  box-shadow: 0px 1px 2px 0px rgba(0, 0, 0, 0.05);
+  align-self: flex-end;
+}
+
+.chat__booking-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 3px;
+}
+
+.chat__booking-icon {
+  width: 14px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.chat__booking-title {
+  font-family: Inter, sans-serif;
+  font-weight: 700;
+  font-size: 11.9px;
+  line-height: 2.02;
+  color: #ffffff;
+}
+
+.chat__booking-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 3px;
+}
+
+.chat__booking-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 72px;
+}
+
+.chat__booking-row:first-child .chat__booking-value {
+  text-align: right;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.chat__booking-label {
+  font-family: Inter, sans-serif;
+  font-weight: 400;
+  font-size: 9.8px;
+  line-height: 2.04;
+  color: #FEFCE8;
+}
+
+.chat__booking-value {
+  font-family: Inter, sans-serif;
+  font-weight: 400;
+  font-size: 9.8px;
+  line-height: 2.04;
+  color: #ffffff;
+  text-align: right;
+}
+
+.chat__booking-value--price {
+  font-weight: 700;
+  font-size: 7.9px;
+  line-height: 2.53;
+}
+
+.chat__booking-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 10.5px;
+  border-top: 1.33px solid rgba(168, 85, 247, 0.3);
+}
+
+.chat__booking-status-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #FACC15;
+  flex-shrink: 0;
+}
+
+.chat__booking-status {
+  font-family: Inter, sans-serif;
+  font-weight: 400;
+  font-size: 9.8px;
+  line-height: 2.04;
+  color: #ffffff;
 }
 
 .chat__message-list {
@@ -493,69 +629,46 @@ onBeforeUnmount(() => {
 }
 
 .chat__composer {
-  padding: 16px 24px calc(env(safe-area-inset-bottom) + 20px);
+  padding: 12px 20px calc(env(safe-area-inset-bottom) + 12px);
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(12px);
   border-top: 1px solid rgba(148, 163, 184, 0.25);
+  flex-shrink: 0;
 }
 
 .chat__composer-form {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: 1fr auto;
   align-items: flex-end;
-  gap: 14px;
-  background: #ffffff;
-  border-radius: 20px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  padding: 12px 16px;
-  box-shadow: 0 18px 28px -26px rgba(15, 23, 42, 0.35);
+  gap: 12px;
 }
 
-.chat__composer-attach,
 .chat__composer-send {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 40px;
   height: 40px;
-  border-radius: 16px;
+  border-radius: 50%;
   border: none;
   cursor: pointer;
   transition: transform 0.2s ease, opacity 0.2s ease;
-  color: #6366f1;
-  background: rgba(99, 102, 241, 0.12);
-}
-
-.chat__composer-attach svg,
-.chat__composer-send svg {
-  width: 20px;
-  height: 20px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.chat__composer-send {
-  background: linear-gradient(135deg, #9333ea, #2563eb);
-  color: #ffffff;
-  box-shadow: 0 12px 24px -18px rgba(79, 70, 229, 0.7);
+  background: #9333ea;
+  flex-shrink: 0;
 }
 
 .chat__composer-send svg {
-  fill: currentColor;
-  stroke: none;
+  width: 17px;
+  height: 17px;
 }
 
 .chat__composer-send:disabled {
-  opacity: 0.5;
+  background: #9CA3AF;
+  opacity: 1;
   cursor: default;
   transform: none;
-  box-shadow: none;
 }
 
-.chat__composer-attach:hover,
 .chat__composer-send:not(:disabled):hover {
   transform: translateY(-1px);
 }
@@ -569,15 +682,17 @@ onBeforeUnmount(() => {
   width: 100%;
   border: none;
   resize: none;
-  background: transparent;
+  background: #e5e7eb;
   font: inherit;
   line-height: 1.5;
   max-height: 120px;
   color: #1f2937;
+  border-radius: 20px;
+  padding: 12px 16px;
 }
 
 .chat__composer-input::placeholder {
-  color: #94a3b8;
+  color: #9ca3af;
 }
 
 .chat__composer-input:focus-visible {
@@ -597,20 +712,47 @@ onBeforeUnmount(() => {
 
 @media (max-width: 480px) {
   .chat__header {
-    padding: 20px 20px 18px;
-    gap: 12px;
+    padding: 16px 16px 14px;
+    gap: 10px;
+  }
+
+  .chat__back,
+  .chat__action {
+    width: 36px;
+    height: 36px;
   }
 
   .chat__meta {
-    padding: 18px 20px 12px;
+    padding: 12px 16px 8px;
+    gap: 10px;
+  }
+
+  .chat__summary-card {
+    padding: 12px 14px;
   }
 
   .chat__messages {
-    padding: 0 20px 20px;
+    padding: 0 16px 12px;
+    gap: 12px;
   }
 
   .chat__composer {
-    padding: 14px 16px calc(env(safe-area-inset-bottom) + 16px);
+    padding: 10px 16px calc(env(safe-area-inset-bottom) + 10px);
+  }
+
+  .chat__composer-input {
+    padding: 10px 14px;
+    font-size: 15px;
+  }
+
+  .chat__composer-send {
+    width: 36px;
+    height: 36px;
+  }
+
+  .chat__composer-send svg {
+    width: 15px;
+    height: 15px;
   }
 }
 </style>
