@@ -19,11 +19,14 @@ const emit = defineEmits<{
   (e: 'edit-card', card: PaymentCard): void
   (e: 'select-card', cardId: string): void
   (e: 'confirm', card: PaymentCard): void
+  (e: 'delete-card', card: PaymentCard): void
 }>()
 
 const selectedCardId = ref<string | null>(null)
 const editingCardId = ref<string | null>(null)
 const editingCardName = ref<string>('')
+const showDeleteConfirm = ref(false)
+const cardToDelete = ref<PaymentCard | null>(null)
 
 // Используем переданные карты или дефолтные для демо
 const cards = ref<PaymentCard[]>(props.cards || [
@@ -130,6 +133,42 @@ const handleNameInputKeydown = (event: KeyboardEvent, card: PaymentCard) => {
   }
 }
 
+const handleDeleteCard = (card: PaymentCard, event: Event) => {
+  event.stopPropagation()
+  cardToDelete.value = card
+  showDeleteConfirm.value = true
+}
+
+const confirmDelete = () => {
+  if (!cardToDelete.value) return
+  
+  const card = cardToDelete.value
+  // Remove card from local list
+  const index = cards.value.findIndex(c => c.id === card.id)
+  if (index > -1) {
+    cards.value.splice(index, 1)
+    // If deleted card was active, activate first card if available
+    if (card.isActive && cards.value.length > 0) {
+      const firstCard = cards.value[0]
+      if (firstCard) {
+        firstCard.isActive = true
+        selectedCardId.value = firstCard.id
+      }
+    } else if (selectedCardId.value === card.id) {
+      const firstCard = cards.value[0]
+      selectedCardId.value = firstCard ? firstCard.id : null
+    }
+  }
+  emit('delete-card', card)
+  showDeleteConfirm.value = false
+  cardToDelete.value = null
+}
+
+const cancelDelete = () => {
+  showDeleteConfirm.value = false
+  cardToDelete.value = null
+}
+
 // При открытии экрана всегда прокручиваем контейнер приложения к началу,
 // чтобы в видимой области был заголовок payment-cards__header
 onMounted(() => {
@@ -206,17 +245,29 @@ onMounted(() => {
             </div>
           </div>
 
-          <!-- Иконка редактирования -->
-          <button
-            type="button"
-            class="payment-cards__edit-button"
-            @click="handleEditCard(card, $event)"
-            aria-label="Редактировать карту"
-          >
-            <svg width="16" height="15" viewBox="0 0 16 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M10.9922 2.37891L13.4531 4.83984C13.5625 4.94922 13.5625 5.11328 13.4531 5.22266L7.49219 11.1836L4.94922 11.457C4.62109 11.5117 4.32031 11.2109 4.375 10.8828L4.64844 8.33984L10.6094 2.37891C10.7188 2.26953 10.8828 2.26953 10.9922 2.37891ZM15.4219 1.75C15.832 2.16016 15.832 2.84375 15.4219 3.25391L14.4648 4.21094C14.3555 4.32031 14.1914 4.32031 14.082 4.21094L11.6211 1.75C11.5117 1.64062 11.5117 1.47656 11.6211 1.36719L12.5781 0.410156C12.9883 0 13.6719 0 14.082 0.410156L15.4219 1.75ZM10.5 9.57031C10.5 9.46094 10.5273 9.37891 10.582 9.32422L11.6758 8.23047C11.8945 8.03906 12.25 8.17578 12.25 8.47656V12.7695C12.25 13.5078 11.6484 14.082 10.9375 14.082H1.3125C0.574219 14.082 0 13.5078 0 12.7695V3.14453C0 2.43359 0.574219 1.83203 1.3125 1.83203H9.10547C9.40625 1.83203 9.54297 2.1875 9.35156 2.40625L8.25781 3.5C8.20312 3.55469 8.12109 3.58203 8.01172 3.58203H1.75V12.332H10.5V9.57031Z" fill="#374151"/>
-            </svg>
-          </button>
+          <!-- Иконки редактирования и удаления -->
+          <div class="payment-cards__card-actions">
+            <button
+              type="button"
+              class="payment-cards__edit-button"
+              @click="handleEditCard(card, $event)"
+              aria-label="Редактировать карту"
+            >
+              <svg width="16" height="15" viewBox="0 0 16 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M10.9922 2.37891L13.4531 4.83984C13.5625 4.94922 13.5625 5.11328 13.4531 5.22266L7.49219 11.1836L4.94922 11.457C4.62109 11.5117 4.32031 11.2109 4.375 10.8828L4.64844 8.33984L10.6094 2.37891C10.7188 2.26953 10.8828 2.26953 10.9922 2.37891ZM15.4219 1.75C15.832 2.16016 15.832 2.84375 15.4219 3.25391L14.4648 4.21094C14.3555 4.32031 14.1914 4.32031 14.082 4.21094L11.6211 1.75C11.5117 1.64062 11.5117 1.47656 11.6211 1.36719L12.5781 0.410156C12.9883 0 13.6719 0 14.082 0.410156L15.4219 1.75ZM10.5 9.57031C10.5 9.46094 10.5273 9.37891 10.582 9.32422L11.6758 8.23047C11.8945 8.03906 12.25 8.17578 12.25 8.47656V12.7695C12.25 13.5078 11.6484 14.082 10.9375 14.082H1.3125C0.574219 14.082 0 13.5078 0 12.7695V3.14453C0 2.43359 0.574219 1.83203 1.3125 1.83203H9.10547C9.40625 1.83203 9.54297 2.1875 9.35156 2.40625L8.25781 3.5C8.20312 3.55469 8.12109 3.58203 8.01172 3.58203H1.75V12.332H10.5V9.57031Z" fill="#374151"/>
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="payment-cards__delete-button"
+              @click="handleDeleteCard(card, $event)"
+              aria-label="Удалить карту"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 4L4 12M4 4L12 12" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
         </button>
       </div>
 
@@ -284,6 +335,29 @@ onMounted(() => {
       </button>
       <p class="payment-cards__footer-text">Активная карта используется для автоматических платежей</p>
     </footer>
+
+    <!-- Модальное окно подтверждения удаления -->
+    <div v-if="showDeleteConfirm" class="payment-cards__delete-modal-overlay" @click="cancelDelete">
+      <div class="payment-cards__delete-modal" @click.stop>
+        <div class="payment-cards__delete-modal-title">Вы точно хотите удалить эту карту?</div>
+        <div class="payment-cards__delete-modal-buttons">
+          <button
+            type="button"
+            class="payment-cards__delete-modal-button payment-cards__delete-modal-button--cancel"
+            @click="cancelDelete"
+          >
+            Отмена
+          </button>
+          <button
+            type="button"
+            class="payment-cards__delete-modal-button payment-cards__delete-modal-button--confirm"
+            @click="confirmDelete"
+          >
+            Удалить
+          </button>
+        </div>
+      </div>
+    </div>
   </section>
 </template>
 
@@ -453,6 +527,13 @@ onMounted(() => {
   color: #6b7280;
 }
 
+.payment-cards__card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .payment-cards__edit-button {
   width: 32px;
   height: 32px;
@@ -467,6 +548,23 @@ onMounted(() => {
 }
 
 .payment-cards__edit-button:hover {
+  opacity: 0.7;
+}
+
+.payment-cards__delete-button {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.payment-cards__delete-button:hover {
   opacity: 0.7;
 }
 
@@ -656,6 +754,71 @@ onMounted(() => {
     max-width: 100%;
   }
 }
+
+.payment-cards__delete-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+}
+
+.payment-cards__delete-modal {
+  background-color: #ffffff;
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 400px;
+  width: 100%;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.payment-cards__delete-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.payment-cards__delete-modal-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.payment-cards__delete-modal-button {
+  flex: 1;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.payment-cards__delete-modal-button--cancel {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+.payment-cards__delete-modal-button--cancel:hover {
+  background-color: #e5e7eb;
+}
+
+.payment-cards__delete-modal-button--confirm {
+  background-color: #dc2626;
+  color: #ffffff;
+}
+
+.payment-cards__delete-modal-button--confirm:hover {
+  background-color: #b91c1c;
+}
 </style>
 
 <style scoped>
@@ -842,6 +1005,13 @@ onMounted(() => {
   color: #6b7280;
 }
 
+.payment-cards__card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .payment-cards__edit-button {
   width: 32px;
   height: 32px;
@@ -856,6 +1026,23 @@ onMounted(() => {
 }
 
 .payment-cards__edit-button:hover {
+  opacity: 0.7;
+}
+
+.payment-cards__delete-button {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.payment-cards__delete-button:hover {
   opacity: 0.7;
 }
 

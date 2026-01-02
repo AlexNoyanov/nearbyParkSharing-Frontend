@@ -196,7 +196,7 @@ const handleGalleryScroll = () => {
       </div>
 
       <!-- Description Section -->
-      <div v-if="false" class="parking-details__section parking-details__description-section">
+      <div class="parking-details__section parking-details__description-section">
         <h3 class="parking-details__description-title">Описание</h3>
         <p class="parking-details__description">
           Удобное парковочное место рядом с главным входом в ТЦ "Галерея". Место хорошо освещено, есть охрана. Въезд с ул. Тверская, место №15 во втором ряду от входа. Ориентир - красная колонна.
@@ -204,7 +204,7 @@ const handleGalleryScroll = () => {
       </div>
 
       <!-- Features Section -->
-      <div v-if="false" class="parking-details__section">
+      <div class="parking-details__section">
         <h3 class="parking-details__section-title">Особенности</h3>
         <div class="parking-details__features">
           <div class="parking-details__feature">
@@ -259,7 +259,7 @@ const handleGalleryScroll = () => {
       </div>
 
       <!-- Location Section -->
-      <div v-if="false" class="parking-details__section">
+      <div class="parking-details__section">
         <h3 class="parking-details__section-title">Местоположение</h3>
         <div class="parking-details__map-container" @click="emit('open-full-map')">
           <div ref="mapContainer" class="parking-details__map"></div>
@@ -369,6 +369,7 @@ const handleGalleryScroll = () => {
   object-fit: cover;
   display: block;
   border-radius: 8px;
+
 }
 
 .parking-details__photo-overlay {

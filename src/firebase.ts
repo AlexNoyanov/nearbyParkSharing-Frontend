@@ -20,18 +20,39 @@ const requiredKeys = [
   ["VITE_FIREBASE_APP_ID", firebaseConfig.appId],
 ] as const;
 
-for (const [key, value] of requiredKeys) {
-  if (!value) {
-    throw new Error(
-      `Environment variable ${key} is missing. Please configure your Firebase credentials.`
-    );
+// Check if all required keys are present
+const missingKeys = requiredKeys.filter(([_, value]) => !value);
+
+let firebaseApp: ReturnType<typeof initializeApp> | null = null;
+
+if (missingKeys.length === 0) {
+  // All keys present, initialize Firebase
+  try {
+    firebaseApp = initializeApp(firebaseConfig);
+  } catch (error) {
+    console.warn("Failed to initialize Firebase:", error);
   }
+} else {
+  // Missing keys, log warning but don't crash
+  console.warn(
+    "Firebase environment variables are missing. Firebase features will be disabled.",
+    "Missing variables:",
+    missingKeys.map(([key]) => key).join(", ")
+  );
+  console.warn(
+    "To enable Firebase, create a .env file with the required variables."
+  );
 }
 
-export const firebaseApp = initializeApp(firebaseConfig);
+export { firebaseApp };
 
 export const initAnalytics = async (): Promise<Analytics | null> => {
   if (typeof window === "undefined") {
+    return null;
+  }
+
+  if (!firebaseApp) {
+    console.warn("Firebase is not initialized. Analytics will not be available.");
     return null;
   }
 

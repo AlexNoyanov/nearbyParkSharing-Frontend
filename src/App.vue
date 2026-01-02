@@ -37,6 +37,10 @@ import homeIconSvg from './assets/icons/bottom-nav-home.svg?raw'
 import plusIconSvg from './assets/icons/bottom-nav-plus.svg?raw'
 import profileIconSvg from './assets/icons/bottom-nav-profile.svg?raw'
 import searchIconSvg from './assets/icons/bottom-nav-search.svg?raw'
+import OwnerRequestConfirmationScreen from './views/OwnerRequestConfirmationScreen.vue'
+import OwnerRequestDeclineScreen from './views/OwnerRequestDeclineScreen.vue'
+import OwnerBookingConfirmedScreen from './views/OwnerBookingConfirmedScreen.vue'
+import OwnerCompletedBookingScreen from './views/OwnerCompletedBookingScreen.vue'
 
 type Stage =
   | 'onboarding1'
@@ -68,6 +72,10 @@ type Stage =
   | 'chat-list'
   | 'payment-cards'
   | 'placeholder'
+  | 'owner-request-confirmation'
+  | 'owner-request-decline'
+  | 'owner-booking-confirmed'
+  | 'owner-completed-booking'
 
 const stage = ref<Stage>('onboarding1')
 const selectedParking = ref<ParkingSpot | null>(null)
@@ -103,6 +111,22 @@ type Booking = {
 }
 
 const bookings = ref<Booking[]>([])
+
+type OwnerRequestStatus = 'awaiting' | 'cancelled' | 'completed' | 'active'
+
+type OwnerRequest = {
+  id: string
+  address: string
+  startDate: string
+  endDate: string
+  startTime: string
+  endTime: string
+  renterName: string
+  status: OwnerRequestStatus
+}
+
+const ownerRequests = ref<OwnerRequest[]>([])
+const selectedOwnerRequest = ref<OwnerRequest | null>(null)
 
 // Feature toggle states - will be updated as features are checked
 const featureStates = ref<Record<FeatureKey, boolean | null>>({
@@ -192,7 +216,11 @@ const isNavVisible = computed(() =>
   stage.value !== 'full-screen-map' &&
   stage.value !== 'payment-cards' &&
   stage.value !== 'placeholder' &&
-  stage.value !== 'chat'
+  stage.value !== 'chat' &&
+  stage.value !== 'owner-request-confirmation' &&
+  stage.value !== 'owner-request-decline' &&
+  stage.value !== 'owner-booking-confirmed' &&
+  stage.value !== 'owner-completed-booking'
 )
 
 const ensureParkingSelected = () => {
@@ -240,6 +268,7 @@ const goToLogin = async () => {
 const goToHomeAsGuest = async () => {
   currentUser.value = null
   userName.value = undefined
+  ownerRequests.value = []
   await checkFeatureAndNavigate('home', 'home')
   if (stage.value === 'home') {
     navSelection.value = 'home'
@@ -275,6 +304,55 @@ const goToCodeVerification = async (arg1: string, arg2?: string) => {
 const handleAuthSuccess = (user: User) => {
   currentUser.value = user
   userName.value = user.name
+
+   // Инициализируем заявки на бронирование для владельца места
+  if (user.phone === '+79990001122') {
+    ownerRequests.value = [
+      {
+        id: 'owner-req-1',
+        address: 'Москва, Тверская, 15',
+        startDate: '2025-12-15',
+        endDate: '2025-12-15',
+        startTime: '10:00',
+        endTime: '14:00',
+        renterName: 'Михаил',
+        status: 'awaiting',
+      },
+      {
+        id: 'owner-req-2',
+        address: 'Москва, Тверская, 15',
+        startDate: '2025-12-15',
+        endDate: '2025-12-15',
+        startTime: '16:00',
+        endTime: '20:00',
+        renterName: 'Елена',
+        status: 'cancelled',
+      },
+      {
+        id: 'owner-req-3',
+        address: 'Москва, Тверская, 15',
+        startDate: '2025-12-14',
+        endDate: '2025-12-14',
+        startTime: '09:00',
+        endTime: '12:00',
+        renterName: 'Дмитрий',
+        status: 'completed',
+      },
+      {
+        id: 'owner-req-4',
+        address: 'Москва, Тверская, 15',
+        startDate: '2025-12-16',
+        endDate: '2025-12-16',
+        startTime: '14:00',
+        endTime: '18:00',
+        renterName: 'Алексей',
+        status: 'active',
+      },
+    ]
+  } else {
+    ownerRequests.value = []
+  }
+
   // If it's a registration flow, show geo confirmation screen first
   if (isRegistrationFlow.value) {
     stage.value = 'geo-confirmation'
@@ -351,8 +429,8 @@ const openSearchFromHome = async () => {
 }
 
 const openRentFromHome = async () => {
-  await checkFeatureAndNavigate('rent-map', 'rent')
-  if (stage.value === 'rent-map') {
+  await checkFeatureAndNavigate('rent', 'rent')
+  if (stage.value === 'rent') {
     navSelection.value = 'rent'
   }
 }
@@ -371,6 +449,40 @@ const handleOpenChat = async () => {
   }
 }
 
+const handleOpenOwnerRequestFromHome = (request: OwnerRequest) => {
+  if (request.status === 'awaiting') {
+    // Экран подтверждения аренды владельцем
+    selectedOwnerRequest.value = request
+    stage.value = 'owner-request-confirmation'
+    return
+  }
+
+  if (request.status === 'active') {
+    // Для активных заявок открываем экран подтверждённого бронирования
+    selectedOwnerRequest.value = request
+    stage.value = 'owner-booking-confirmed'
+    return
+  }
+
+  if (request.status === 'completed') {
+    // Для завершенных заявок открываем экран с информацией о парковочном месте
+    selectedOwnerRequest.value = request
+    stage.value = 'owner-completed-booking'
+    return
+  }
+
+  // Для отмененных заявок открываем чат с историей
+  selectedChatName.value = request.renterName
+  selectedChatBooking.value = {
+    address: request.address,
+    date: request.startDate,
+    time: `${request.startTime} — ${request.endTime}`,
+    price: '₽1 600',
+    status: 'Отменено',
+  }
+  stage.value = 'chat'
+}
+
 const handleOpenChatFromList = (booking: Booking) => {
   // Определяем имя контакта на основе статуса бронирования
   // Если статус awaiting - пользователь арендует, контакт - владелец места
@@ -380,10 +492,131 @@ const handleOpenChatFromList = (booking: Booking) => {
   } else {
     selectedChatName.value = 'Елена' // Арендатор
   }
+  
+  // Форматируем дату и время
+  const formatBookingDate = (b: Booking): string => {
+    const startDate = new Date(`${b.startDate}T${b.startTime}`)
+    const endDate = new Date(`${b.endDate}T${b.endTime}`)
+    
+    const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
+      day: 'numeric',
+      month: 'short'
+    })
+    
+    const timeFormatter = new Intl.DateTimeFormat('ru-RU', {
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+    
+    if (b.startDate === b.endDate) {
+      return `${dateFormatter.format(startDate)}, ${timeFormatter.format(startDate)} — ${timeFormatter.format(endDate)}`
+    } else {
+      return `${dateFormatter.format(startDate)} — ${dateFormatter.format(endDate)}`
+    }
+  }
+  
+  // Конвертируем статус в русский текст
+  const getStatusText = (status: Booking['status']): string => {
+    switch (status) {
+      case 'awaiting':
+        return 'Ожидает подтверждения'
+      case 'confirmed':
+        return 'Подтверждено'
+      case 'active':
+        return 'Активно'
+      case 'completed':
+        return 'Завершено'
+      default:
+        return 'Ожидает подтверждения'
+    }
+  }
+  
+  selectedChatBooking.value = {
+    address: booking.address,
+    date: booking.startDate,
+    time: formatBookingDate(booking),
+    price: '₽1 600', // TODO: Calculate actual price
+    status: getStatusText(booking.status)
+  }
+  
   stage.value = 'chat'
 }
 
 const selectedChatName = ref<string | undefined>(undefined)
+const selectedChatBooking = ref<{ address?: string; date?: string; time?: string; price?: string; status?: string } | undefined>(undefined)
+
+const handleOwnerRequestConfirm = () => {
+  if (!selectedOwnerRequest.value) return
+
+  ownerRequests.value = ownerRequests.value.map((req) =>
+    req.id === selectedOwnerRequest.value?.id ? { ...req, status: 'active' } : req,
+  )
+
+  // Navigate to booking confirmed screen
+  stage.value = 'owner-booking-confirmed'
+}
+
+const handleOwnerBookingConfirmedOk = () => {
+  stage.value = 'home'
+  navSelection.value = 'home'
+}
+
+const handleOwnerBookingConfirmedGoHome = () => {
+  stage.value = 'home'
+  navSelection.value = 'home'
+}
+
+const handleOwnerBookingConfirmedChat = () => {
+  if (!selectedOwnerRequest.value) return
+  
+  selectedChatName.value = selectedOwnerRequest.value.renterName
+  selectedChatBooking.value = {
+    address: selectedOwnerRequest.value.address,
+    date: selectedOwnerRequest.value.startDate,
+    time: `${selectedOwnerRequest.value.startTime} — ${selectedOwnerRequest.value.endTime}`,
+    price: '₽160',
+    status: 'Подтверждено',
+  }
+  stage.value = 'chat'
+}
+
+const handleOwnerCompletedBookingGoHome = () => {
+  stage.value = 'home'
+  navSelection.value = 'home'
+}
+
+const handleOwnerCompletedBookingChat = () => {
+  if (!selectedOwnerRequest.value) return
+  
+  selectedChatName.value = selectedOwnerRequest.value.renterName
+  selectedChatBooking.value = {
+    address: selectedOwnerRequest.value.address,
+    date: selectedOwnerRequest.value.startDate,
+    time: `${selectedOwnerRequest.value.startTime} — ${selectedOwnerRequest.value.endTime}`,
+    price: '₽160',
+    status: 'Завершено',
+  }
+  stage.value = 'chat'
+}
+
+const handleOwnerRequestDecline = () => {
+  if (!selectedOwnerRequest.value) return
+
+  ownerRequests.value = ownerRequests.value.map((req) =>
+    req.id === selectedOwnerRequest.value?.id ? { ...req, status: 'cancelled' } : req,
+  )
+
+  // Переходим в чат с информацией об отмене
+  selectedChatName.value = selectedOwnerRequest.value.renterName
+  selectedChatBooking.value = {
+    address: selectedOwnerRequest.value.address,
+    date: selectedOwnerRequest.value.startDate,
+    time: `${selectedOwnerRequest.value.startTime} — ${selectedOwnerRequest.value.endTime}`,
+    price: '₽160',
+    status: 'Отменено',
+  }
+  stage.value = 'chat'
+}
 
 const handleOpenDetails = async (parking: ParkingSpot) => {
   selectedParking.value = parking
@@ -509,6 +742,13 @@ const handlePaymentCardConfirm = (card: { id: string; name: string; type: 'visa'
     stage.value = 'rent-booking-dates'
   }
   previousStage.value = null
+}
+
+const handleDeletePaymentCard = (card: { id: string; name: string; type: 'visa' | 'mastercard' | 'mir'; lastFour: string; isActive: boolean }) => {
+  // Если удаляемая карта была выбрана, сбрасываем выбор
+  if (selectedPaymentCard.value && selectedPaymentCard.value.id === card.id) {
+    selectedPaymentCard.value = null
+  }
 }
 
 const handleAddPaymentCard = (card?: { id: string; name: string; type: 'visa' | 'mastercard' | 'mir'; lastFour: string; isActive: boolean }) => {
@@ -656,13 +896,19 @@ watch(stage, async (newStage) => {
 }, { immediate: true })
 
 onMounted(async () => {
+  // Set userName immediately (synchronous)
   userName.value = window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name
   
-  // Check feature toggle for initial onboarding screen
-  const onboarding1Enabled = await isFeatureEnabled('onboarding1')
-  if (!onboarding1Enabled) {
-    placeholderMessage.value = featureToggles.getPlaceholderMessage('onboarding1')
-    stage.value = 'placeholder'
+  // Check feature toggle asynchronously after component has rendered
+  try {
+    const onboarding1Enabled = await isFeatureEnabled('onboarding1')
+    if (!onboarding1Enabled) {
+      placeholderMessage.value = featureToggles.getPlaceholderMessage('onboarding1')
+      stage.value = 'placeholder'
+    }
+  } catch (error) {
+    console.error('Error checking feature toggle:', error)
+    // Keep default stage 'onboarding1' if check fails
   }
 })
 </script>
@@ -741,11 +987,13 @@ onMounted(async () => {
           :current-user="currentUser"
           :bookings-count="bookingsCount"
           :bookings="bookings"
+          :owner-requests="ownerRequests"
           @open-search="openSearchFromHome"
           @open-rent-out="openRentFromHome"
           @open-booking="handleReserve"
           @open-history="openHistoryFromHome"
           @open-chat="handleOpenChat"
+          @open-owner-request="handleOpenOwnerRequestFromHome"
         />
 
         <SearchScreen
@@ -773,6 +1021,35 @@ onMounted(async () => {
           :parking="selectedParking"
           @finish="goHome"
           @extend="extendBooking"
+        />
+
+        <OwnerRequestConfirmationScreen
+          v-else-if="stage === 'owner-request-confirmation' && selectedOwnerRequest"
+          :request="selectedOwnerRequest"
+          @back="() => { stage = 'home'; navSelection = 'home' }"
+          @confirm="handleOwnerRequestConfirm"
+          @decline="() => { stage = 'owner-request-decline' }"
+        />
+
+        <OwnerRequestDeclineScreen
+          v-else-if="stage === 'owner-request-decline'"
+          @decline-booking="handleOwnerRequestDecline"
+          @go-back="() => { stage = 'owner-request-confirmation' }"
+        />
+
+        <OwnerBookingConfirmedScreen
+          v-else-if="stage === 'owner-booking-confirmed' && selectedOwnerRequest"
+          :request="selectedOwnerRequest"
+          @ok="handleOwnerBookingConfirmedOk"
+          @go-home="handleOwnerBookingConfirmedGoHome"
+          @open-chat="handleOwnerBookingConfirmedChat"
+        />
+
+        <OwnerCompletedBookingScreen
+          v-else-if="stage === 'owner-completed-booking' && selectedOwnerRequest"
+          :request="selectedOwnerRequest"
+          @go-home="handleOwnerCompletedBookingGoHome"
+          @open-chat="handleOwnerCompletedBookingChat"
         />
 
         <RentOutMapScreen
@@ -829,6 +1106,7 @@ onMounted(async () => {
           @edit-card="() => {}"
           @select-card="() => {}"
           @confirm="handlePaymentCardConfirm"
+          @delete-card="handleDeletePaymentCard"
         />
 
         <FullScreenMapScreen
@@ -846,7 +1124,7 @@ onMounted(async () => {
           v-else-if="stage === 'rent'"
           :selected-address="selectedAddress"
           :current-user="currentUser"
-          @back="() => stage = 'rent-map'"
+          @back="goHome"
           @success="() => stage = 'rent-success'"
           @open-map="() => stage = 'map-selection'"
           @update-address="(addr) => { selectedAddress = addr }"
@@ -880,7 +1158,8 @@ onMounted(async () => {
         <ChatScreen
           v-else-if="stage === 'chat' && featureStates['chat'] !== false"
           :contact-name="selectedChatName"
-          @back="() => { stage = 'chat-list'; selectedChatName = undefined; }"
+          :booking="selectedChatBooking"
+          @back="() => { stage = 'chat-list'; selectedChatName = undefined; selectedChatBooking = undefined; }"
         />
 
         <PlaceholderScreen

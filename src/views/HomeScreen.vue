@@ -16,11 +16,25 @@ type Booking = {
   status: 'awaiting' | 'confirmed' | 'active' | 'completed'
 }
 
+type OwnerRequestStatus = 'awaiting' | 'cancelled' | 'completed' | 'active' | 'active'
+
+type OwnerRequest = {
+  id: string
+  address: string
+  startDate: string
+  endDate: string
+  startTime: string
+  endTime: string
+  renterName: string
+  status: OwnerRequestStatus
+}
+
 const props = defineProps<{ 
   userName?: string
   currentUser?: User | null
   bookingsCount?: number
   bookings?: Booking[]
+  ownerRequests?: OwnerRequest[]
 }>()
 
 const emit = defineEmits<{
@@ -29,6 +43,7 @@ const emit = defineEmits<{
   (e: 'open-booking', parking: ParkingSpot): void
   (e: 'open-history'): void
   (e: 'open-chat'): void
+  (e: 'open-owner-request', request: OwnerRequest): void
 }>()
 
 type QuickAction = {
@@ -67,42 +82,14 @@ type ActivityEntry = {
   statusLabel: string
   statusTone: 'success' | 'neutral'
   statusMeta?: string
+  statusColor?: string
   parking: ParkingSpot | null
-  booking?: never
-  address?: never
+  booking?: unknown
+  address?: string
 }
 
-// Commented out activity items to show empty list message
-const recentActivities: ActivityEntry[] = props.currentUser ? [
-  // {
-  //   id: 'activity-1',
-  //   title: 'Ваше место на ул. Мира',
-  //   period: 'Сегодня, 8 часов • ₽640',
-  //   meta: 'Арендатор: Елена С.',
-  //   statusLabel: 'Активно',
-  //   statusTone: 'success',
-  //   statusMeta: 'до 18:00',
-  //   parking: featuredParkings[0] ?? fallbackParking,
-  // },
-  // {
-  //   id: 'activity-2',
-  //   title: 'Место у дома на Тверской',
-  //   period: 'Вчера, 6 часов • ₽480',
-  //   meta: 'Арендатор: Дмитрий В.',
-  //   statusLabel: 'Завершено',
-  //   statusTone: 'neutral',
-  //   parking: featuredParkings[1] ?? fallbackParking,
-  // },
-  // {
-  //   id: 'activity-3',
-  //   title: 'Парковка в центре',
-  //   period: '2 дня назад, 4 часа • ₽320',
-  //   meta: 'Арендатор: Михаил П.',
-  //   statusLabel: 'Завершено',
-  //   statusTone: 'neutral',
-  //   parking: featuredParkings[2] ?? fallbackParking,
-  // },
-] : []
+// Пока отдельные активности (кроме заявок и бронирований) не используем
+const recentActivities: ActivityEntry[] = []
 
 const activityFilters = ref([
   { id: 'rentals', label: 'Аренда мест', icon: 'car', isActive: false },
@@ -129,6 +116,59 @@ const handleFilterClick = (filterId: string) => {
   }))
 }
 
+const getStatusLabel = (status: string, type: 'booking' | 'ownerRequest'): string => {
+  if (type === 'ownerRequest') {
+    switch (status) {
+      case 'awaiting':
+        return 'Ожидает подтверждения'
+      case 'cancelled':
+        return 'Отменено'
+      case 'active':
+        return 'Активное'
+      case 'completed':
+        return 'Завершено'
+      default:
+        return 'Ожидает подтверждения'
+    }
+  } else {
+    // For bookings
+    switch (status) {
+      case 'awaiting':
+        return 'Ожидает подтверждения'
+      case 'confirmed':
+        return 'Активное'
+      case 'active':
+        return 'Активное'
+      case 'completed':
+        return 'Завершено'
+      default:
+        return 'Ожидает подтверждения'
+    }
+  }
+}
+
+const getStatusColor = (status: string, type: 'booking' | 'ownerRequest'): string => {
+  if (type === 'ownerRequest') {
+    if (status === 'awaiting' || status === 'cancelled') {
+      return '#EF4444'
+    } else if (status === 'active') {
+      return '#22C55E'
+    } else if (status === 'completed') {
+      return '#4B5563'
+    }
+  } else {
+    // For bookings
+    if (status === 'awaiting') {
+      return '#EF4444'
+    } else if (status === 'confirmed' || status === 'active') {
+      return '#22C55E'
+    } else if (status === 'completed') {
+      return '#4B5563'
+    }
+  }
+  return '#4B5563'
+}
+
 // Computed property to get activities based on active filter
 const displayedActivities = computed(() => {
   const activeFilter = activityFilters.value.find(f => f.isActive)
@@ -140,16 +180,49 @@ const displayedActivities = computed(() => {
       title: 'Запрос на бронирование',
       address: booking.address,
       period: formatBookingPeriod(booking),
-      statusLabel: booking.status === 'awaiting' ? 'Ожидает' : '',
-      statusMeta: booking.status === 'awaiting' ? 'начала аренды' : '',
+      statusLabel: getStatusLabel(booking.status, 'booking'),
+      statusMeta: '',
       statusTone: 'success' as const,
+      statusColor: getStatusColor(booking.status, 'booking'),
       booking,
       parking: null as ParkingSpot | null
     })).reverse() // Show newest bookings first
-  } else {
-    // Show sharing activities (currently empty)
+  } else if (activeFilter?.id === 'sharing') {
+    // Заявки на бронирование ваших мест
+    if (props.ownerRequests && props.ownerRequests.length > 0) {
+      return props.ownerRequests.map((request) => {
+        const statusLabel = getStatusLabel(request.status, 'ownerRequest')
+        const statusColor = getStatusColor(request.status, 'ownerRequest')
+
+        const statusTone: 'success' | 'neutral' =
+          request.status === 'awaiting' ? 'success' : 'neutral'
+
+        const statusMeta =
+          request.status === 'awaiting'
+            ? 'ждет вашего решения'
+            : request.status === 'cancelled'
+            ? 'клиент отменил запрос'
+            : 'бронь завершена'
+
+        return {
+          id: request.id,
+          title: 'Заявка на ваше место',
+          address: request.address,
+          period: formatOwnerRequestPeriod(request),
+          meta: `Клиент: ${request.renterName}`,
+          statusLabel,
+          statusTone,
+          statusMeta,
+          statusColor,
+          booking: request,
+          parking: null as ParkingSpot | null,
+        }
+      })
+    }
     return recentActivities
   }
+
+  return recentActivities
 })
 
 const formatBookingPeriod = (booking: Booking): string => {
@@ -172,6 +245,52 @@ const formatBookingPeriod = (booking: Booking): string => {
     return `${dateFormatter.format(startDate)}, ${timeFormatter.format(startDate)} — ${timeFormatter.format(endDate)}`
   } else {
     return `${dateFormatter.format(startDate)} — ${dateFormatter.format(endDate)}`
+  }
+}
+
+const formatOwnerRequestPeriod = (request: OwnerRequest): string => {
+  const startDate = new Date(`${request.startDate}T${request.startTime}`)
+  const endDate = new Date(`${request.endDate}T${request.endTime}`)
+
+  const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    month: 'short',
+  })
+
+  const timeFormatter = new Intl.DateTimeFormat('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+  if (request.startDate === request.endDate) {
+    return `${dateFormatter.format(startDate)}, ${timeFormatter.format(startDate)} — ${timeFormatter.format(endDate)}`
+  } else {
+    return `${dateFormatter.format(startDate)} — ${dateFormatter.format(endDate)}`
+  }
+}
+
+const handleActivityClick = (entry: any) => {
+  // Если это заявка на ваше место (есть renterName в booking)
+  if (entry.booking && 'renterName' in entry.booking) {
+    emit('open-owner-request', entry.booking as OwnerRequest)
+    return
+  }
+
+  // Обычные бронирования (вы арендуете место)
+  if (entry.booking) {
+    // Если статус "awaiting" (Ожидает подтверждения), открываем "Мои места"
+    if (entry.booking.status === 'awaiting') {
+      emit('open-rent-out')
+      return
+    }
+    // Для других статусов открываем чат
+    emit('open-chat')
+    return
+  }
+
+  // Переход к подробностям парковки
+  if (entry.parking) {
+    emit('open-booking', entry.parking as ParkingSpot)
   }
 }
 </script>
@@ -317,7 +436,7 @@ const formatBookingPeriod = (booking: Booking): string => {
               class="home__activity-item"
               :class="{ 'home__activity-item--booking': entry.booking }"
               :disabled="entry.booking ? false : !entry.parking"
-              @click="entry.booking ? emit('open-chat') : (entry.parking && emit('open-booking', entry.parking))"
+              @click="handleActivityClick(entry)"
             >
               <span class="home__activity-icon" :class="{ 'home__activity-icon--booking': entry.booking }" aria-hidden="true">
                 <svg v-if="entry.booking" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -350,11 +469,9 @@ const formatBookingPeriod = (booking: Booking): string => {
                     'home__activity-status-label--success': entry.statusTone === 'success',
                     'home__activity-status-label--neutral': entry.statusTone === 'neutral',
                   }"
+                  :style="entry.statusColor ? { color: entry.statusColor } : {}"
                 >
                   {{ entry.statusLabel }}
-                </span>
-                <span v-if="entry.statusMeta" class="home__activity-status-meta">
-                  {{ entry.statusMeta }}
                 </span>
               </div>
             </button>
@@ -403,7 +520,7 @@ const formatBookingPeriod = (booking: Booking): string => {
   margin: 0 0 8px 0;
   font-family: Inter, sans-serif;
   font-weight: 700;
-  font-size: 28px;
+  font-size: 20px;
   line-height: 1.2;
   color: #ffffff;
 }
@@ -412,7 +529,7 @@ const formatBookingPeriod = (booking: Booking): string => {
   margin: 0;
   font-family: Inter, sans-serif;
   font-weight: 400;
-  font-size: 16px;
+  font-size: 13px;
   line-height: 1.5;
   color: #ffffff;
 }
@@ -527,14 +644,14 @@ const formatBookingPeriod = (booking: Booking): string => {
 
 .home__action-title {
   margin: 0;
-  font-size: 16.8px;
+  font-size: 15px;
   font-weight: 700;
   color: #1f2937;
 }
 
 .home__action-subtitle {
   margin: 0;
-  font-size: 13.2px;
+  font-size: 12px;
   color: #4b5563;
   font-weight: 500;
   margin-top: 14px;
@@ -638,14 +755,14 @@ const formatBookingPeriod = (booking: Booking): string => {
 
 .home__stat-title {
   margin: 0;
-  font-size: 15.6px;
+  font-size: 14px;
   font-weight: 700;
   color: #1f2937;
 }
 
 .home__stat-caption {
   margin: 0;
-  font-size: 13.4px;
+  font-size: 12px;
   color: #4b5563;
   font-weight: 500;
 }
@@ -663,7 +780,7 @@ const formatBookingPeriod = (booking: Booking): string => {
 
 .home__section-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   color: #1f2937;
 }
@@ -847,7 +964,7 @@ const formatBookingPeriod = (booking: Booking): string => {
 
 .home__activity-address {
   margin: 0;
-  font-size: 13.2px;
+  font-size: 12px;
   color: #4b5563;
   font-weight: 400;
   line-height: 1.4;
@@ -860,7 +977,7 @@ const formatBookingPeriod = (booking: Booking): string => {
 
 .home__activity-title {
   margin: 0;
-  font-size: 15.4px;
+  font-size: 14px;
   font-weight: 600;
   color: #1f2937;
   min-width: 0;
@@ -872,7 +989,7 @@ const formatBookingPeriod = (booking: Booking): string => {
 
 .home__activity-period {
   margin: 0;
-  font-size: 13.2px;
+  font-size: 12px;
   color: #4b5563;
   font-weight: 500;
   min-width: 0;
@@ -883,7 +1000,7 @@ const formatBookingPeriod = (booking: Booking): string => {
 
 .home__activity-meta {
   margin: 0;
-  font-size: 12.2px;
+  font-size: 11px;
   color: #6b7280;
   min-width: 0;
   max-width: 100%;
@@ -913,10 +1030,9 @@ const formatBookingPeriod = (booking: Booking): string => {
 
 .home__activity-item--booking .home__activity-status-label {
   background-color: transparent;
-  color: #16a34a;
   padding: 0;
   border-radius: 0;
-  font-size: 13.2px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -937,9 +1053,8 @@ const formatBookingPeriod = (booking: Booking): string => {
 }
 
 .home__activity-item--booking .home__activity-status-meta {
-  color: #22C55E;
   font-weight: 600;
-  font-size: 13.2px;
+  font-size: 12px;
   word-wrap: break-word;
   overflow-wrap: break-word;
   max-width: 100%;
@@ -962,7 +1077,6 @@ const formatBookingPeriod = (booking: Booking): string => {
   word-break: break-word;
   max-width: 100%;
   text-align: right;
-  color: #22C55E;
   background-color: transparent;
   padding: 0;
   overflow-wrap: break-word;
@@ -970,7 +1084,6 @@ const formatBookingPeriod = (booking: Booking): string => {
 }
 
 .home__activity-item--booking .home__activity-status-meta {
-  color: #22C55E;
   font-weight: 600;
 }
 
@@ -1109,7 +1222,6 @@ const formatBookingPeriod = (booking: Booking): string => {
     word-break: break-word;
     overflow-wrap: break-word;
     max-width: 100%;
-    color: #22C55E;
     background-color: transparent;
     padding: 0;
     min-width: 0;
@@ -1118,7 +1230,6 @@ const formatBookingPeriod = (booking: Booking): string => {
   .home__activity-item--booking .home__activity-status-meta {
     font-size: 11px;
     line-height: 1.3;
-    color: #22C55E;
     font-weight: 600;
     word-wrap: break-word;
     overflow-wrap: break-word;
@@ -1167,14 +1278,6 @@ const formatBookingPeriod = (booking: Booking): string => {
     margin-right: calc(env(safe-area-inset-right) * -1 - 32px);
   }
 
-  .home__greeting-title {
-    font-size: 32px;
-  }
-
-  .home__greeting-subtitle {
-    font-size: 18px;
-  }
-
   .home__greeting-icon {
     width: 80px;
     height: 80px;
@@ -1204,50 +1307,6 @@ const formatBookingPeriod = (booking: Booking): string => {
     width: 32px;
     height: 32px;
   }
-
-  .home__action-title {
-    font-size: 20px;
-  }
-
-  .home__action-subtitle {
-    font-size: 15px;
-  }
-
-  .home__stat-card {
-    padding: 32px;
-    gap: 20px;
-  }
-
-  .home__stat-icon {
-    width: 64px;
-    height: 64px;
-  }
-
-  .home__stat-title {
-    font-size: 18px;
-  }
-
-  .home__stat-caption {
-    font-size: 15px;
-  }
-
-  .home__section-title {
-    font-size: 20px;
-  }
-
-  .home__activity-card {
-    padding: 24px;
-  }
-
-  .home__activity-filters {
-    padding: 10px;
-    gap: 10px;
-  }
-
-  .home__activity-filter {
-    padding: 14px 28px;
-    font-size: 15px;
-  }
 }
 
 /* Small desktop styles (1024px and up, like MacBook Air 13") */
@@ -1267,11 +1326,11 @@ const formatBookingPeriod = (booking: Booking): string => {
   }
 
   .home__greeting-title {
-    font-size: 36px;
+    font-size: 20px;
   }
 
   .home__greeting-subtitle {
-    font-size: 20px;
+    font-size: 13px;
   }
 
   .home__greeting-icon {
@@ -1310,15 +1369,6 @@ const formatBookingPeriod = (booking: Booking): string => {
     height: 40px;
   }
 
-  .home__action-title {
-    font-size: 24px;
-  }
-
-  .home__action-subtitle {
-    font-size: 16px;
-    margin-top: 16px;
-  }
-
   .home__stat-card {
     padding: 40px;
     gap: 24px;
@@ -1342,24 +1392,7 @@ const formatBookingPeriod = (booking: Booking): string => {
 
   .home__stat-count {
     padding: 6px 16px;
-    font-size: 14px;
-  }
-
-  .home__stat-title {
-    font-size: 20px;
-  }
-
-  .home__stat-caption {
-    font-size: 16px;
-  }
-
-  .home__section-title {
-    font-size: 24px;
-  }
-
-  .home__section-action {
-    font-size: 16px;
-    padding: 8px 16px;
+    font-size: 12px;
   }
 
   .home__activity-card {
@@ -1375,7 +1408,7 @@ const formatBookingPeriod = (booking: Booking): string => {
 
   .home__activity-filter {
     padding: 16px 32px;
-    font-size: 16px;
+    font-size: 14px;
     gap: 10px;
     border-radius: 14px;
   }
@@ -1412,25 +1445,13 @@ const formatBookingPeriod = (booking: Booking): string => {
     height: 32px;
   }
 
-  .home__activity-title {
-    font-size: 18px;
-  }
-
-  .home__activity-period {
-    font-size: 15px;
-  }
-
-  .home__activity-meta {
-    font-size: 14px;
-  }
-
   .home__activity-status-label {
     padding: 6px 16px;
-    font-size: 14px;
+    font-size: 12px;
   }
 
   .home__activity-status-meta {
-    font-size: 13px;
+    font-size: 12px;
   }
 
   .home__activity-empty {
@@ -1443,7 +1464,7 @@ const formatBookingPeriod = (booking: Booking): string => {
   }
 
   .home__activity-empty-text {
-    font-size: 18px;
+    font-size: 14px;
   }
 }
 

@@ -10,7 +10,8 @@
     "firebase:login": "firebase login",
     "deploy": "npm run build && npx firebase deploy --only hosting",
     "deploy:quick": "npm run build && npx firebase deploy --only hosting",
-    "deploy:watch": "node deploy-watcher.js"
+    "deploy:watch": "node deploy-watcher.js",
+    "d": "npm run deploy"
   },
   "dependencies": {
     "@mobiscroll/javascript-lite": "^4.10.9",

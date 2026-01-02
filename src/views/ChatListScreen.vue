@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 
 type Booking = {
   id: string
@@ -23,6 +23,7 @@ const emit = defineEmits<{
 }>()
 
 const filterType = ref<'all' | 'active'>('all')
+const contentRef = ref<HTMLElement | null>(null)
 
 const filteredBookings = computed(() => {
   if (!props.bookings) return []
@@ -100,6 +101,20 @@ const getContactName = (booking: Booking): { name: string; role: string } => {
     return { name: 'Елена', role: 'Арендатор' }
   }
 }
+
+onMounted(async () => {
+  await nextTick()
+  // Scroll to top when component is mounted
+  if (contentRef.value) {
+    contentRef.value.scrollTop = 0
+  }
+  const appContent = document.querySelector('.app__content') as HTMLElement | null
+  if (appContent) {
+    appContent.scrollTop = 0
+  }
+  // Also scroll window to top
+  window.scrollTo(0, 0)
+})
 </script>
 
 <template>
@@ -133,7 +148,7 @@ const getContactName = (booking: Booking): { name: string; role: string } => {
       </button>
     </div>
 
-    <div class="chat-list__content">
+    <div ref="contentRef" class="chat-list__content">
       <div v-if="filteredBookings.length > 0" class="chat-list__bookings">
         <article
           v-for="booking in filteredBookings"
@@ -141,7 +156,13 @@ const getContactName = (booking: Booking): { name: string; role: string } => {
           class="chat-list__booking-card"
         >
           <div class="chat-list__booking-status" :style="{ color: getStatusColor(booking.status) }">
-            {{ getStatusLabel(booking.status) }}
+            <span>{{ getStatusLabel(booking.status) }}</span>
+            <span v-if="booking.status === 'awaiting'" class="chat-list__booking-status-icon">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="8" cy="8" r="7" fill="#F97316"/>
+                <path d="M7.06941 3.00995C7.08275 3.00328 7.14275 2.99995 7.24941 2.99995C7.36275 3.01328 7.43608 3.02328 7.46941 3.02995C7.72941 3.10995 7.91608 3.26328 8.02941 3.48995C8.08941 3.61662 8.11941 3.73995 8.11941 3.85995C8.11941 3.98662 8.08941 4.10995 8.02941 4.22995C7.91608 4.46328 7.72941 4.61995 7.46941 4.69995C7.40941 4.71328 7.32608 4.71995 7.21941 4.71995C7.10608 4.71995 7.02275 4.71328 6.96941 4.69995C6.70275 4.61995 6.51275 4.46328 6.39941 4.22995C6.34608 4.12328 6.31941 3.99995 6.31941 3.85995C6.31941 3.76662 6.32275 3.69995 6.32941 3.65995C6.36275 3.53995 6.42275 3.42662 6.50941 3.31995C6.64941 3.15328 6.83608 3.04995 7.06941 3.00995ZM6.99941 5.48995C7.66608 5.46328 7.98608 5.44995 7.95941 5.44995H8.01941V7.33995V9.22995H8.32941H8.63941V9.58995V9.94995H8.54941L7.90941 9.92995C7.54275 9.92328 7.16275 9.92328 6.76941 9.92995L6.08941 9.94995H5.99941V9.58995V9.22995H6.34941H6.68941V7.85995C6.68941 6.93328 6.68608 6.45662 6.67941 6.42995C6.65275 6.34995 6.60941 6.30328 6.54941 6.28995C6.45608 6.26328 6.32275 6.24995 6.14941 6.24995H6.02941V5.88995V5.52995H6.05941L6.99941 5.48995Z" fill="white"/>
+              </svg>
+            </span>
           </div>
           
           <div class="chat-list__booking-role-tag" :style="{ backgroundColor: getUserRole(booking).color === '#2563EB' ? '#DBEAFE' : '#EFF6FF', color: getUserRole(booking).color }">
@@ -277,12 +298,16 @@ const getContactName = (booking: Booking): { name: string; role: string } => {
   flex: 1;
   overflow-y: auto;
   padding: 16px 24px;
+  display: flex;
+  justify-content: center;
 }
 
 .chat-list__bookings {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  width: 100%;
+  max-width: 428px;
 }
 
 .chat-list__booking-card {
@@ -300,6 +325,13 @@ const getContactName = (booking: Booking): { name: string; role: string } => {
   font-weight: 600;
   font-size: 12px;
   line-height: 1.5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-list__booking-status-icon svg {
+  display: block;
 }
 
 .chat-list__booking-role-tag {
@@ -427,6 +459,9 @@ const getContactName = (booking: Booking): { name: string; role: string } => {
   justify-content: center;
   padding: 80px 24px;
   text-align: center;
+  width: 100%;
+  max-width: 428px;
+  margin: 0 auto;
 }
 
 .chat-list__empty-icon {
@@ -461,8 +496,46 @@ const getContactName = (booking: Booking): { name: string; role: string } => {
     padding: 12px 20px;
   }
 
+  .chat-list__bookings {
+    max-width: 100%;
+  }
+
   .chat-list__booking-card {
     padding: 14px;
+  }
+}
+
+@media (min-width: 768px) {
+  .chat-list__content {
+    padding: 24px 48px;
+  }
+
+  .chat-list__bookings {
+    max-width: 600px;
+  }
+
+  .chat-list__empty {
+    max-width: 600px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .chat-list__bookings {
+    max-width: 700px;
+  }
+
+  .chat-list__empty {
+    max-width: 700px;
+  }
+}
+
+@media (min-width: 1440px) {
+  .chat-list__bookings {
+    max-width: 600px;
+  }
+
+  .chat-list__empty {
+    max-width: 600px;
   }
 }
 </style>

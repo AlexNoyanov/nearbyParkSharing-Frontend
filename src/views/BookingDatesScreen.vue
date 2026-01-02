@@ -198,12 +198,14 @@ const getRentalTypePrice = (type: 'hourly' | 'daily' | 'monthly') => {
   return props.location.priceMonth
 }
 
-// При открытии экрана всегда прокручиваем контейнер приложения к началу,
-// чтобы в видимой области был заголовок booking-dates__header
 onMounted(() => {
   const appContent = document.querySelector('.app__content') as HTMLElement | null
   if (appContent) {
     appContent.scrollTop = 0
+  }
+  const bookingContent = document.querySelector('.booking-dates__content') as HTMLElement | null
+  if (bookingContent) {
+    bookingContent.scrollTop = 0
   }
   // На всякий случай сбрасываем и scroll окна (в Telegram WebApp)
   window.scrollTo(0, 0)
@@ -574,6 +576,7 @@ onMounted(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   min-width: 78px;
+  color: #1F2937;
 }
 
 .booking-dates__rental-type--active {
@@ -587,10 +590,12 @@ onMounted(() => {
   height: 20px;
   stroke: currentColor;
   fill: none;
+  color: #1F2937;
 }
 
 .booking-dates__rental-type--active svg {
   stroke: white;
+  color: white;
 }
 
 .booking-dates__rental-type-content {

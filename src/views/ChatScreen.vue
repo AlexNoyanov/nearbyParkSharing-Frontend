@@ -53,15 +53,33 @@ const bookingData = computed(() => ({
   status: props.booking?.status || 'Ожидает подтверждения'
 }))
 
+// Проверяем, ожидает ли бронирование подтверждения
+const isAwaitingConfirmation = computed(() => {
+  const status = bookingData.value.status
+  return status === 'Ожидает подтверждения' || status === 'awaiting'
+})
+
+// Проверяем, подтверждено ли бронирование
+const isConfirmed = computed(() => {
+  const status = bookingData.value.status
+  return status === 'Подтверждено' || status === 'confirmed' || status === 'completed' || status === 'Активное' || status === 'active'
+})
+
+// Проверяем, отменено ли бронирование
+const isCancelled = computed(() => {
+  const status = bookingData.value.status
+  return status === 'Отменено' || status === 'cancelled'
+})
+
 const conversation = ref<Message[]>([])
 
 const composerValue = ref('')
 const isSubmitting = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
 
-const todayLabel = new Intl.DateTimeFormat('ru-RU', {
-  day: 'numeric',
-  month: 'long',
+const currentTime = new Intl.DateTimeFormat('ru-RU', {
+  hour: '2-digit',
+  minute: '2-digit',
 }).format(new Date())
 
 const scrollToBottom = async () => {
@@ -173,19 +191,20 @@ onBeforeUnmount(() => {
     </header>
 
     <section class="chat__meta">
-      <article class="chat__summary-card">
+      <article v-if="!isAwaitingConfirmation" class="chat__summary-card">
         <div class="chat__summary-title">Сегодня, 17:40</div>
         <p class="chat__summary-description">Бронь №2418 · Парковка на ул. Мира</p>
       </article>
-      <div class="chat__chips">
-        <span class="chat__chip">Ворота по номеру</span>
-        <span class="chat__chip chat__chip--accent">Домофон 2418#</span>
-      </div>
+      <article v-else class="chat__awaiting-message">
+        <p class="chat__awaiting-text">Запрос на бронирование отправлен.</p>
+        <p class="chat__awaiting-text">Продолжить общение в чате возможно</p>
+        <p class="chat__awaiting-text">после подтверждения бронирования</p>
+      </article>
     </section>
 
     <section ref="messagesContainer" class="chat__messages" aria-live="polite">
       <div class="chat__date-divider">
-        <span>Сегодня · {{ todayLabel }}</span>
+        <span>Сегодня, {{ currentTime }}</span>
       </div>
 
       <!-- Booking info message -->
@@ -217,6 +236,56 @@ onBeforeUnmount(() => {
         <div class="chat__booking-footer">
           <div class="chat__booking-status-indicator"></div>
           <span class="chat__booking-status">{{ bookingData.status }}</span>
+        </div>
+      </div>
+
+      <!-- Confirmation banner -->
+      <div v-if="isConfirmed" class="chat__confirmation-banner">
+        <div class="chat__confirmation-icon">
+          <svg width="31" height="23" viewBox="0 0 31 23" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M10.3125 22.0898L0.585938 12.3633C0 11.7773 0 10.7812 0.585938 10.1953L2.69531 8.08594C3.28125 7.5 4.21875 7.5 4.80469 8.08594L11.4258 14.6484L25.4883 0.585938C26.0742 0 27.0117 0 27.5977 0.585938L29.707 2.69531C30.293 3.28125 30.293 4.27734 29.707 4.86328L12.4805 22.0898C11.8945 22.6758 10.8984 22.6758 10.3125 22.0898Z" fill="white"/>
+          </svg>
+        </div>
+        <span class="chat__confirmation-text">Бронирование подтверждено</span>
+      </div>
+
+      <!-- Cancellation banner -->
+      <div v-if="isCancelled" class="chat__cancellation-banner">
+        <div class="chat__cancellation-icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 4L4 12M4 4L12 12" stroke="#EF4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <span class="chat__cancellation-text">Бронирование отменено</span>
+      </div>
+
+      <!-- Cancellation payment message -->
+      <div v-if="isCancelled" class="chat__cancellation-message">
+        <div class="chat__cancellation-message-header">
+          <div class="chat__cancellation-message-icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M6.625 7.03125H0.375C0.15625 7.03125 0 6.84375 0 6.65625V0.375C0 0.1875 0.15625 0 0.375 0H1.875C2.0625 0 2.25 0.1875 2.25 0.375V2.84375C3.65625 1.25 5.75 0.25 8.0625 0.28125C12.3438 0.3125 15.75 3.75 15.75 8.03125C15.75 12.3125 12.2812 15.75 8 15.75C6 15.75 4.15625 15 2.78125 13.75C2.625 13.625 2.625 13.375 2.78125 13.2188L3.84375 12.1562C3.96875 12 4.1875 12 4.34375 12.125C5.3125 13 6.59375 13.5 8 13.5C11.0312 13.5 13.5 11.0625 13.5 8C13.5 4.96875 11.0312 2.5 8 2.5C6.15625 2.5 4.5625 3.40625 3.5625 4.78125H6.625C6.8125 4.78125 7 4.9375 7 5.15625V6.65625C7 6.84375 6.8125 7.03125 6.625 7.03125Z" fill="#4B5563"/>
+            </svg>
+          </div>
+          <span class="chat__cancellation-message-title">Возврат средств</span>
+        </div>
+        <div class="chat__cancellation-message-content">
+          <div class="chat__cancellation-message-row">
+            <span class="chat__cancellation-message-label">Оплаченная сумма:</span>
+            <span class="chat__cancellation-message-value">{{ bookingData.price }}</span>
+          </div>
+          <div class="chat__cancellation-message-row">
+            <span class="chat__cancellation-message-label">Комиссия за отмену:</span>
+            <span class="chat__cancellation-message-value chat__cancellation-message-value--fee">₽0</span>
+          </div>
+          <div class="chat__cancellation-message-row">
+            <span class="chat__cancellation-message-label chat__cancellation-message-label--bold">К возврату:</span>
+            <span class="chat__cancellation-message-value chat__cancellation-message-value--refund">{{ bookingData.price }}</span>
+          </div>
+        </div>
+        <div class="chat__cancellation-message-separator"></div>
+        <div class="chat__cancellation-message-info">
+          Средства поступят на вашу карту в течение 3-5 рабочих дней
         </div>
       </div>
 
@@ -258,6 +327,7 @@ onBeforeUnmount(() => {
             class="chat__composer-input"
             placeholder="Написать сообщение..."
             rows="1"
+            :disabled="isAwaitingConfirmation"
             @keydown.enter.exact.prevent="handleSubmit"
           />
         </label>
@@ -265,7 +335,7 @@ onBeforeUnmount(() => {
         <button
           type="submit"
           class="chat__composer-send"
-          :disabled="true"
+          :disabled="isAwaitingConfirmation"
           aria-label="Отправить сообщение"
         >
           <svg width="17" height="17" viewBox="0 0 17 17" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -415,6 +485,29 @@ onBeforeUnmount(() => {
   color: #4b5563;
 }
 
+.chat__awaiting-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 9999px;
+  background: #ffffff;
+  box-shadow: 0 16px 28px -28px rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(99, 102, 241, 0.1);
+  text-align: center;
+}
+
+.chat__awaiting-text {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 400;
+  color: #374151;
+  line-height: 1.5;
+  text-align: center;
+}
+
 .chat__chips {
   display: flex;
   flex-wrap: wrap;
@@ -456,15 +549,12 @@ onBeforeUnmount(() => {
 }
 
 .chat__date-divider span {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  border-radius: 9999px;
-  background: rgba(79, 70, 229, 0.08);
-  color: #4338ca;
-  font-size: 12.5px;
-  font-weight: 600;
+  display: inline-block;
+  color: #9CA3AF;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.9;
+  text-align: center;
 }
 
 .chat__booking-message {
@@ -566,6 +656,193 @@ onBeforeUnmount(() => {
   font-size: 9.8px;
   line-height: 2.04;
   color: #ffffff;
+}
+
+.chat__confirmation-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  margin: 16px auto;
+  max-width: 271.5px;
+  background: #E0EBF7;
+  border: 1px solid #80C080;
+  border-radius: 9999px;
+  box-shadow: 0px 1px 2px 0px rgba(0, 0, 0, 0.1);
+  align-self: center;
+  white-space: nowrap;
+}
+
+.chat__confirmation-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: #33CC33;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.chat__confirmation-icon svg {
+  width: 16px;
+  height: 12px;
+  display: block;
+}
+
+.chat__confirmation-text {
+  font-family: Inter, sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #338066;
+  white-space: nowrap;
+}
+
+.chat__cancellation-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  margin: 16px auto;
+  max-width: 271.5px;
+  background: #FCE7F3;
+  border: 1px solid #F9A8D4;
+  border-radius: 9999px;
+  box-shadow: 0px 1px 2px 0px rgba(0, 0, 0, 0.1);
+  align-self: center;
+  white-space: nowrap;
+}
+
+.chat__cancellation-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: #FEE2E2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.chat__cancellation-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.chat__cancellation-text {
+  font-family: Inter, sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #DC2626;
+  white-space: nowrap;
+}
+
+.chat__cancellation-message {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 16px;
+  margin: 16px auto;
+  max-width: 271.5px;
+  background: #ffffff;
+  border-radius: 20px;
+  border: 2px solid #E5E7EB;
+  box-shadow: 0px 1px 2px 0px rgba(0, 0, 0, 0.05);
+  align-self: flex-end;
+}
+
+.chat__cancellation-message-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.chat__cancellation-message-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #F3F4F6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.chat__cancellation-message-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.chat__cancellation-message-title {
+  font-family: Inter, sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #1F2937;
+}
+
+.chat__cancellation-message-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.chat__cancellation-message-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.chat__cancellation-message-label {
+  font-family: Inter, sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #4B5563;
+}
+
+.chat__cancellation-message-label--bold {
+  font-weight: 700;
+}
+
+.chat__cancellation-message-value {
+  font-family: Inter, sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #1F2937;
+  text-align: right;
+}
+
+.chat__cancellation-message-value--fee {
+  color: #EF4444;
+}
+
+.chat__cancellation-message-value--refund {
+  font-weight: 700;
+  color: #16A34A;
+}
+
+.chat__cancellation-message-separator {
+  width: 100%;
+  height: 1px;
+  background: #E5E7EB;
+  margin-bottom: 16px;
+}
+
+.chat__cancellation-message-info {
+  font-family: Inter, sans-serif;
+  font-weight: 400;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #9CA3AF;
 }
 
 .chat__message-list {
@@ -728,6 +1005,10 @@ onBeforeUnmount(() => {
   }
 
   .chat__summary-card {
+    padding: 12px 14px;
+  }
+
+  .chat__awaiting-message {
     padding: 12px 14px;
   }
 

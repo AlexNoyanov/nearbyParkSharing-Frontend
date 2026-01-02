@@ -446,7 +446,7 @@ const handleRetry = () => {
                 </div>
               </div>
             </div>
-            <div class="rent-out__time-fields">
+            <div class="rent-out__time-fields rent-out__time-fields--with-margin">
               <div class="rent-out__time-field">
                 <label class="rent-out__time-label">С времени</label>
                 <input v-model="fromTime" type="time" class="rent-out__time-input" />
@@ -508,7 +508,7 @@ const handleRetry = () => {
                 </button>
               </div>
 
-              <div v-if="hourlyRent || (dailyRent && !monthlyRent)">
+              <div v-if="hourlyRent || (dailyRent && !monthlyRent)" class="rent-out__time-section">
                 <h3 class="rent-out__subsection-title">Время доступности</h3>
                 <div class="rent-out__time-fields">
                   <div class="rent-out__time-field">
@@ -652,7 +652,7 @@ const handleRetry = () => {
   margin: 0;
   font-family: Inter, sans-serif;
   font-weight: 600;
-  font-size: 22px;
+  font-size: 18px;
   line-height: 1.5;
   text-align: center;
   color: #ffffff;
@@ -680,27 +680,27 @@ const handleRetry = () => {
 }
 
 .rent-out__section-title {
-  margin: 0 0 20px 0;
+  margin: 0 0 12px 0;
   font-family: Inter, sans-serif;
-  font-weight: 600;
-  font-size: 20px;
-  color: #1f2937;
+  font-weight: 500;
+  font-size: 14px;
+  color: #374151;
 }
 
 .rent-out__map-selector {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 18px 20px;
+  padding: 12px 16px;
   border: none;
   border-radius: 12px;
   background-color: #F9FAFB;
   color: #2563EB;
   font-family: Inter, sans-serif;
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   width: 100%;
   transition: opacity 0.2s ease;
 }
@@ -719,12 +719,12 @@ const handleRetry = () => {
 
 .rent-out__input {
   width: 100%;
-  padding: 20px;
+  padding: 16px;
   border: 1px solid #d1d5db;
   border-radius: 12px;
   background-color: #F9FAFB;
   font-family: Inter, sans-serif;
-  font-size: 18px;
+  font-size: 16px;
   color: #1f2937;
   transition: border-color 0.2s ease;
 }
@@ -744,7 +744,7 @@ const handleRetry = () => {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 20px;
+  padding: 16px;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
   background-color: #F9FAFB;
@@ -819,13 +819,13 @@ const handleRetry = () => {
 .rent-out__vehicle-label {
   font-family: Inter, sans-serif;
   font-weight: 600;
-  font-size: 18px;
+  font-size: 14px;
   color: #1f2937;
 }
 
 .rent-out__vehicle-subtitle {
   font-family: Inter, sans-serif;
-  font-size: 16px;
+  font-size: 12px;
   color: #6b7280;
 }
 
@@ -877,7 +877,7 @@ const handleRetry = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px;
+  padding: 16px;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
   background-color: #F9FAFB;
@@ -888,7 +888,7 @@ const handleRetry = () => {
   align-items: center;
   gap: 16px;
   font-family: Inter, sans-serif;
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 500;
   color: #1f2937;
 }
@@ -954,18 +954,18 @@ const handleRetry = () => {
 
 .rent-out__price-label {
   font-family: Inter, sans-serif;
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 500;
   color: #374151;
 }
 
 .rent-out__price-input {
-  padding: 20px;
+  padding: 16px;
   border: 1px solid #d1d5db;
   border-radius: 12px;
   background-color: #F9FAFB;
   font-family: Inter, sans-serif;
-  font-size: 18px;
+  font-size: 16px;
   color: #1f2937;
   transition: border-color 0.2s ease;
 }
@@ -998,8 +998,8 @@ const handleRetry = () => {
 .rent-out__info-text {
   flex: 1;
   font-family: Inter, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
+  font-size: 14px;
+  line-height: 20px;
   color: #166534;
 }
 
@@ -1012,10 +1012,10 @@ const handleRetry = () => {
 }
 
 .rent-out__subsection-title {
-  margin: 20px 0 16px 0;
+  margin: 0 0 12px 0;
   font-family: Inter, sans-serif;
   font-weight: 500;
-  font-size: 18px;
+  font-size: 14px;
   color: #374151;
 }
 
@@ -1037,7 +1037,7 @@ const handleRetry = () => {
 
 .rent-out__date-label {
   font-family: Inter, sans-serif;
-  font-size: 16px;
+  font-size: 12px;
   color: #6b7280;
 }
 
@@ -1049,28 +1049,19 @@ const handleRetry = () => {
 
 .rent-out__date-input {
   width: 100%;
-  padding: 18px 20px;
+  padding: 12px 40px 12px 16px;
   border: 1px solid #d1d5db;
   border-radius: 12px;
   background-color: #F9FAFB;
   font-family: Inter, sans-serif;
-  font-size: 18px;
+  font-size: 14px;
   color: #1f2937;
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-/* Стилизация для date input на мобильных устройствах */
-.rent-out__date-input::-webkit-calendar-picker-indicator {
-  opacity: 1;
-  cursor: pointer;
-  width: 20px;
-  height: 20px;
-  margin-left: 8px;
 }
 
 .rent-out__date-input-wrapper svg {
-  display: none; /* Скрываем SVG, так как date input имеет встроенную иконку */
+  position: absolute;
+  right: 12px;
+  pointer-events: none;
 }
 
 .rent-out__weekdays {
@@ -1085,7 +1076,7 @@ const handleRetry = () => {
   border-radius: 8px;
   background-color: #F9FAFB;
   font-family: Inter, sans-serif;
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 500;
   color: #6b7280;
   cursor: pointer;
@@ -1102,10 +1093,18 @@ const handleRetry = () => {
   color: #ffffff;
 }
 
+.rent-out__time-section {
+  margin-top: 20px;
+}
+
 .rent-out__time-fields {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+
+.rent-out__time-fields--with-margin {
+  margin-top: 20px;
 }
 
 .rent-out__time-field {
@@ -1115,17 +1114,17 @@ const handleRetry = () => {
 
 .rent-out__time-label {
   font-family: Inter, sans-serif;
-  font-size: 16px;
+  font-size: 12px;
   color: #6b7280;
 }
 
 .rent-out__time-input {
-  padding: 18px 20px;
+  padding: 12px 16px;
   border: 1px solid #d1d5db;
   border-radius: 12px;
   background-color: #F9FAFB;
   font-family: Inter, sans-serif;
-  font-size: 18px;
+  font-size: 14px;
   color: #1f2937;
 }
 
@@ -1210,19 +1209,19 @@ const handleRetry = () => {
 
 .rent-out__feature-label {
   font-family: Inter, sans-serif;
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 500;
   color: #1f2937;
 }
 
 .rent-out__textarea {
   width: 100%;
-  padding: 20px;
+  padding: 16px;
   border: 1px solid #d1d5db;
   border-radius: 12px;
   background-color: #F9FAFB;
   font-family: Inter, sans-serif;
-  font-size: 18px;
+  font-size: 16px;
   color: #1f2937;
   resize: vertical;
   min-height: 140px;
@@ -1252,7 +1251,7 @@ const handleRetry = () => {
 
 .rent-out__info-message span {
   font-family: Inter, sans-serif;
-  font-size: 16px;
+  font-size: 14px;
   color: #1E40AF;
   line-height: 1.5;
 }
@@ -1273,7 +1272,7 @@ const handleRetry = () => {
   color: #6B7280;
   font-family: Inter, sans-serif;
   font-weight: 600;
-  font-size: 18px;
+  font-size: 16px;
   cursor: pointer;
   transition: all 0.2s ease;
 }

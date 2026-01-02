@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import parkingLotImage from '../assets/images/parkinglot.jpg'
 
 type Location = {
   id: string
@@ -26,6 +27,19 @@ const selectedPreviewLocation = ref<Location | null>(null)
 const isDragging = ref(false)
 const dragStartY = ref(0)
 const dragStartHeight = ref(0)
+
+// Gallery state for preview
+const previewGalleryContainer = ref<HTMLElement | null>(null)
+const previewPhotos = [parkingLotImage, parkingLotImage, parkingLotImage]
+const previewCurrentPhotoIndex = ref(0)
+
+const handlePreviewGalleryScroll = () => {
+  if (!previewGalleryContainer.value) return
+  const container = previewGalleryContainer.value
+  const width = container.offsetWidth || 1
+  const index = Math.round(container.scrollLeft / width)
+  previewCurrentPhotoIndex.value = Math.max(0, Math.min(previewPhotos.length - 1, index))
+}
 
 // Filter state
 const availableNow = ref(true)
@@ -331,6 +345,13 @@ const handleFilterTouchEnd = () => {
   filterSheetHeight.value = 500
 }
 
+const handleClosePreview = () => {
+  // Закрываем предпросмотр и саму шторку
+  selectedPreviewLocation.value = null
+  filterSheetOpen.value = false
+  filterSheetHeight.value = 0
+}
+
 // Toggle filter sheet
 const toggleFilterSheet = () => {
   filterSheetOpen.value = !filterSheetOpen.value
@@ -416,45 +437,72 @@ watch(monthlyRent, (isMonthly) => {
         <!-- Preview mode inside sheet -->
         <div v-if="selectedPreviewLocation" class="rent-out-map__preview">
           <div class="rent-out-map__preview-header">
-            <h3 class="rent-out-map__preview-title">Предпросмотр места</h3>
             <button
               type="button"
               class="rent-out-map__preview-close"
-              @click="selectedPreviewLocation = null"
+              @click="handleClosePreview"
             >
               ✕
             </button>
           </div>
           
-          <div class="rent-out-map__preview-card">
-            <div class="rent-out-map__preview-address">
-              <span class="rent-out-map__preview-address-main">
-                {{ selectedPreviewLocation.address }}
-              </span>
-            </div>
-            <div class="rent-out-map__preview-prices">
-              <div class="rent-out-map__preview-price">
-                <span class="rent-out-map__preview-price-label">Час</span>
-                <span class="rent-out-map__preview-price-value">
-                  {{ selectedPreviewLocation.priceHour }}
-                </span>
-              </div>
-              <div class="rent-out-map__preview-price">
-                <span class="rent-out-map__preview-price-label">День</span>
-                <span class="rent-out-map__preview-price-value">
-                  {{ selectedPreviewLocation.priceDay }}
-                </span>
-              </div>
-              <div class="rent-out-map__preview-price">
-                <span class="rent-out-map__preview-price-label">Месяц</span>
-                <span class="rent-out-map__preview-price-value">
-                  {{ selectedPreviewLocation.priceMonth }}
-                </span>
+          <!-- Photo Gallery -->
+          <div class="parking-details__gallery">
+            <div
+              ref="previewGalleryContainer"
+              class="parking-details__main-photo-container"
+              @scroll.passive="handlePreviewGalleryScroll"
+            >
+              <div
+                v-for="(photo, index) in previewPhotos"
+                :key="index"
+                class="parking-details__main-photo"
+              >
+                <img
+                  :src="photo"
+                  alt="Парковочное место"
+                  class="parking-details__photo-image"
+                />
               </div>
             </div>
-            <p class="rent-out-map__preview-hint">
-              Потяните фильтр вверх до конца, чтобы открыть полное описание места.
-            </p>
+            <div class="parking-details__photo-overlay">
+              <span>{{ previewCurrentPhotoIndex + 1 }} / {{ previewPhotos.length }}</span>
+            </div>
+          </div>
+
+          <!-- Address Section -->
+          <div class="parking-details__section">
+            <h2 class="parking-details__section-title">Адрес парковки</h2>
+            <div class="parking-details__address-row">
+              <div class="parking-details__address-content">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M8 0C3.58 0 0 3.58 0 8C0 12.42 8 16 8 16C8 16 16 12.42 16 8C16 3.58 12.42 0 8 0ZM8 10C6.9 10 6 9.1 6 8C6 6.9 6.9 6 8 6C9.1 6 10 6.9 10 8C10 9.1 9.1 10 8 10Z" fill="#9CA3AF"/>
+                </svg>
+                <div class="parking-details__address-text">
+                  <span>{{ selectedPreviewLocation.address }},</span>
+                  <span>Москва</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Rates Section -->
+          <div class="parking-details__section parking-details__rates">
+            <h3 class="parking-details__rates-title">Тарифы</h3>
+            <div class="parking-details__rates-list">
+              <div class="parking-details__rate-item">
+                <div class="parking-details__rate-price">{{ selectedPreviewLocation.priceHour.replace('₽/ч', '').trim() }} ₽</div>
+                <div class="parking-details__rate-label">за час</div>
+              </div>
+              <div class="parking-details__rate-item">
+                <div class="parking-details__rate-price parking-details__rate-price--green">{{ selectedPreviewLocation.priceDay.replace('₽/день', '').trim() }} ₽</div>
+                <div class="parking-details__rate-label">за день</div>
+              </div>
+              <div class="parking-details__rate-item">
+                <div class="parking-details__rate-price parking-details__rate-price--purple">{{ selectedPreviewLocation.priceMonth.replace('₽/мес', '').trim() }} ₽</div>
+                <div class="parking-details__rate-label">за месяц</div>
+              </div>
+            </div>
           </div>
           
           <button
@@ -803,13 +851,13 @@ watch(monthlyRent, (isMonthly) => {
   overflow-y: auto;
   padding: 0 24px 24px;
   padding-bottom: calc(24px + env(safe-area-inset-bottom));
-  background: #f8fafc;
+  background: #ffffff;
 }
 
 .rent-out-map__preview {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 0;
 }
 
 .rent-out-map__preview-header {
@@ -1143,6 +1191,169 @@ watch(monthlyRent, (isMonthly) => {
   width: 17px;
   height: 17px;
   flex-shrink: 0;
+}
+
+/* Preview styles - using parking-details classes */
+.rent-out-map__preview .parking-details__gallery {
+  margin: 0 -24px;
+  position: relative;
+  margin-bottom: 0;
+}
+
+.rent-out-map__preview .parking-details__main-photo-container {
+  width: 100%;
+  height: 192px;
+  overflow-x: auto;
+  display: flex;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  gap: 8px;
+}
+
+.parking-details__main-photo {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  flex-shrink: 0;
+  scroll-snap-align: center;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.parking-details__photo-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: 16px;
+  padding: 8px;
+}
+
+.parking-details__photo-overlay {
+  position: absolute;
+  bottom: 12px;
+  right: 24px;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  padding: 0.5px 6px;
+  border-radius: 4px;
+  font-family: Inter, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.rent-out-map__preview .parking-details__section {
+  margin-top: 0;
+  padding: 8.5px 0;
+  background: white;
+  border-radius: 12px;
+  padding: 8.5px 18px;
+  margin-bottom: 0;
+}
+
+.parking-details__section-title {
+  margin: 0 0 0px 0;
+  font-family: Inter, sans-serif;
+  font-weight: 700;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #1F2937;
+}
+
+.parking-details__address-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.parking-details__address-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.parking-details__address-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  font-family: Inter, sans-serif;
+  font-size: 11.5px;
+  line-height: 2.09;
+  color: #4B5563;
+  flex: 1;
+}
+
+.parking-details__rates {
+  background: #F9FAFB;
+  border-radius: 12px;
+  padding: 12px 16px 20px;
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.parking-details__rates-title {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #1F2937;
+  text-align: center;
+}
+
+.parking-details__rates-list {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.parking-details__rate-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  justify-content: flex-start;
+  flex: 1;
+  min-width: 0;
+}
+
+.parking-details__rate-price {
+  font-family: Inter, sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 1.2;
+  color: #2563EB;
+  text-align: center;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.parking-details__rate-price--green {
+  color: #16A34A;
+}
+
+.parking-details__rate-price--purple {
+  color: #9333EA;
+}
+
+.parking-details__rate-label {
+  font-family: Inter, sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #4B5563;
+  text-align: center;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 @media (min-width: 768px) {
