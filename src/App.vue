@@ -602,11 +602,12 @@ const handleOwnerCompletedBookingChat = () => {
 const handleOwnerRequestDecline = () => {
   if (!selectedOwnerRequest.value) return
 
+  // 1. Обновляем статус заявки на 'cancelled'
   ownerRequests.value = ownerRequests.value.map((req) =>
     req.id === selectedOwnerRequest.value?.id ? { ...req, status: 'cancelled' } : req,
   )
 
-  // Переходим в чат с информацией об отмене
+  // 2. Настраиваем данные для чата с информацией об отмене
   selectedChatName.value = selectedOwnerRequest.value.renterName
   selectedChatBooking.value = {
     address: selectedOwnerRequest.value.address,
@@ -615,6 +616,8 @@ const handleOwnerRequestDecline = () => {
     price: '₽160',
     status: 'Отменено',
   }
+  
+  // 3. Переходим в чат (экран отмены уже был показан перед этим)
   stage.value = 'chat'
 }
 

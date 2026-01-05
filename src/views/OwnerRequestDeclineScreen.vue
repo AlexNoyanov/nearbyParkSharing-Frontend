@@ -11,6 +11,11 @@ onMounted(() => {
   document.documentElement.scrollTop = 0
   document.body.scrollTop = 0
 })
+
+const handleDecline = () => {
+  // Эмитим событие отмены, которое обновит статус и перейдет в чат
+  emit('decline-booking')
+}
 </script>
 
 <template>
@@ -29,7 +34,7 @@ onMounted(() => {
 
     <!-- Buttons -->
     <footer class="owner-decline__footer">
-      <button type="button" class="owner-decline__button owner-decline__button--decline" @click="emit('decline-booking')">
+      <button type="button" class="owner-decline__button owner-decline__button--decline" @click="handleDecline">
         Отклонить бронирование
       </button>
       <button type="button" class="owner-decline__button owner-decline__button--back" @click="emit('go-back')">
