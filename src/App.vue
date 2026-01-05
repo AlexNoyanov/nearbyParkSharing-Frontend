@@ -901,10 +901,10 @@ onMounted(async () => {
   
   // Check feature toggle asynchronously after component has rendered
   try {
-    const onboarding1Enabled = await isFeatureEnabled('onboarding1')
-    if (!onboarding1Enabled) {
-      placeholderMessage.value = featureToggles.getPlaceholderMessage('onboarding1')
-      stage.value = 'placeholder'
+  const onboarding1Enabled = await isFeatureEnabled('onboarding1')
+  if (!onboarding1Enabled) {
+    placeholderMessage.value = featureToggles.getPlaceholderMessage('onboarding1')
+    stage.value = 'placeholder'
     }
   } catch (error) {
     console.error('Error checking feature toggle:', error)

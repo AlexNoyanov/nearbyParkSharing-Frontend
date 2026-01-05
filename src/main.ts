@@ -3,23 +3,9 @@ import "./style.css";
 import App from "./App.vue";
 import { initAnalytics } from "./firebase";
 
-// Add debug logging
-console.log("main.ts loaded");
-
 const mountApp = () => {
-  const appElement = document.getElementById("app");
-  if (!appElement) {
-    console.error("App element not found!");
-    return;
-  }
-  
-  try {
-    const app = createApp(App);
-    app.mount("#app");
-    console.log("App mounted successfully");
-  } catch (error) {
-    console.error("Failed to mount app:", error);
-  }
+  const app = createApp(App);
+  app.mount("#app");
 };
 
 const initTelegramWebApp = () => {
@@ -45,19 +31,9 @@ const initTelegramWebApp = () => {
 };
 
 const bootstrap = async () => {
-  // Mount app first to ensure it renders immediately
+  initTelegramWebApp();
+  await initAnalytics();
   mountApp();
-  
-  // Then initialize services in background
-  try {
-    initTelegramWebApp();
-    await initAnalytics();
-  } catch (error) {
-    console.error('Failed to initialize services:', error);
-    // Continue anyway - app is already mounted
-  }
 };
 
-// Mount app immediately - don't wait for anything
-console.log("Starting bootstrap...");
 bootstrap();

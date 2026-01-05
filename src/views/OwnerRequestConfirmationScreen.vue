@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
+
 const props = defineProps<{
   request: {
     id: string
@@ -17,6 +19,11 @@ const emit = defineEmits<{
   (e: 'confirm'): void
   (e: 'decline'): void
 }>()
+
+// Scroll to top when component mounts
+onMounted(() => {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+})
 
 const formatDayLabel = (dateStr: string) => {
   const date = new Date(dateStr)

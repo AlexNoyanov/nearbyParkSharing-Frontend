@@ -436,7 +436,7 @@ const handleRetry = () => {
         <div v-if="(hourlyRent || dailyRent || monthlyRent) && !permanentAvailability" class="rent-out__period-details">
           <h3 class="rent-out__subsection-title">Календарный период доступности</h3>
           
-          <!-- Для почасовой аренды - одно поле даты и время -->
+          <!-- Для почасовой аренды - одно поле даты, дни недели и время -->
           <template v-if="hourlyRent && !dailyRent && !monthlyRent">
             <div class="rent-out__date-fields">
               <div class="rent-out__date-field">
@@ -446,14 +446,34 @@ const handleRetry = () => {
                 </div>
               </div>
             </div>
-            <div class="rent-out__time-fields rent-out__time-fields--with-margin">
-              <div class="rent-out__time-field">
-                <label class="rent-out__time-label">С времени</label>
-                <input v-model="fromTime" type="time" class="rent-out__time-input" />
+            
+            <div class="rent-out__weekdays-section">
+              <h3 class="rent-out__subsection-title">Дни недели</h3>
+              <div class="rent-out__weekdays">
+                <button
+                  v-for="day in weekDays"
+                  :key="day"
+                  type="button"
+                  class="rent-out__weekday"
+                  :class="{ 'rent-out__weekday--selected': selectedDays.includes(day) }"
+                  @click="toggleDay(day)"
+                >
+                  {{ day }}
+                </button>
               </div>
-              <div class="rent-out__time-field">
-                <label class="rent-out__time-label">До времени</label>
-                <input v-model="toTime" type="time" class="rent-out__time-input" />
+            </div>
+            
+            <div class="rent-out__time-section">
+              <h3 class="rent-out__subsection-title">Время доступности</h3>
+              <div class="rent-out__time-fields">
+                <div class="rent-out__time-field">
+                  <label class="rent-out__time-label">С времени</label>
+                  <input v-model="fromTime" type="time" class="rent-out__time-input" />
+                </div>
+                <div class="rent-out__time-field">
+                  <label class="rent-out__time-label">До времени</label>
+                  <input v-model="toTime" type="time" class="rent-out__time-input" />
+                </div>
               </div>
             </div>
           </template>
