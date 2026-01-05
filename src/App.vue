@@ -112,7 +112,7 @@ type Booking = {
 
 const bookings = ref<Booking[]>([])
 
-type OwnerRequestStatus = 'awaiting' | 'cancelled' | 'completed' | 'active'
+type OwnerRequestStatus = 'awaiting' | 'cancelled' | 'completed' | 'active' | 'confirmed'
 
 type OwnerRequest = {
   id: string
@@ -348,6 +348,16 @@ const handleAuthSuccess = (user: User) => {
         renterName: 'Алексей',
         status: 'active',
       },
+      {
+        id: 'owner-req-5',
+        address: 'Москва, Тверская, 15',
+        startDate: '2025-12-17',
+        endDate: '2025-12-17',
+        startTime: '10:00',
+        endTime: '18:00',
+        renterName: 'Иван',
+        status: 'confirmed',
+      },
     ]
   } else {
     ownerRequests.value = []
@@ -457,6 +467,13 @@ const handleOpenOwnerRequestFromHome = (request: OwnerRequest) => {
     return
   }
 
+  if (request.status === 'confirmed') {
+    // Для подтверждённых заявок (ожидает начала аренды) открываем финальный экран с подтверждением
+    selectedOwnerRequest.value = request
+    stage.value = 'owner-booking-confirmed'
+    return
+  }
+
   if (request.status === 'active') {
     // Для активных заявок открываем экран подтверждённого бронирования
     selectedOwnerRequest.value = request
@@ -548,8 +565,9 @@ const selectedChatBooking = ref<{ address?: string; date?: string; time?: string
 const handleOwnerRequestConfirm = () => {
   if (!selectedOwnerRequest.value) return
 
+  // Устанавливаем статус 'confirmed' (Ожидает начала аренды) вместо 'active'
   ownerRequests.value = ownerRequests.value.map((req) =>
-    req.id === selectedOwnerRequest.value?.id ? { ...req, status: 'active' } : req,
+    req.id === selectedOwnerRequest.value?.id ? { ...req, status: 'confirmed' } : req,
   )
 
   // Navigate to booking confirmed screen

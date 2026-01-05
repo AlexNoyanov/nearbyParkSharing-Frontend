@@ -16,7 +16,7 @@ type Booking = {
   status: 'awaiting' | 'confirmed' | 'active' | 'completed'
 }
 
-type OwnerRequestStatus = 'awaiting' | 'cancelled' | 'completed' | 'active' | 'active'
+type OwnerRequestStatus = 'awaiting' | 'cancelled' | 'completed' | 'active' | 'confirmed'
 
 type OwnerRequest = {
   id: string
@@ -123,6 +123,8 @@ const getStatusLabel = (status: string, type: 'booking' | 'ownerRequest'): strin
         return 'Ожидает подтверждения'
       case 'cancelled':
         return 'Отменено'
+      case 'confirmed':
+        return 'Ожидает начала аренды'
       case 'active':
         return 'Активное'
       case 'completed':
@@ -151,7 +153,7 @@ const getStatusColor = (status: string, type: 'booking' | 'ownerRequest'): strin
   if (type === 'ownerRequest') {
     if (status === 'awaiting' || status === 'cancelled') {
       return '#EF4444'
-    } else if (status === 'active') {
+    } else if (status === 'confirmed' || status === 'active') {
       return '#22C55E'
     } else if (status === 'completed') {
       return '#4B5563'
@@ -202,6 +204,10 @@ const displayedActivities = computed(() => {
             ? 'ждет вашего решения'
             : request.status === 'cancelled'
             ? 'клиент отменил запрос'
+            : request.status === 'confirmed'
+            ? 'ожидает начала аренды'
+            : request.status === 'active'
+            ? 'аренда активна'
             : 'бронь завершена'
 
         return {
