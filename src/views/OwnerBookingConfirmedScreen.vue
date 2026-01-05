@@ -10,7 +10,7 @@ const props = defineProps<{
     startTime: string
     endTime: string
     renterName: string
-    status: 'awaiting' | 'cancelled' | 'completed' | 'active'
+    status: 'awaiting' | 'cancelled' | 'completed' | 'active' | 'confirmed'
   }
 }>()
 

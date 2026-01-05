@@ -9,7 +9,7 @@
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
     "firebase:login": "firebase login",
-    "deploy": "npm run build && npx firebase deploy --only hosting",
+    "deploy": "npm run build && ./node_modules/.bin/firebase deploy --only hosting",
     "deploy:quick": "npm run build && npx firebase deploy --only hosting",
     "deploy:watch": "node deploy-watcher.js",
     "d": "npm run deploy"
