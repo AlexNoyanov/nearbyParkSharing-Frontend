@@ -41,6 +41,7 @@ import OwnerRequestConfirmationScreen from './views/OwnerRequestConfirmationScre
 import OwnerRequestDeclineScreen from './views/OwnerRequestDeclineScreen.vue'
 import OwnerBookingConfirmedScreen from './views/OwnerBookingConfirmedScreen.vue'
 import OwnerCompletedBookingScreen from './views/OwnerCompletedBookingScreen.vue'
+import OwnerCancelledBookingScreen from './views/OwnerCancelledBookingScreen.vue'
 
 type Stage =
   | 'onboarding1'
@@ -76,6 +77,7 @@ type Stage =
   | 'owner-request-decline'
   | 'owner-booking-confirmed'
   | 'owner-completed-booking'
+  | 'owner-cancelled-booking'
 
 const stage = ref<Stage>('onboarding1')
 const selectedParking = ref<ParkingSpot | null>(null)
@@ -209,6 +211,7 @@ const isNavVisible = computed(() =>
   stage.value !== 'geo-confirmation' &&
   stage.value !== 'map-selection' &&
   stage.value !== 'rent-map' &&
+  stage.value !== 'owner-cancelled-booking' &&
   stage.value !== 'rent-success' &&
   stage.value !== 'car-selection' &&
   stage.value !== 'car-changed' &&
@@ -488,16 +491,9 @@ const handleOpenOwnerRequestFromHome = (request: OwnerRequest) => {
     return
   }
 
-  // Для отмененных заявок открываем чат с историей
-  selectedChatName.value = request.renterName
-  selectedChatBooking.value = {
-    address: request.address,
-    date: request.startDate,
-    time: `${request.startTime} — ${request.endTime}`,
-    price: '₽1 600',
-    status: 'Отменено',
-  }
-  stage.value = 'chat'
+  // Для отмененных заявок открываем экран с отмененным бронированием
+  selectedOwnerRequest.value = request
+  stage.value = 'owner-cancelled-booking'
 }
 
 const handleOpenChatFromList = (booking: Booking) => {
@@ -603,6 +599,11 @@ const handleOwnerCompletedBookingGoHome = () => {
   navSelection.value = 'home'
 }
 
+const handleOwnerCancelledBookingGoHome = () => {
+  stage.value = 'home'
+  navSelection.value = 'home'
+}
+
 const handleOwnerCompletedBookingChat = () => {
   if (!selectedOwnerRequest.value) return
   
@@ -625,7 +626,7 @@ const handleOwnerRequestDecline = () => {
     req.id === selectedOwnerRequest.value?.id ? { ...req, status: 'cancelled' } : req,
   )
 
-  // 2. Настраиваем данные для чата с информацией об отмене
+  // 2. Настраиваем данные для чата с информацией об отмене (для отправки сообщения)
   selectedChatName.value = selectedOwnerRequest.value.renterName
   selectedChatBooking.value = {
     address: selectedOwnerRequest.value.address,
@@ -635,8 +636,8 @@ const handleOwnerRequestDecline = () => {
     status: 'Отменено',
   }
   
-  // 3. Переходим в чат (экран отмены уже был показан перед этим)
-  stage.value = 'chat'
+  // 3. Показываем экран с отмененным бронированием (сообщение в чат будет отправлено автоматически)
+  stage.value = 'owner-cancelled-booking'
 }
 
 const handleOpenDetails = async (parking: ParkingSpot) => {
@@ -1071,6 +1072,12 @@ onMounted(async () => {
           :request="selectedOwnerRequest"
           @go-home="handleOwnerCompletedBookingGoHome"
           @open-chat="handleOwnerCompletedBookingChat"
+        />
+
+        <OwnerCancelledBookingScreen
+          v-else-if="stage === 'owner-cancelled-booking' && selectedOwnerRequest"
+          :request="selectedOwnerRequest"
+          @go-home="handleOwnerCancelledBookingGoHome"
         />
 
         <RentOutMapScreen
