@@ -28,6 +28,11 @@ export const mockUsers: User[] = [
     name: "Алексей Владелец",
     phone: "+79990001122",
   },
+  {
+    id: "4",
+    name: "Михаил Клиент",
+    phone: "+79990001133",
+  },
 ];
 
 // Mock verification codes
@@ -37,6 +42,7 @@ const mockVerificationCodes: Record<string, string> = {
   "+79991234567": "1234", // User 1: Иван Иванов
   "+79997654321": "5678", // User 2: Мария Петрова
   "+79990001122": "9012", // User 3: Алексей Владелец (владелец парковки)
+  "+79990001133": "3456", // User 4: Михаил Клиент (клиент с подтвержденным бронированием)
 };
 
 // Store for pending registrations

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import type { ParkingSpot } from '../data/parkings'
+import { featuredParkings } from '../data/parkings'
 import type { User } from '../services/mockAuth'
 import searchIconUrl from '../assets/icons/icon-search.svg?url'
 
@@ -14,6 +15,7 @@ type Booking = {
   rentalType: 'hourly' | 'daily' | 'monthly'
   createdAt: Date
   status: 'awaiting' | 'confirmed' | 'active' | 'completed'
+  parkingSpotId?: string
 }
 
 type OwnerRequestStatus = 'awaiting' | 'cancelled' | 'completed' | 'active' | 'confirmed'
@@ -177,18 +179,29 @@ const displayedActivities = computed(() => {
   
   if (activeFilter?.id === 'rentals') {
     // Show bookings when "Аренда мест" filter is active
-    return (props.bookings || []).map(booking => ({
-      id: booking.id,
-      title: 'Запрос на бронирование',
-      address: booking.address,
-      period: formatBookingPeriod(booking),
-      statusLabel: getStatusLabel(booking.status, 'booking'),
-      statusMeta: '',
-      statusTone: 'success' as const,
-      statusColor: getStatusColor(booking.status, 'booking'),
-      booking,
-      parking: null as ParkingSpot | null
-    })).reverse() // Show newest bookings first
+    return (props.bookings || []).map(booking => {
+      // Находим парковочное место для бронирования
+      let parking: ParkingSpot | null = null
+      if (booking.parkingSpotId) {
+        parking = featuredParkings.find(p => p.id === booking.parkingSpotId) || null
+      } else {
+        // Если нет ID, ищем по адресу
+        parking = featuredParkings.find(p => booking.address.includes(p.address) || p.address.includes(booking.address)) || null
+      }
+      
+      return {
+        id: booking.id,
+        title: 'Запрос на бронирование',
+        address: booking.address,
+        period: formatBookingPeriod(booking),
+        statusLabel: getStatusLabel(booking.status, 'booking'),
+        statusMeta: '',
+        statusTone: 'success' as const,
+        statusColor: getStatusColor(booking.status, 'booking'),
+        booking,
+        parking: parking as ParkingSpot | null
+      }
+    }).reverse() // Show newest bookings first
   } else if (activeFilter?.id === 'sharing') {
     // Заявки на бронирование ваших мест
     if (props.ownerRequests && props.ownerRequests.length > 0) {
@@ -289,12 +302,21 @@ const handleActivityClick = (entry: any) => {
       emit('open-rent-out')
       return
     }
+    // Для подтвержденных и активных бронирований открываем детали парковки
+    if (entry.booking.status === 'confirmed' || entry.booking.status === 'active') {
+      // Находим парковочное место по адресу
+      const parking = entry.parking
+      if (parking) {
+        emit('open-booking', parking as ParkingSpot)
+        return
+      }
+    }
     // Для других статусов открываем чат
     emit('open-chat')
     return
   }
 
-  // Переход к подробностям парковки
+  // Переход к подробностям парковки (карточка места из главной страницы "Аренда места")
   if (entry.parking) {
     emit('open-booking', entry.parking as ParkingSpot)
   }
@@ -343,6 +365,8 @@ const handleActivityClick = (entry: any) => {
         :key="stat.id"
         class="home__stat-card"
         :class="`home__stat-card--${stat.tone}`"
+        @click="stat.id === 'bookings' && props.currentUser && props.bookingsCount && props.bookingsCount > 0 ? emit('open-history') : null"
+        :style="stat.id === 'bookings' && props.currentUser && props.bookingsCount && props.bookingsCount > 0 ? { cursor: 'pointer' } : {}"
       >
         <div class="home__stat-header">
           <div class="home__stat-icon">

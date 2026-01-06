@@ -42,6 +42,7 @@ import OwnerRequestDeclineScreen from './views/OwnerRequestDeclineScreen.vue'
 import OwnerBookingConfirmedScreen from './views/OwnerBookingConfirmedScreen.vue'
 import OwnerCompletedBookingScreen from './views/OwnerCompletedBookingScreen.vue'
 import OwnerCancelledBookingScreen from './views/OwnerCancelledBookingScreen.vue'
+import BookingListScreen from './views/BookingListScreen.vue'
 
 type Stage =
   | 'onboarding1'
@@ -78,6 +79,7 @@ type Stage =
   | 'owner-booking-confirmed'
   | 'owner-completed-booking'
   | 'owner-cancelled-booking'
+  | 'booking-list'
 
 const stage = ref<Stage>('onboarding1')
 const selectedParking = ref<ParkingSpot | null>(null)
@@ -110,6 +112,7 @@ type Booking = {
   rentalType: 'hourly' | 'daily' | 'monthly'
   createdAt: Date
   status: 'awaiting' | 'confirmed' | 'active' | 'completed'
+  parkingSpotId?: string
 }
 
 const bookings = ref<Booking[]>([])
@@ -223,7 +226,8 @@ const isNavVisible = computed(() =>
   stage.value !== 'owner-request-confirmation' &&
   stage.value !== 'owner-request-decline' &&
   stage.value !== 'owner-booking-confirmed' &&
-  stage.value !== 'owner-completed-booking'
+  stage.value !== 'owner-completed-booking' &&
+  stage.value !== 'booking-list'
 )
 
 const ensureParkingSelected = () => {
@@ -362,8 +366,30 @@ const handleAuthSuccess = (user: User) => {
         status: 'confirmed',
       },
     ]
+    bookings.value = []
+    bookingsCount.value = 0
+  } else if (user.phone === '+79990001133') {
+    // Новый клиент с подтвержденным бронированием
+    ownerRequests.value = []
+    bookings.value = [
+      {
+        id: 'booking-1',
+        address: 'ул. Льва Толстого, 18',
+        startDate: '2025-12-20',
+        endDate: '2025-12-20',
+        startTime: '10:00',
+        endTime: '14:00',
+        rentalType: 'hourly',
+        createdAt: new Date('2025-12-19'),
+        status: 'confirmed',
+        parkingSpotId: 'skyline',
+      },
+    ]
+    bookingsCount.value = 1
   } else {
     ownerRequests.value = []
+    bookings.value = []
+    bookingsCount.value = 0
   }
 
   // If it's a registration flow, show geo confirmation screen first
@@ -449,9 +475,14 @@ const openRentFromHome = async () => {
 }
 
 const openHistoryFromHome = async () => {
-  await checkFeatureAndNavigate('profile', 'profile')
-  if (stage.value === 'profile') {
-    navSelection.value = 'profile'
+  // Если есть бронирования, открываем список бронирований
+  if (bookings.value.length > 0) {
+    stage.value = 'booking-list'
+  } else {
+    await checkFeatureAndNavigate('profile', 'profile')
+    if (stage.value === 'profile') {
+      navSelection.value = 'profile'
+    }
   }
 }
 
@@ -643,6 +674,25 @@ const handleOwnerRequestDecline = () => {
 const handleOpenDetails = async (parking: ParkingSpot) => {
   selectedParking.value = parking
   await checkFeatureAndNavigate('details', 'details')
+}
+
+const handleOpenBookingFromList = async (booking: Booking) => {
+  // Находим парковочное место по адресу или ID
+  if (booking.parkingSpotId) {
+    const parking = featuredParkings.find(p => p.id === booking.parkingSpotId)
+    if (parking) {
+      selectedParking.value = parking
+      await checkFeatureAndNavigate('details', 'details')
+      return
+    }
+  }
+  
+  // Если не найдено по ID, ищем по адресу
+  const parking = featuredParkings.find(p => booking.address.includes(p.address) || p.address.includes(booking.address))
+  if (parking) {
+    selectedParking.value = parking
+    await checkFeatureAndNavigate('details', 'details')
+  }
 }
 
 const backToSearch = async () => {
@@ -1174,6 +1224,14 @@ onMounted(async () => {
           v-else-if="stage === 'chat-list' && featureStates['chat'] !== false"
           :bookings="bookings"
           @back="goHome"
+          @open-chat="handleOpenChatFromList"
+        />
+
+        <BookingListScreen
+          v-else-if="stage === 'booking-list'"
+          :bookings="bookings"
+          @back="goHome"
+          @open-booking="handleOpenBookingFromList"
           @open-chat="handleOpenChatFromList"
         />
 
