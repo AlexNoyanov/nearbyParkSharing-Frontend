@@ -14,7 +14,7 @@ type Booking = {
   endTime: string
   rentalType: 'hourly' | 'daily' | 'monthly'
   createdAt: Date
-  status: 'awaiting' | 'confirmed' | 'active' | 'completed'
+  status: 'awaiting' | 'confirmed' | 'active' | 'completed' | 'cancelled'
   parkingSpotId?: string
 }
 
@@ -46,6 +46,7 @@ const emit = defineEmits<{
   (e: 'open-history'): void
   (e: 'open-chat'): void
   (e: 'open-owner-request', request: OwnerRequest): void
+  (e: 'open-booking-details', booking: Booking): void
 }>()
 
 type QuickAction = {
@@ -297,20 +298,24 @@ const handleActivityClick = (entry: any) => {
 
   // Обычные бронирования (вы арендуете место)
   if (entry.booking) {
+    console.log('[HomeScreen] handleActivityClick - booking found:', entry.booking)
+    console.log('[HomeScreen] Booking status:', entry.booking.status)
+    
     // Если статус "awaiting" (Ожидает подтверждения), открываем "Мои места"
     if (entry.booking.status === 'awaiting') {
+      console.log('[HomeScreen] Status is awaiting, opening rent-out')
       emit('open-rent-out')
       return
     }
-    // Для подтвержденных и активных бронирований открываем детали парковки
+    
+    // Для подтвержденных и активных бронирований открываем детали бронирования
     if (entry.booking.status === 'confirmed' || entry.booking.status === 'active') {
-      // Находим парковочное место по адресу
-      const parking = entry.parking
-      if (parking) {
-        emit('open-booking', parking as ParkingSpot)
-        return
-      }
+      console.log('[HomeScreen] Status is confirmed/active, opening booking details')
+      emit('open-booking-details', entry.booking as Booking)
+      return
     }
+    
+    console.log('[HomeScreen] Status does not match, opening chat. Status:', entry.booking.status)
     // Для других статусов открываем чат
     emit('open-chat')
     return

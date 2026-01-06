@@ -10,7 +10,7 @@ type Booking = {
   endTime: string
   rentalType: 'hourly' | 'daily' | 'monthly'
   createdAt: Date
-  status: 'awaiting' | 'confirmed' | 'active' | 'completed'
+  status: 'awaiting' | 'confirmed' | 'active' | 'completed' | 'cancelled'
 }
 
 const props = defineProps<{

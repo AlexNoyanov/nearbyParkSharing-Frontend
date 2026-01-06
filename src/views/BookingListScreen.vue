@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
-import type { ParkingSpot } from '../data/parkings'
-import { featuredParkings } from '../data/parkings'
 import parkingLotImage from '../assets/images/parkinglot.jpg'
 
 type Booking = {
@@ -13,7 +11,7 @@ type Booking = {
   endTime: string
   rentalType: 'hourly' | 'daily' | 'monthly'
   createdAt: Date
-  status: 'awaiting' | 'confirmed' | 'active' | 'completed'
+  status: 'awaiting' | 'confirmed' | 'active' | 'completed' | 'cancelled'
   parkingSpotId?: string
 }
 
@@ -61,20 +59,21 @@ const formatBookingDate = (booking: Booking): string => {
   }
 }
 
-const getStatusLabel = (status: Booking['status']): string => {
-  switch (status) {
-    case 'awaiting':
-      return 'Ожидает подтверждения'
-    case 'confirmed':
-      return 'Подтверждено'
-    case 'active':
-      return 'Активно'
-    case 'completed':
-      return 'Завершено'
-    default:
-      return ''
-  }
-}
+// Status label is now handled by getStatusText
+// const getStatusLabel = (status: Booking['status']): string => {
+//   switch (status) {
+//     case 'awaiting':
+//       return 'Ожидает подтверждения'
+//     case 'confirmed':
+//       return 'Подтверждено'
+//     case 'active':
+//       return 'Активно'
+//     case 'completed':
+//       return 'Завершено'
+//     default:
+//       return ''
+//   }
+// }
 
 const getStatusColor = (status: Booking['status']): string => {
   switch (status) {
@@ -106,15 +105,16 @@ const getStatusText = (status: Booking['status']): string => {
   }
 }
 
-const getParkingSpot = (booking: Booking): ParkingSpot | null => {
-  if (booking.parkingSpotId) {
-    return featuredParkings.find(p => p.id === booking.parkingSpotId) || null
-  }
-  // Если нет ID, ищем по адресу
-  return featuredParkings.find(p => booking.address.includes(p.address) || p.address.includes(booking.address)) || null
-}
+// Parking spot can be used for future features
+// const getParkingSpot = (booking: Booking): ParkingSpot | null => {
+//   if (booking.parkingSpotId) {
+//     return featuredParkings.find(p => p.id === booking.parkingSpotId) || null
+//   }
+//   // Если нет ID, ищем по адресу
+//   return featuredParkings.find(p => booking.address.includes(p.address) || p.address.includes(booking.address)) || null
+// }
 
-const getOwnerName = (booking: Booking): string => {
+const getOwnerName = (): string => {
   // Моковое имя владельца
   return 'Михаил'
 }
@@ -219,7 +219,7 @@ onMounted(async () => {
             </div>
             <div class="booking-list__owner-row">
               <div class="booking-list__owner">
-                <span class="booking-list__owner-name">{{ getOwnerName(booking) }}</span>
+                <span class="booking-list__owner-name">{{ getOwnerName() }}</span>
                 <span class="booking-list__owner-role">Владелец места</span>
               </div>
               <button

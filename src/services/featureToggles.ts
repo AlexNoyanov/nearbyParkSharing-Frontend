@@ -16,6 +16,7 @@ export type FeatureKey =
   | 'rent'
   | 'profile'
   | 'chat'
+  | 'booking-details'
 
 export interface FeatureToggleResponse {
   enabled: boolean
@@ -42,6 +43,7 @@ const defaultFeatureStates: Record<FeatureKey, boolean> = {
   'rent': true,  // Enabled - доступно через "Найти парковку"
   'profile': false,
   'chat': true,
+  'booking-details': true,
 }
 
 // Placeholder messages for disabled features
@@ -101,6 +103,10 @@ const placeholderMessages: Record<FeatureKey, { title: string; description: stri
   'chat': {
     title: 'Чаты запускаем позже',
     description: 'Команда работает над единым центром общения с арендаторами и службой поддержки.',
+  },
+  'booking-details': {
+    title: 'Детали бронирования временно недоступны',
+    description: 'Мы обновляем страницу деталей бронирования. Пожалуйста, попробуйте позже.',
   },
 }
 

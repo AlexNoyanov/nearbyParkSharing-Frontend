@@ -43,6 +43,7 @@ import OwnerBookingConfirmedScreen from './views/OwnerBookingConfirmedScreen.vue
 import OwnerCompletedBookingScreen from './views/OwnerCompletedBookingScreen.vue'
 import OwnerCancelledBookingScreen from './views/OwnerCancelledBookingScreen.vue'
 import BookingListScreen from './views/BookingListScreen.vue'
+import BookingDetailsScreen from './views/BookingDetailsScreen.vue'
 
 type Stage =
   | 'onboarding1'
@@ -80,6 +81,7 @@ type Stage =
   | 'owner-completed-booking'
   | 'owner-cancelled-booking'
   | 'booking-list'
+  | 'booking-details'
 
 const stage = ref<Stage>('onboarding1')
 const selectedParking = ref<ParkingSpot | null>(null)
@@ -111,11 +113,12 @@ type Booking = {
   endTime: string
   rentalType: 'hourly' | 'daily' | 'monthly'
   createdAt: Date
-  status: 'awaiting' | 'confirmed' | 'active' | 'completed'
+  status: 'awaiting' | 'confirmed' | 'active' | 'completed' | 'cancelled'
   parkingSpotId?: string
 }
 
 const bookings = ref<Booking[]>([])
+const selectedBooking = ref<Booking | null>(null)
 
 type OwnerRequestStatus = 'awaiting' | 'cancelled' | 'completed' | 'active' | 'confirmed'
 
@@ -149,6 +152,7 @@ const featureStates = ref<Record<FeatureKey, boolean | null>>({
   'rent': null,
   'profile': null,
   'chat': null,
+  'booking-details': null,
 })
 
 const placeholderMessage = ref<{ title: string; description: string } | null>(null)
@@ -227,7 +231,8 @@ const isNavVisible = computed(() =>
   stage.value !== 'owner-request-decline' &&
   stage.value !== 'owner-booking-confirmed' &&
   stage.value !== 'owner-completed-booking' &&
-  stage.value !== 'booking-list'
+  stage.value !== 'booking-list' &&
+  stage.value !== 'booking-details'
 )
 
 const ensureParkingSelected = () => {
@@ -677,22 +682,62 @@ const handleOpenDetails = async (parking: ParkingSpot) => {
 }
 
 const handleOpenBookingFromList = async (booking: Booking) => {
-  // Находим парковочное место по адресу или ID
-  if (booking.parkingSpotId) {
-    const parking = featuredParkings.find(p => p.id === booking.parkingSpotId)
-    if (parking) {
-      selectedParking.value = parking
-      await checkFeatureAndNavigate('details', 'details')
-      return
-    }
+  // Открываем экран деталей бронирования
+  selectedBooking.value = booking
+  stage.value = 'booking-details'
+}
+
+const handleOpenBookingDetails = async (booking: Booking) => {
+  console.log('[App] handleOpenBookingDetails called with booking:', booking)
+  if (!booking) {
+    console.error('[App] handleOpenBookingDetails: booking is null or undefined')
+    return
   }
-  
-  // Если не найдено по ID, ищем по адресу
-  const parking = featuredParkings.find(p => booking.address.includes(p.address) || p.address.includes(booking.address))
-  if (parking) {
-    selectedParking.value = parking
-    await checkFeatureAndNavigate('details', 'details')
+  selectedBooking.value = booking
+  const enabled = await isFeatureEnabled('booking-details')
+  console.log('[App] Feature booking-details enabled:', enabled)
+  if (enabled) {
+    stage.value = 'booking-details'
+    console.log('[App] Navigated to booking-details stage, current stage:', stage.value)
+  } else {
+    placeholderMessage.value = featureToggles.getPlaceholderMessage('booking-details')
+    stage.value = 'placeholder'
+    console.log('[App] Feature disabled, showing placeholder')
   }
+}
+
+const handleStartParking = () => {
+  if (!selectedBooking.value) return
+  // Обновляем статус бронирования на 'active'
+  bookings.value = bookings.value.map((b) =>
+    b.id === selectedBooking.value?.id ? { ...b, status: 'active' } : b,
+  )
+  selectedBooking.value = { ...selectedBooking.value, status: 'active' }
+  // Можно добавить переход на экран активного бронирования
+  console.log('[App] Starting parking for booking:', selectedBooking.value.id)
+}
+
+const handleCancelBooking = () => {
+  if (!selectedBooking.value) return
+  // Обновляем статус бронирования на 'cancelled'
+  bookings.value = bookings.value.map((b) =>
+    b.id === selectedBooking.value?.id ? { ...b, status: 'cancelled' } : b,
+  )
+  bookingsCount.value = bookings.value.filter(b => b.status !== 'cancelled').length
+  // Возвращаемся на главный экран
+  stage.value = 'home'
+  navSelection.value = 'home'
+  console.log('[App] Cancelled booking:', selectedBooking.value.id)
+}
+
+const handleBookingDetailsBack = () => {
+  stage.value = 'home'
+  navSelection.value = 'home'
+}
+
+const handleBookingDetailsChat = () => {
+  if (!selectedBooking.value) return
+  handleOpenChatFromList(selectedBooking.value)
 }
 
 const backToSearch = async () => {
@@ -1066,6 +1111,7 @@ onMounted(async () => {
           @open-history="openHistoryFromHome"
           @open-chat="handleOpenChat"
           @open-owner-request="handleOpenOwnerRequestFromHome"
+          @open-booking-details="handleOpenBookingDetails"
         />
 
         <SearchScreen
@@ -1233,6 +1279,16 @@ onMounted(async () => {
           @back="goHome"
           @open-booking="handleOpenBookingFromList"
           @open-chat="handleOpenChatFromList"
+        />
+
+        <BookingDetailsScreen
+          v-else-if="stage === 'booking-details' && selectedBooking"
+          :booking="selectedBooking"
+          :user-car="userCar"
+          @back="handleBookingDetailsBack"
+          @open-chat="handleBookingDetailsChat"
+          @start-parking="handleStartParking"
+          @cancel-booking="handleCancelBooking"
         />
 
         <PlaceholderScreen
