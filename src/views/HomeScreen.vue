@@ -1268,6 +1268,69 @@ const handleActivityClick = (entry: any) => {
   }
 }
 
+/* Medium tablet styles (600px - 767px) */
+@media (min-width: 600px) and (max-width: 767px) {
+  .home {
+    max-width: 600px;
+    margin: 0 auto;
+    padding-left: calc(env(safe-area-inset-left) + 40px);
+    padding-right: calc(env(safe-area-inset-right) + 40px);
+    padding-bottom: 56px;
+    gap: 40px;
+  }
+
+  .home__greeting {
+    padding: calc(env(safe-area-inset-top) + 70px) calc(env(safe-area-inset-right) + 28px) 28px calc(env(safe-area-inset-left) + 28px);
+    margin-left: calc(env(safe-area-inset-left) * -1 - 28px);
+    margin-right: calc(env(safe-area-inset-right) * -1 - 28px);
+  }
+
+  .home__greeting-icon {
+    width: 72px;
+    height: 72px;
+  }
+
+  .home__actions {
+    gap: 28px;
+  }
+
+  .home__stats {
+    gap: 28px;
+  }
+
+  .home__action-card {
+    padding: 36px;
+    gap: 24px;
+  }
+
+  .home__action-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 18px;
+  }
+
+  .home__action-icon img,
+  .home__action-icon svg {
+    width: 28px;
+    height: 28px;
+  }
+
+  .home__stat-card {
+    padding: 32px;
+    gap: 20px;
+  }
+
+  .home__stat-icon {
+    width: 64px;
+    height: 64px;
+  }
+
+  .home__activity-card {
+    padding: 24px;
+    border-radius: 18px;
+  }
+}
+
 /* Tablet styles (768px and up) */
 @media (min-width: 768px) {
   .home {

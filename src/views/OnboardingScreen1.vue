@@ -498,6 +498,114 @@ const props = defineProps<{
   }
 }
 
+/* Medium tablet styles (600px - 767px) */
+@media (min-width: 600px) and (max-width: 767px) {
+  .onboarding-1__container {
+    max-width: 500px;
+    border-radius: 40px;
+    margin: 0 auto;
+  }
+
+  .onboarding-1__header {
+    padding: 70px 40px 40px;
+    gap: 36px;
+  }
+
+  .onboarding-1__illustration {
+    width: 240px;
+    height: 163px;
+  }
+
+  .onboarding-1__oval-bg {
+    width: 240px;
+    height: 163px;
+  }
+
+  .onboarding-1__square {
+    width: 84px;
+    height: 84px;
+    border-radius: 26px;
+  }
+
+  .onboarding-1__car-icon {
+    width: 44px;
+    height: 32px;
+  }
+
+  .onboarding-1__p-badge {
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    top: -9px;
+    right: -9px;
+  }
+
+  .onboarding-1__p-icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .onboarding-1__pin-container {
+    width: 32px;
+    height: 32px;
+    bottom: -9px;
+    left: -9px;
+  }
+
+  .onboarding-1__pin-icon {
+    width: 13px;
+    height: 17px;
+  }
+
+  .onboarding-1__title {
+    font-size: 38px;
+    max-width: 450px;
+  }
+
+  .onboarding-1__subtitle {
+    font-size: 18px;
+    max-width: 450px;
+  }
+
+  .onboarding-1__features {
+    padding: 40px 70px 0;
+    gap: 26px;
+  }
+
+  .onboarding-1__feature {
+    gap: 16px;
+  }
+
+  .onboarding-1__feature-circle {
+    width: 36px;
+    height: 36px;
+  }
+
+  .onboarding-1__feature-icon {
+    height: 22px;
+  }
+
+  .onboarding-1__feature-text {
+    font-size: 15px;
+  }
+
+  .onboarding-1__footer {
+    padding: 0 40px 28px;
+    gap: 14px;
+  }
+
+  .onboarding-1__button {
+    padding: 17px 28px;
+    font-size: 17px;
+    border-radius: 17px;
+  }
+
+  .onboarding-1__button--secondary {
+    padding: 9px 0;
+    font-size: 15px;
+  }
+}
+
 /* Tablet styles (768px and up) - Only applies to tablets and larger, mobile screens remain unchanged */
 @media (min-width: 768px) {
   .onboarding-1__container {
