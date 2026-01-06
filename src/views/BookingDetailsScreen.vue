@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { featuredParkings, type ParkingSpot } from '../data/parkings'
 
 type Booking = {
@@ -40,16 +40,17 @@ const parkingSpot = computed((): ParkingSpot | null => {
 const formatDate = (dateStr: string): string => {
   const date = new Date(dateStr)
   const today = new Date()
-  const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  
-  const isToday = date.toDateString() === today.toDateString()
-  const isTomorrow = date.toDateString() === tomorrow.toDateString()
-  
-  if (isToday) return 'Сегодня'
-  if (isTomorrow) return 'Завтра'
-  
-  return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const sameDay =
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate()
+
+  if (sameDay) return 'Сегодня'
+
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+  }).format(date)
 }
 
 const formatTime = (timeStr: string): string => {
@@ -102,6 +103,15 @@ const getCarInfo = () => {
 }
 
 const carInfo = computed(() => getCarInfo())
+
+onMounted(() => {
+  // Прокручиваем страницу в самый верх при открытии экрана
+  const appContent = document.querySelector('.app__content') as HTMLElement | null
+  if (appContent) {
+    appContent.scrollTop = 0
+  }
+  window.scrollTo(0, 0)
+})
 </script>
 
 <template>
@@ -143,44 +153,46 @@ const carInfo = computed(() => getCarInfo())
       <!-- Parking Details Card -->
       <div class="booking-details__parking-card">
         <h2 class="booking-details__parking-title">Детали парковки</h2>
-        <div class="booking-details__parking-address">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M10 0C6.13 0 3 3.13 3 7C3 12.25 10 20 10 20C10 20 17 12.25 17 7C17 3.13 13.87 0 10 0ZM10 9.5C8.62 9.5 7.5 8.38 7.5 7C7.5 5.62 8.62 4.5 10 4.5C11.38 4.5 12.5 5.62 12.5 7C12.5 8.38 11.38 9.5 10 9.5Z" fill="#2563EB"/>
-          </svg>
-          <div class="booking-details__parking-address-text">
-            <div class="booking-details__parking-address-main">{{ booking.address }}</div>
-            <div v-if="parkingSpot" class="booking-details__parking-spot">
+        
+        <div class="booking-details__parking-address-row">
+          <div class="booking-details__parking-icon-circle">
+            <span class="booking-details__parking-icon-text">P</span>
+          </div>
+          <p class="booking-details__parking-address">
+            {{ booking.address }}
+            <span v-if="parkingSpot" class="booking-details__parking-spot-text">
               Место №{{ parkingSpot.id }}, второй ряд от входа
-            </div>
-          </div>
+            </span>
+          </p>
         </div>
-        <div class="booking-details__parking-times">
-          <div class="booking-details__time-column">
-            <div class="booking-details__time-label">Начало</div>
-            <div class="booking-details__time-date">{{ formatDate(booking.startDate) }}</div>
-            <div class="booking-details__time-value">{{ formatTime(booking.startTime) }}</div>
-            <div class="booking-details__time-label">Автомобиль</div>
-            <div class="booking-details__time-value">{{ carInfo.brand }} {{ carInfo.model }}</div>
+
+        <div class="booking-details__parking-datetime">
+          <div class="booking-details__parking-col">
+            <p class="booking-details__parking-label">НАЧАЛО</p>
+            <p class="booking-details__parking-date">{{ formatDate(booking.startDate) }}</p>
+            <p class="booking-details__parking-time">{{ formatTime(booking.startTime) }}</p>
+            <p class="booking-details__parking-label">АВТОМОБИЛЬ</p>
+            <p class="booking-details__parking-car">{{ carInfo.brand }} {{ carInfo.model }}</p>
           </div>
-          <div class="booking-details__time-arrow">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M9 18L15 12L9 6" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <div class="booking-details__parking-arrow">
+            <svg width="15" height="14" viewBox="0 0 15 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M5.96875 12.8125L6.65625 13.5C6.96875 13.7812 7.4375 13.7812 7.71875 13.5L13.7812 7.40625C14.0938 7.125 14.0938 6.65625 13.7812 6.375L7.71875 0.28125C7.4375 0 6.9375 0 6.65625 0.28125L5.96875 0.96875C5.65625 1.28125 5.6875 1.75 5.96875 2.0625L9.75 5.625H0.75C0.34375 5.625 0 5.96875 0 6.375V7.375C0 7.8125 0.34375 8.125 0.75 8.125H9.75L5.96875 11.7188C5.6875 12.0312 5.65625 12.5 5.96875 12.8125Z" fill="#0077ED"/>
             </svg>
           </div>
-          <div class="booking-details__time-column">
-            <div class="booking-details__time-label">Выезд</div>
-            <div class="booking-details__time-date">{{ formatDate(booking.endDate) }}</div>
-            <div class="booking-details__time-value">{{ formatTime(booking.endTime) }}</div>
-            <div class="booking-details__time-label">Номер</div>
-            <div class="booking-details__time-value">{{ carInfo.fullNumber }}</div>
+          <div class="booking-details__parking-col booking-details__parking-col--right">
+            <p class="booking-details__parking-label">ВЫЕЗД</p>
+            <p class="booking-details__parking-date">{{ formatDate(booking.endDate) }}</p>
+            <p class="booking-details__parking-time">{{ formatTime(booking.endTime) }}</p>
+            <p class="booking-details__parking-label">НОМЕР</p>
+            <p class="booking-details__parking-number">{{ carInfo.fullNumber }}</p>
           </div>
         </div>
       </div>
 
       <!-- Auto-extension Warning -->
       <div class="booking-details__warning">
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M10 0L0 18H20L10 0ZM10 14C9.45 14 9 13.55 9 13C9 12.45 9.45 12 10 12C10.55 12 11 12.45 11 13C11 13.55 10.55 14 10 14ZM9 10H11V6H9V10Z" fill="#F59E0B"/>
+        <svg width="19" height="17" viewBox="0 0 19 17" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M18.1562 14.0312C18.7188 15.0312 18 16.25 16.8438 16.25H1.875C0.71875 16.25 0 15 0.5625 14.0312L8.0625 1C8.625 0 10.0938 0.03125 10.6562 1L18.1562 14.0312ZM9.375 11.3125C8.5625 11.3125 7.9375 11.9688 7.9375 12.75C7.9375 13.5625 8.5625 14.1875 9.375 14.1875C10.1562 14.1875 10.8125 13.5625 10.8125 12.75C10.8125 11.9688 10.1562 11.3125 9.375 11.3125ZM8 6.15625L8.21875 10.4062C8.25 10.625 8.40625 10.75 8.59375 10.75H10.125C10.3125 10.75 10.4688 10.625 10.5 10.4062L10.7188 6.15625C10.75 5.9375 10.5625 5.75 10.3438 5.75H8.375C8.15625 5.75 7.96875 5.9375 8 6.15625Z" fill="#CA8A04"/>
         </svg>
         <div class="booking-details__warning-content">
           <div class="booking-details__warning-title">Автопродление</div>
@@ -395,32 +407,38 @@ const carInfo = computed(() => getCarInfo())
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
+  padding: 20px;
+  background: #ffffff;
+  border-radius: 16px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .booking-details__status-circle {
-  width: 80px;
-  height: 80px;
+  width: 160px;
+  height: 160px;
   border-radius: 50%;
-  border: 2px solid #E5E7EB;
+  border: 4px solid #E5E7EB;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 8px;
   background: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .booking-details__status-line {
-  width: 24px;
-  height: 2px;
+  width: 32px;
+  height: 3px;
   background: #9CA3AF;
-  border-radius: 1px;
+  border-radius: 2px;
 }
 
 .booking-details__status-text-small {
   font-family: Inter, sans-serif;
   font-weight: 400;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.4;
   color: #6B7280;
 }
@@ -436,103 +454,132 @@ const carInfo = computed(() => getCarInfo())
 
 /* Parking Details Card */
 .booking-details__parking-card {
-  background: #F9FAFB;
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid #e5e7eb;
+  padding: 20px;
+  background-color: #f3f4f6;
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
 .booking-details__parking-title {
-  margin: 0;
+  margin: 0 0 16px 0;
   font-family: Inter, sans-serif;
-  font-weight: 600;
   font-size: 16px;
-  line-height: 1.5;
-  color: #1F2937;
+  font-weight: 700;
+  color: #111827;
+  text-align: center;
+}
+
+.booking-details__parking-address-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  margin-bottom: 8px;
+}
+
+.booking-details__parking-icon-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  background: #DBEAFE;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.booking-details__parking-icon-text {
+  font-family: Inter, sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  color: #2563EB;
 }
 
 .booking-details__parking-address {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.booking-details__parking-address svg {
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.booking-details__parking-address-text {
-  flex: 1;
-}
-
-.booking-details__parking-address-main {
+  margin: 0;
   font-family: Inter, sans-serif;
-  font-weight: 500;
   font-size: 14px;
-  line-height: 1.4;
-  color: #1F2937;
-  margin-bottom: 4px;
-}
-
-.booking-details__parking-spot {
-  font-family: Inter, sans-serif;
   font-weight: 400;
-  font-size: 12px;
-  line-height: 1.4;
-  color: #6B7280;
-}
-
-.booking-details__parking-times {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  margin-top: 8px;
-}
-
-.booking-details__time-column {
-  flex: 1;
+  color: #6b7280;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.booking-details__time-arrow {
+.booking-details__parking-spot-text {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.booking-details__parking-datetime {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+}
+
+.booking-details__parking-col {
+  display: grid;
+  gap: 4px;
+  text-align: center;
+  align-items: center;
+}
+
+.booking-details__parking-col--right {
+  text-align: center;
+  align-items: center;
+}
+
+.booking-details__parking-arrow {
   display: flex;
   align-items: center;
-  padding-top: 20px;
-  flex-shrink: 0;
+  justify-content: center;
 }
 
-.booking-details__time-label {
+.booking-details__parking-label {
+  margin: 0 0 4px 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  color: #6b7280;
   font-family: Inter, sans-serif;
-  font-weight: 400;
-  font-size: 12px;
-  line-height: 1.4;
-  color: #6B7280;
-  margin-top: 8px;
 }
 
-.booking-details__time-label:first-child {
-  margin-top: 0;
-}
-
-.booking-details__time-date {
-  font-family: Inter, sans-serif;
-  font-weight: 400;
-  font-size: 12px;
-  line-height: 1.4;
-  color: #6B7280;
-}
-
-.booking-details__time-value {
-  font-family: Inter, sans-serif;
-  font-weight: 500;
+.booking-details__parking-date {
+  margin: 0;
   font-size: 14px;
-  line-height: 1.4;
-  color: #1F2937;
+  font-weight: 500;
+  color: #0077ED;
+  font-family: Inter, sans-serif;
+}
+
+.booking-details__parking-time {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #0077ED;
+  font-family: Inter, sans-serif;
+}
+
+.booking-details__parking-car {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+  font-family: Inter, sans-serif;
+}
+
+.booking-details__parking-number {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+  font-family: Inter, sans-serif;
 }
 
 /* Warning */
@@ -573,12 +620,13 @@ const carInfo = computed(() => getCarInfo())
 
 /* Owner Card */
 .booking-details__owner-card {
-  background: #F9FAFB;
+  background: #ffffff;
   border-radius: 12px;
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  border: 1px solid #E5E7EB;
 }
 
 .booking-details__owner-title {

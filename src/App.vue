@@ -44,6 +44,8 @@ import OwnerCompletedBookingScreen from './views/OwnerCompletedBookingScreen.vue
 import OwnerCancelledBookingScreen from './views/OwnerCancelledBookingScreen.vue'
 import BookingListScreen from './views/BookingListScreen.vue'
 import BookingDetailsScreen from './views/BookingDetailsScreen.vue'
+import ClientCancelledBookingScreen from './views/ClientCancelledBookingScreen.vue'
+import CancelBookingModal from './components/CancelBookingModal.vue'
 
 type Stage =
   | 'onboarding1'
@@ -82,9 +84,11 @@ type Stage =
   | 'owner-cancelled-booking'
   | 'booking-list'
   | 'booking-details'
+  | 'client-cancelled-booking'
 
 const stage = ref<Stage>('onboarding1')
 const selectedParking = ref<ParkingSpot | null>(null)
+const showCancelModal = ref(false)
 const navSelection = ref<'home' | 'search' | 'rent' | 'profile' | 'chat'>('home')
 const userName = ref<string>()
 const currentUser = ref<User | null>(null)
@@ -231,9 +235,10 @@ const isNavVisible = computed(() =>
   stage.value !== 'owner-request-decline' &&
   stage.value !== 'owner-booking-confirmed' &&
   stage.value !== 'owner-completed-booking' &&
-  stage.value !== 'booking-list' &&
-  stage.value !== 'booking-details'
-)
+      stage.value !== 'booking-list' &&
+      stage.value !== 'booking-details' &&
+      stage.value !== 'client-cancelled-booking'
+    )
 
 const ensureParkingSelected = () => {
   if (!selectedParking.value) {
@@ -719,15 +724,31 @@ const handleStartParking = () => {
 
 const handleCancelBooking = () => {
   if (!selectedBooking.value) return
+  // Показываем попап подтверждения
+  showCancelModal.value = true
+}
+
+const handleCancelBookingConfirm = () => {
+  if (!selectedBooking.value) return
   // Обновляем статус бронирования на 'cancelled'
   bookings.value = bookings.value.map((b) =>
     b.id === selectedBooking.value?.id ? { ...b, status: 'cancelled' } : b,
   )
   bookingsCount.value = bookings.value.filter(b => b.status !== 'cancelled').length
-  // Возвращаемся на главный экран
+  // Закрываем попап
+  showCancelModal.value = false
+  // Переходим на экран отмененного бронирования
+  stage.value = 'client-cancelled-booking'
+  console.log('[App] Cancelled booking:', selectedBooking.value.id)
+}
+
+const handleCancelBookingCancel = () => {
+  showCancelModal.value = false
+}
+
+const handleClientCancelledBookingGoHome = () => {
   stage.value = 'home'
   navSelection.value = 'home'
-  console.log('[App] Cancelled booking:', selectedBooking.value.id)
 }
 
 const handleBookingDetailsBack = () => {
@@ -1289,6 +1310,18 @@ onMounted(async () => {
           @open-chat="handleBookingDetailsChat"
           @start-parking="handleStartParking"
           @cancel-booking="handleCancelBooking"
+        />
+
+        <ClientCancelledBookingScreen
+          v-else-if="stage === 'client-cancelled-booking'"
+          @go-home="handleClientCancelledBookingGoHome"
+        />
+
+        <!-- Cancel Booking Modal -->
+        <CancelBookingModal
+          v-if="showCancelModal"
+          @confirm="handleCancelBookingConfirm"
+          @cancel="handleCancelBookingCancel"
         />
 
         <PlaceholderScreen
