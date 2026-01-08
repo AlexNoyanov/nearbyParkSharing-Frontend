@@ -44,10 +44,13 @@ import OwnerCompletedBookingScreen from './views/OwnerCompletedBookingScreen.vue
 import OwnerCancelledBookingScreen from './views/OwnerCancelledBookingScreen.vue'
 import BookingListScreen from './views/BookingListScreen.vue'
 import BookingDetailsScreen from './views/BookingDetailsScreen.vue'
+import BookingErrorScreen from './views/BookingErrorScreen.vue'
 import ClientCancelledBookingScreen from './views/ClientCancelledBookingScreen.vue'
 import CancelBookingModal from './components/CancelBookingModal.vue'
 import ExtendBookingModal from './components/ExtendBookingModal.vue'
 import EarlyBookingScreen from './views/EarlyBookingScreen.vue'
+import RentalCompletionScreen from './views/RentalCompletionScreen.vue'
+import BookingExtendedScreen from './views/BookingExtendedScreen.vue'
 
 type Stage =
   | 'onboarding1'
@@ -86,13 +89,17 @@ type Stage =
   | 'owner-cancelled-booking'
   | 'booking-list'
   | 'booking-details'
+  | 'booking-error'
   | 'client-cancelled-booking'
   | 'early-booking'
+  | 'rental-completion'
+  | 'booking-extended'
 
 const stage = ref<Stage>('onboarding1')
 const selectedParking = ref<ParkingSpot | null>(null)
 const showCancelModal = ref(false)
 const showExtendModal = ref(false)
+const extendedBookingData = ref<{ date: string; time: string; surcharge: number } | null>(null)
 const navSelection = ref<'home' | 'search' | 'rent' | 'profile' | 'chat'>('home')
 const userName = ref<string>()
 const currentUser = ref<User | null>(null)
@@ -241,8 +248,11 @@ const isNavVisible = computed(() =>
   stage.value !== 'owner-completed-booking' &&
       stage.value !== 'booking-list' &&
       stage.value !== 'booking-details' &&
+      stage.value !== 'booking-error' &&
       stage.value !== 'client-cancelled-booking' &&
-      stage.value !== 'early-booking'
+      stage.value !== 'early-booking' &&
+      stage.value !== 'rental-completion' &&
+      stage.value !== 'booking-extended'
     )
 
 const ensureParkingSelected = () => {
@@ -397,6 +407,24 @@ const handleAuthSuccess = (user: User) => {
         rentalType: 'hourly',
         createdAt: new Date('2025-12-19'),
         status: 'confirmed',
+        parkingSpotId: 'skyline',
+      },
+    ]
+    bookingsCount.value = 1
+  } else if (user.phone === '+79990001144') {
+    // Клиент с ожидающим подтверждения бронированием
+    ownerRequests.value = []
+    bookings.value = [
+      {
+        id: 'booking-2',
+        address: 'ул. Тверская, 15',
+        startDate: '2025-12-21',
+        endDate: '2025-12-21',
+        startTime: '10:00',
+        endTime: '12:00',
+        rentalType: 'hourly',
+        createdAt: new Date('2025-12-20'),
+        status: 'awaiting',
         parkingSpotId: 'skyline',
       },
     ]
@@ -796,6 +824,18 @@ const handleBookingDetailsChat = () => {
 
 const handleFinishParking = () => {
   if (!selectedBooking.value) return
+  // Переходим на экран завершения аренды
+  stage.value = 'rental-completion'
+  console.log('[App] Opening rental completion screen for booking:', selectedBooking.value.id)
+}
+
+const handleRentalCompletionBack = () => {
+  // Возвращаемся на экран деталей бронирования
+  stage.value = 'booking-details'
+}
+
+const handleRentalCompletionConfirm = () => {
+  if (!selectedBooking.value) return
   // Обновляем статус бронирования на 'completed'
   const updatedBooking = { ...selectedBooking.value, status: 'completed' as const }
   bookings.value = bookings.value.map((b) =>
@@ -806,7 +846,7 @@ const handleFinishParking = () => {
   // Переходим на главную страницу
   stage.value = 'home'
   navSelection.value = 'home'
-  console.log('[App] Finished parking for booking:', selectedBooking.value.id)
+  console.log('[App] Completed rental for booking:', selectedBooking.value.id)
 }
 
 const handleExtendParking = () => {
@@ -817,9 +857,11 @@ const handleExtendParking = () => {
 
 const handleExtendBookingConfirm = (data: { date: string; time: string }) => {
   if (!selectedBooking.value) return
-  // Обновляем дату и время окончания бронирования
-  const updatedBooking = {
-    ...selectedBooking.value,
+  // Закрываем модальное окно продления
+  showExtendModal.value = false
+  // Обновляем время окончания бронирования
+  const updatedBooking = { 
+    ...selectedBooking.value, 
     endDate: data.date,
     endTime: data.time
   }
@@ -827,12 +869,38 @@ const handleExtendBookingConfirm = (data: { date: string; time: string }) => {
     b.id === selectedBooking.value?.id ? updatedBooking : b,
   )
   selectedBooking.value = updatedBooking
-  showExtendModal.value = false
-  console.log('[App] Extended parking until:', data.date, data.time)
+  // Сохраняем данные о продлении для экрана успешного продления
+  extendedBookingData.value = {
+    date: data.date,
+    time: data.time,
+    surcharge: 160 // TODO: Calculate actual surcharge
+  }
+  // Показываем экран успешного продления
+  stage.value = 'booking-extended'
+  console.log('[App] Booking extended successfully to:', data.date, data.time)
+}
+
+const handleBookingExtendedSendMessage = () => {
+  if (!selectedBooking.value) return
+  // Переходим в чат с владельцем места
+  handleOpenChatFromList(selectedBooking.value)
+  // Очищаем данные о продлении
+  extendedBookingData.value = null
+}
+
+const handleBookingExtendedClose = () => {
+  // Возвращаемся на экран деталей бронирования
+  extendedBookingData.value = null
+  stage.value = 'booking-details'
 }
 
 const handleExtendBookingCancel = () => {
   showExtendModal.value = false
+}
+
+const handleBookingErrorOk = () => {
+  // Возвращаемся на экран деталей бронирования
+  stage.value = 'booking-details'
 }
 
 const backToSearch = async () => {
@@ -1399,6 +1467,28 @@ onMounted(async () => {
           @back="handleEarlyBookingBack"
           @pay-and-start="handleEarlyBookingPayAndStart"
           @wait-for-scheduled="handleEarlyBookingWaitForScheduled"
+        />
+
+        <BookingErrorScreen
+          v-else-if="stage === 'booking-error'"
+          @ok="handleBookingErrorOk"
+        />
+
+        <RentalCompletionScreen
+          v-else-if="stage === 'rental-completion' && selectedBooking"
+          :booking="selectedBooking"
+          @back="handleRentalCompletionBack"
+          @complete="handleRentalCompletionConfirm"
+        />
+
+        <BookingExtendedScreen
+          v-else-if="stage === 'booking-extended' && selectedBooking && extendedBookingData"
+          :booking="selectedBooking"
+          :extended-end-date="extendedBookingData.date"
+          :extended-end-time="extendedBookingData.time"
+          :surcharge="extendedBookingData.surcharge"
+          @send-message="handleBookingExtendedSendMessage"
+          @close="handleBookingExtendedClose"
         />
 
         <!-- Cancel Booking Modal -->

@@ -78,6 +78,9 @@ const getStatusDescription = (status: Booking['status']): string => {
   if (status === 'confirmed') {
     return 'Вы еще на сообщили о прибытии на место'
   }
+  if (status === 'awaiting') {
+    return 'Арендатор еще не подтвердил, что место будет свободно'
+  }
   return ''
 }
 
@@ -223,6 +226,29 @@ onUnmounted(() => {
         <div class="booking-details__status-card-content">
           <div class="booking-details__status-card-title">{{ getStatusText(booking.status) }}</div>
           <div class="booking-details__status-card-description">{{ getStatusDescription(booking.status) }}</div>
+        </div>
+      </div>
+
+      <!-- Awaiting Status Card -->
+      <div 
+        v-if="booking.status === 'awaiting'"
+        class="booking-details__status-card booking-details__status-card--awaiting"
+      >
+        <div class="booking-details__status-card-icon booking-details__status-card-icon--awaiting"></div>
+        <div class="booking-details__status-card-content">
+          <div class="booking-details__status-card-title booking-details__status-card-title--awaiting">{{ getStatusText(booking.status) }}</div>
+          <div class="booking-details__status-card-description booking-details__status-card-description--awaiting">{{ getStatusDescription(booking.status) }}</div>
+        </div>
+      </div>
+
+      <!-- Status Indicator Circle for awaiting -->
+      <div v-if="booking.status === 'awaiting'" class="booking-details__status-indicator-wrapper">
+        <div class="booking-details__status-circle">
+          <div class="booking-details__status-line"></div>
+          <div class="booking-details__status-text-small">не началось</div>
+        </div>
+        <div class="booking-details__status-time">
+          Забронировано до {{ formatTime(booking.endTime) }} {{ formatDate(booking.endDate) }}
         </div>
       </div>
 
@@ -538,6 +564,23 @@ onUnmounted(() => {
   font-size: 14px;
   line-height: 1.4;
   color: rgba(255, 255, 255, 0.9);
+}
+
+/* Awaiting status card styles */
+.booking-details__status-card--awaiting {
+  background: #EAB308;
+}
+
+.booking-details__status-card-icon--awaiting {
+  background: #ffffff;
+}
+
+.booking-details__status-card-title--awaiting {
+  color: #ffffff;
+}
+
+.booking-details__status-card-description--awaiting {
+  color: rgba(255, 255, 255, 0.95);
 }
 
 /* Active Status Card */

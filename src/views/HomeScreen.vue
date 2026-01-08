@@ -303,16 +303,9 @@ const handleActivityClick = (entry: any) => {
     console.log('[HomeScreen] handleActivityClick - booking found:', entry.booking)
     console.log('[HomeScreen] Booking status:', entry.booking.status)
     
-    // Если статус "awaiting" (Ожидает подтверждения), открываем "Мои места"
-    if (entry.booking.status === 'awaiting') {
-      console.log('[HomeScreen] Status is awaiting, opening rent-out')
-      emit('open-rent-out')
-      return
-    }
-    
-    // Для подтвержденных и активных бронирований открываем детали бронирования
-    if (entry.booking.status === 'confirmed' || entry.booking.status === 'active') {
-      console.log('[HomeScreen] Status is confirmed/active, opening booking details')
+    // Для всех статусов бронирования (awaiting, confirmed, active) открываем детали бронирования
+    if (entry.booking.status === 'awaiting' || entry.booking.status === 'confirmed' || entry.booking.status === 'active') {
+      console.log('[HomeScreen] Opening booking details for status:', entry.booking.status)
       emit('open-booking-details', entry.booking as Booking)
       return
     }
