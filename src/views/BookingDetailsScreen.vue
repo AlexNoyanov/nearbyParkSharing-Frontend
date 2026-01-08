@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { featuredParkings, type ParkingSpot } from '../data/parkings'
 
 type Booking = {
@@ -25,6 +25,8 @@ const emit = defineEmits<{
   (e: 'open-chat'): void
   (e: 'start-parking'): void
   (e: 'cancel-booking'): void
+  (e: 'finish-parking'): void
+  (e: 'extend-parking'): void
 }>()
 
 const parkingSpot = computed((): ParkingSpot | null => {
@@ -104,6 +106,82 @@ const getCarInfo = () => {
 
 const carInfo = computed(() => getCarInfo())
 
+// Countdown timer state
+const daysRemaining = ref(0)
+const hoursRemaining = ref(0)
+const minutesRemaining = ref(0)
+const secondsRemaining = ref(0)
+let countdownInterval: number | null = null
+
+const updateCountdown = () => {
+  if (props.booking.status !== 'active') {
+    return
+  }
+
+  // For testing: set fixed 8 hours countdown
+  const totalSeconds = 8 * 60 * 60 // 8 hours in seconds
+  
+  // Calculate current total seconds from current values
+  const currentTotalSeconds = daysRemaining.value * 24 * 60 * 60 + 
+                              hoursRemaining.value * 60 * 60 + 
+                              minutesRemaining.value * 60 + 
+                              secondsRemaining.value
+  
+  // If countdown hasn't started yet (all values are 0), initialize with 8 hours
+  // Otherwise, decrease by 1 second
+  let remainingSeconds = currentTotalSeconds > 0 ? currentTotalSeconds - 1 : totalSeconds
+  
+  if (remainingSeconds <= 0) {
+    daysRemaining.value = 0
+    hoursRemaining.value = 0
+    minutesRemaining.value = 0
+    secondsRemaining.value = 0
+    return
+  }
+
+  daysRemaining.value = Math.floor(remainingSeconds / (24 * 60 * 60))
+  const hoursInSeconds = remainingSeconds % (24 * 60 * 60)
+  hoursRemaining.value = Math.floor(hoursInSeconds / (60 * 60))
+  const minutesInSeconds = hoursInSeconds % (60 * 60)
+  minutesRemaining.value = Math.floor(minutesInSeconds / 60)
+  secondsRemaining.value = minutesInSeconds % 60
+}
+
+const formatCountdownTime = computed(() => {
+  return {
+    hours: String(hoursRemaining.value),
+    minutes: String(minutesRemaining.value).padStart(2, '0')
+  }
+})
+
+const formatCountdownDays = computed(() => {
+  return `${daysRemaining.value} ${daysRemaining.value === 1 ? 'день' : daysRemaining.value < 5 ? 'дня' : 'дней'}`
+})
+
+const startCountdown = () => {
+  if (countdownInterval !== null) {
+    clearInterval(countdownInterval)
+  }
+  updateCountdown()
+  countdownInterval = window.setInterval(updateCountdown, 1000)
+}
+
+const stopCountdown = () => {
+  if (countdownInterval !== null) {
+    clearInterval(countdownInterval)
+    countdownInterval = null
+  }
+}
+
+// Watch for status changes
+watch(() => props.booking.status, (newStatus) => {
+  if (newStatus === 'active') {
+    startCountdown()
+  } else {
+    stopCountdown()
+  }
+}, { immediate: true })
+
 onMounted(() => {
   // Прокручиваем страницу в самый верх при открытии экрана
   const appContent = document.querySelector('.app__content') as HTMLElement | null
@@ -111,6 +189,15 @@ onMounted(() => {
     appContent.scrollTop = 0
   }
   window.scrollTo(0, 0)
+
+  // Start countdown if booking is active
+  if (props.booking.status === 'active') {
+    startCountdown()
+  }
+})
+
+onUnmounted(() => {
+  stopCountdown()
 })
 </script>
 
@@ -144,6 +231,34 @@ onMounted(() => {
         <div class="booking-details__status-circle">
           <div class="booking-details__status-line"></div>
           <div class="booking-details__status-text-small">не началось</div>
+        </div>
+        <div class="booking-details__status-time">
+          Забронировано до {{ formatTime(booking.endTime) }} {{ formatDate(booking.endDate) }}
+        </div>
+      </div>
+
+      <!-- Active Status Card -->
+      <div 
+        v-if="booking.status === 'active'"
+        class="booking-details__active-status-card"
+      >
+        <div class="booking-details__active-status-card-icon"></div>
+        <div class="booking-details__active-status-card-content">
+          <div class="booking-details__active-status-card-title">Парковка активна</div>
+          <div class="booking-details__active-status-card-description">Вы припаркованы на забронированном месте</div>
+        </div>
+      </div>
+
+      <!-- Countdown Timer Circle (for active bookings) -->
+      <div v-if="booking.status === 'active'" class="booking-details__status-indicator-wrapper">
+        <div class="booking-details__status-circle">
+          <div class="booking-details__countdown-days">{{ formatCountdownDays }}</div>
+          <div class="booking-details__countdown-time">
+            <span>{{ formatCountdownTime.hours }}</span>
+            <span class="booking-details__countdown-colon">:</span>
+            <span>{{ formatCountdownTime.minutes }}</span>
+          </div>
+          <div class="booking-details__countdown-label">осталось</div>
         </div>
         <div class="booking-details__status-time">
           Забронировано до {{ formatTime(booking.endTime) }} {{ formatDate(booking.endDate) }}
@@ -273,6 +388,7 @@ onMounted(() => {
 
       <!-- Action Buttons -->
       <div class="booking-details__actions">
+        <!-- Buttons for confirmed status -->
         <button
           v-if="booking.status === 'confirmed'"
           type="button"
@@ -282,11 +398,36 @@ onMounted(() => {
           Начать парковку
         </button>
         <button
+          v-if="booking.status === 'confirmed'"
           type="button"
           class="booking-details__action-button booking-details__action-button--danger"
           @click="emit('cancel-booking')"
         >
           Отменить бронирование
+        </button>
+
+        <!-- Buttons for active status -->
+        <button
+          v-if="booking.status === 'active'"
+          type="button"
+          class="booking-details__action-button booking-details__action-button--success"
+          @click="emit('finish-parking')"
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M17.4375 8.71875C17.4375 13.5352 13.5 17.4375 8.71875 17.4375C3.90234 17.4375 0 13.5352 0 8.71875C0 3.9375 3.90234 0 8.71875 0C13.5 0 17.4375 3.9375 17.4375 8.71875ZM7.69922 13.3594L14.168 6.89062C14.3789 6.67969 14.3789 6.29297 14.168 6.08203L13.3594 5.30859C13.1484 5.0625 12.7969 5.0625 12.5859 5.30859L7.3125 10.582L4.81641 8.12109C4.60547 7.875 4.25391 7.875 4.04297 8.12109L3.23438 8.89453C3.02344 9.10547 3.02344 9.49219 3.23438 9.70312L6.89062 13.3594C7.10156 13.5703 7.48828 13.5703 7.69922 13.3594Z" fill="white"/>
+          </svg>
+          Завершить парковку
+        </button>
+        <button
+          v-if="booking.status === 'active'"
+          type="button"
+          class="booking-details__action-button booking-details__action-button--extend"
+          @click="emit('extend-parking')"
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M9.75 8.25V3.75C9.75 3.33594 9.41406 3 9 3C8.58594 3 8.25 3.33594 8.25 3.75V8.25H3.75C3.33594 8.25 3 8.58594 3 9C3 9.41406 3.33594 9.75 3.75 9.75H8.25V14.25C8.25 14.6641 8.58594 15 9 15C9.41406 15 9.75 14.6641 9.75 14.25V9.75H14.25C14.6641 9.75 15 9.41406 15 9C15 8.58594 14.6641 8.25 14.25 8.25H9.75Z" fill="white"/>
+          </svg>
+          Продлить
         </button>
       </div>
     </div>
@@ -362,7 +503,7 @@ onMounted(() => {
 /* Status Card */
 .booking-details__status-card {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   padding: 16px;
   background: #2563EB;
@@ -376,7 +517,6 @@ onMounted(() => {
   border-radius: 50%;
   background: #ffffff;
   flex-shrink: 0;
-  margin-top: 4px;
 }
 
 .booking-details__status-card-content {
@@ -398,6 +538,49 @@ onMounted(() => {
   font-size: 14px;
   line-height: 1.4;
   color: rgba(255, 255, 255, 0.9);
+}
+
+/* Active Status Card */
+.booking-details__active-status-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: #22C55E;
+  border-radius: 12px;
+  margin-bottom: 8px;
+}
+
+.booking-details__active-status-card-icon {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffffff;
+  flex-shrink: 0;
+  margin-top: 6px;
+}
+
+.booking-details__active-status-card-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.booking-details__active-status-card-title {
+  font-family: Inter, sans-serif;
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #ffffff;
+}
+
+.booking-details__active-status-card-description {
+  font-family: Inter, sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #ffffff;
 }
 
 /* Status Indicator */
@@ -436,6 +619,48 @@ onMounted(() => {
 }
 
 .booking-details__status-text-small {
+  font-family: Inter, sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #6B7280;
+}
+
+.booking-details__countdown-days {
+  font-family: Inter, sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 1.2;
+  color: #1F2937;
+  margin-bottom: 4px;
+}
+
+.booking-details__countdown-time {
+  font-family: Inter, sans-serif;
+  font-weight: 700;
+  font-size: 32px;
+  line-height: 1.2;
+  color: #1F2937;
+  margin-bottom: 4px;
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+}
+
+.booking-details__countdown-colon {
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.booking-details__countdown-label {
   font-family: Inter, sans-serif;
   font-weight: 400;
   font-size: 14px;
@@ -660,10 +885,10 @@ onMounted(() => {
   padding: 8px 16px;
   border: none;
   border-radius: 8px;
-  background: #2563EB;
-  color: #ffffff;
+  background: #DBEAFE;
+  color: #2563EB;
   font-family: Inter, sans-serif;
-  font-weight: 500;
+  font-weight: 600;
   font-size: 14px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -675,8 +900,12 @@ onMounted(() => {
   display: block;
 }
 
+.booking-details__chat-button svg path {
+  fill: #2563EB;
+}
+
 .booking-details__chat-button:hover {
-  background: #1D4ED8;
+  background: #BFDBFE;
 }
 
 /* Description */
@@ -776,6 +1005,16 @@ onMounted(() => {
   line-height: 1.5;
   cursor: pointer;
   transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.booking-details__action-button svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 .booking-details__action-button--primary {
@@ -794,6 +1033,24 @@ onMounted(() => {
 
 .booking-details__action-button--danger:hover {
   background: #DC2626;
+}
+
+.booking-details__action-button--success {
+  background: #22C55E;
+  color: #ffffff;
+}
+
+.booking-details__action-button--success:hover {
+  background: #16A34A;
+}
+
+.booking-details__action-button--extend {
+  background: #2563EB;
+  color: #ffffff;
+}
+
+.booking-details__action-button--extend:hover {
+  background: #1D4ED8;
 }
 
 @media (max-width: 480px) {

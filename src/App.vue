@@ -46,6 +46,7 @@ import BookingListScreen from './views/BookingListScreen.vue'
 import BookingDetailsScreen from './views/BookingDetailsScreen.vue'
 import ClientCancelledBookingScreen from './views/ClientCancelledBookingScreen.vue'
 import CancelBookingModal from './components/CancelBookingModal.vue'
+import ExtendBookingModal from './components/ExtendBookingModal.vue'
 import EarlyBookingScreen from './views/EarlyBookingScreen.vue'
 
 type Stage =
@@ -91,6 +92,7 @@ type Stage =
 const stage = ref<Stage>('onboarding1')
 const selectedParking = ref<ParkingSpot | null>(null)
 const showCancelModal = ref(false)
+const showExtendModal = ref(false)
 const navSelection = ref<'home' | 'search' | 'rent' | 'profile' | 'chat'>('home')
 const userName = ref<string>()
 const currentUser = ref<User | null>(null)
@@ -727,15 +729,24 @@ const handleEarlyBookingBack = () => {
 
 const handleEarlyBookingPayAndStart = () => {
   if (!selectedBooking.value) return
-  // Обновляем статус бронирования на 'active'
-  bookings.value = bookings.value.map((b) =>
-    b.id === selectedBooking.value?.id ? { ...b, status: 'active' } : b,
-  )
-  selectedBooking.value = { ...selectedBooking.value, status: 'active' }
-  // Переходим на главную страницу
-  stage.value = 'home'
-  navSelection.value = 'home'
-  console.log('[App] Paid and started parking for booking:', selectedBooking.value.id)
+  
+  // Показываем экран загрузки с текстом "Оплата успешно"
+  loadingMessage.value = 'Оплата успешно'
+  loadingSubtitle.value = ''
+  stage.value = 'loading'
+  
+  // Через 2 секунды возвращаемся на экран деталей бронирования
+  setTimeout(() => {
+    // Обновляем статус бронирования на 'active'
+    const updatedBooking = { ...selectedBooking.value, status: 'active' as const }
+    bookings.value = bookings.value.map((b) =>
+      b.id === selectedBooking.value?.id ? updatedBooking : b,
+    )
+    selectedBooking.value = updatedBooking
+    // Переходим на экран деталей бронирования
+    stage.value = 'booking-details'
+    console.log('[App] Paid and started parking for booking:', selectedBooking.value.id)
+  }, 2000)
 }
 
 const handleEarlyBookingWaitForScheduled = () => {
@@ -781,6 +792,47 @@ const handleBookingDetailsBack = () => {
 const handleBookingDetailsChat = () => {
   if (!selectedBooking.value) return
   handleOpenChatFromList(selectedBooking.value)
+}
+
+const handleFinishParking = () => {
+  if (!selectedBooking.value) return
+  // Обновляем статус бронирования на 'completed'
+  const updatedBooking = { ...selectedBooking.value, status: 'completed' as const }
+  bookings.value = bookings.value.map((b) =>
+    b.id === selectedBooking.value?.id ? updatedBooking : b,
+  )
+  bookingsCount.value = bookings.value.filter(b => b.status !== 'cancelled' && b.status !== 'completed').length
+  selectedBooking.value = updatedBooking
+  // Переходим на главную страницу
+  stage.value = 'home'
+  navSelection.value = 'home'
+  console.log('[App] Finished parking for booking:', selectedBooking.value.id)
+}
+
+const handleExtendParking = () => {
+  if (!selectedBooking.value) return
+  showExtendModal.value = true
+  console.log('[App] Opening extend parking modal for booking:', selectedBooking.value.id)
+}
+
+const handleExtendBookingConfirm = (data: { date: string; time: string }) => {
+  if (!selectedBooking.value) return
+  // Обновляем дату и время окончания бронирования
+  const updatedBooking = {
+    ...selectedBooking.value,
+    endDate: data.date,
+    endTime: data.time
+  }
+  bookings.value = bookings.value.map((b) =>
+    b.id === selectedBooking.value?.id ? updatedBooking : b,
+  )
+  selectedBooking.value = updatedBooking
+  showExtendModal.value = false
+  console.log('[App] Extended parking until:', data.date, data.time)
+}
+
+const handleExtendBookingCancel = () => {
+  showExtendModal.value = false
 }
 
 const backToSearch = async () => {
@@ -1332,6 +1384,8 @@ onMounted(async () => {
           @open-chat="handleBookingDetailsChat"
           @start-parking="handleStartParking"
           @cancel-booking="handleCancelBooking"
+          @finish-parking="handleFinishParking"
+          @extend-parking="handleExtendParking"
         />
 
         <ClientCancelledBookingScreen
@@ -1352,6 +1406,15 @@ onMounted(async () => {
           v-if="showCancelModal"
           @confirm="handleCancelBookingConfirm"
           @cancel="handleCancelBookingCancel"
+        />
+
+        <!-- Extend Booking Modal -->
+        <ExtendBookingModal
+          v-if="showExtendModal && selectedBooking"
+          :current-end-date="selectedBooking.endDate"
+          :current-end-time="selectedBooking.endTime"
+          @confirm="handleExtendBookingConfirm"
+          @cancel="handleExtendBookingCancel"
         />
 
         <PlaceholderScreen
