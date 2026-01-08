@@ -46,6 +46,7 @@ import BookingListScreen from './views/BookingListScreen.vue'
 import BookingDetailsScreen from './views/BookingDetailsScreen.vue'
 import ClientCancelledBookingScreen from './views/ClientCancelledBookingScreen.vue'
 import CancelBookingModal from './components/CancelBookingModal.vue'
+import EarlyBookingScreen from './views/EarlyBookingScreen.vue'
 
 type Stage =
   | 'onboarding1'
@@ -85,6 +86,7 @@ type Stage =
   | 'booking-list'
   | 'booking-details'
   | 'client-cancelled-booking'
+  | 'early-booking'
 
 const stage = ref<Stage>('onboarding1')
 const selectedParking = ref<ParkingSpot | null>(null)
@@ -237,7 +239,8 @@ const isNavVisible = computed(() =>
   stage.value !== 'owner-completed-booking' &&
       stage.value !== 'booking-list' &&
       stage.value !== 'booking-details' &&
-      stage.value !== 'client-cancelled-booking'
+      stage.value !== 'client-cancelled-booking' &&
+      stage.value !== 'early-booking'
     )
 
 const ensureParkingSelected = () => {
@@ -713,13 +716,32 @@ const handleOpenBookingDetails = async (booking: Booking) => {
 
 const handleStartParking = () => {
   if (!selectedBooking.value) return
+  // Переходим на экран раннего бронирования
+  stage.value = 'early-booking'
+  console.log('[App] Opening early booking screen for booking:', selectedBooking.value.id)
+}
+
+const handleEarlyBookingBack = () => {
+  stage.value = 'booking-details'
+}
+
+const handleEarlyBookingPayAndStart = () => {
+  if (!selectedBooking.value) return
   // Обновляем статус бронирования на 'active'
   bookings.value = bookings.value.map((b) =>
     b.id === selectedBooking.value?.id ? { ...b, status: 'active' } : b,
   )
   selectedBooking.value = { ...selectedBooking.value, status: 'active' }
-  // Можно добавить переход на экран активного бронирования
-  console.log('[App] Starting parking for booking:', selectedBooking.value.id)
+  // Переходим на главную страницу
+  stage.value = 'home'
+  navSelection.value = 'home'
+  console.log('[App] Paid and started parking for booking:', selectedBooking.value.id)
+}
+
+const handleEarlyBookingWaitForScheduled = () => {
+  // Возвращаемся на экран деталей бронирования
+  stage.value = 'booking-details'
+  console.log('[App] User will wait for scheduled time')
 }
 
 const handleCancelBooking = () => {
@@ -1315,6 +1337,14 @@ onMounted(async () => {
         <ClientCancelledBookingScreen
           v-else-if="stage === 'client-cancelled-booking'"
           @go-home="handleClientCancelledBookingGoHome"
+        />
+
+        <EarlyBookingScreen
+          v-else-if="stage === 'early-booking' && selectedBooking"
+          :booking="selectedBooking"
+          @back="handleEarlyBookingBack"
+          @pay-and-start="handleEarlyBookingPayAndStart"
+          @wait-for-scheduled="handleEarlyBookingWaitForScheduled"
         />
 
         <!-- Cancel Booking Modal -->

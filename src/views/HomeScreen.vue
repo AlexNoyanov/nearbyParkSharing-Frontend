@@ -146,6 +146,8 @@ const getStatusLabel = (status: string, type: 'booking' | 'ownerRequest'): strin
         return 'Активное'
       case 'completed':
         return 'Завершено'
+      case 'cancelled':
+        return 'Отменено'
       default:
         return 'Ожидает подтверждения'
     }
