@@ -414,6 +414,24 @@ onUnmounted(() => {
 
       <!-- Action Buttons -->
       <div class="booking-details__actions">
+        <!-- Buttons for awaiting status -->
+        <button
+          v-if="booking.status === 'awaiting'"
+          type="button"
+          class="booking-details__action-button booking-details__action-button--inactive"
+          disabled
+        >
+          Бронирование неактивно
+        </button>
+        <button
+          v-if="booking.status === 'awaiting'"
+          type="button"
+          class="booking-details__action-button booking-details__action-button--danger"
+          @click="emit('cancel-booking')"
+        >
+          Отменить бронирование
+        </button>
+
         <!-- Buttons for confirmed status -->
         <button
           v-if="booking.status === 'confirmed'"
@@ -1094,6 +1112,16 @@ onUnmounted(() => {
 
 .booking-details__action-button--extend:hover {
   background: #1D4ED8;
+}
+
+.booking-details__action-button--inactive {
+  background: #E5E7EB;
+  color: #6B7280;
+  cursor: not-allowed;
+}
+
+.booking-details__action-button--inactive:hover {
+  background: #E5E7EB;
 }
 
 @media (max-width: 480px) {
