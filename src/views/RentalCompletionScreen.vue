@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
+
 type Booking = {
   id: string
   address: string
@@ -20,6 +22,25 @@ const emit = defineEmits<{
   (e: 'back'): void
   (e: 'complete'): void
 }>()
+
+// Scroll to top when component mounts
+onMounted(() => {
+  window.scrollTo(0, 0)
+  document.documentElement.scrollTop = 0
+  document.body.scrollTop = 0
+  
+  // Also scroll the content container if it exists
+  const contentElement = document.querySelector('.rental-completion__content') as HTMLElement | null
+  if (contentElement) {
+    contentElement.scrollTop = 0
+  }
+  
+  // Scroll app content if it exists
+  const appContent = document.querySelector('.app__content') as HTMLElement | null
+  if (appContent) {
+    appContent.scrollTop = 0
+  }
+})
 
 const formatDate = (dateStr: string): string => {
   const date = new Date(dateStr)

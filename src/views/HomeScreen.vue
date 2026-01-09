@@ -303,8 +303,8 @@ const handleActivityClick = (entry: any) => {
     console.log('[HomeScreen] handleActivityClick - booking found:', entry.booking)
     console.log('[HomeScreen] Booking status:', entry.booking.status)
     
-    // Для всех статусов бронирования (awaiting, confirmed, active) открываем детали бронирования
-    if (entry.booking.status === 'awaiting' || entry.booking.status === 'confirmed' || entry.booking.status === 'active') {
+    // Для всех статусов бронирования (awaiting, confirmed, active, completed, cancelled) открываем детали бронирования
+    if (entry.booking.status === 'awaiting' || entry.booking.status === 'confirmed' || entry.booking.status === 'active' || entry.booking.status === 'completed' || entry.booking.status === 'cancelled') {
       console.log('[HomeScreen] Opening booking details for status:', entry.booking.status)
       emit('open-booking-details', entry.booking as Booking)
       return

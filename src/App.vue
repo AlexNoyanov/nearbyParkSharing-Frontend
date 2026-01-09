@@ -610,7 +610,7 @@ const handleOpenChatFromList = (booking: Booking) => {
       case 'confirmed':
         return 'Подтверждено'
       case 'active':
-        return 'Активно'
+        return 'Активное'
       case 'completed':
         return 'Завершено'
       default:
@@ -772,6 +772,15 @@ const handleEarlyBookingPayAndStart = () => {
       b.id === selectedBooking.value?.id ? updatedBooking : b,
     )
     selectedBooking.value = updatedBooking
+    
+    // Обновляем статус в selectedChatBooking, если чат открыт или будет открыт
+    if (selectedChatBooking.value) {
+      selectedChatBooking.value = {
+        ...selectedChatBooking.value,
+        status: 'Активное'
+      }
+    }
+    
     // Переходим на экран деталей бронирования
     stage.value = 'booking-details'
     console.log('[App] Paid and started parking for booking:', selectedBooking.value.id)

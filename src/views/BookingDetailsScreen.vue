@@ -69,6 +69,8 @@ const getStatusText = (status: Booking['status']): string => {
       return 'Активно'
     case 'completed':
       return 'Завершено'
+    case 'cancelled':
+      return 'Отменено'
     default:
       return ''
   }
@@ -288,6 +290,28 @@ onUnmounted(() => {
         </div>
         <div class="booking-details__status-time">
           Забронировано до {{ formatTime(booking.endTime) }} {{ formatDate(booking.endDate) }}
+        </div>
+      </div>
+
+      <!-- Completed Status Card -->
+      <div 
+        v-if="booking.status === 'completed'"
+        class="booking-details__status-card booking-details__status-card--completed"
+      >
+        <div class="booking-details__status-card-icon booking-details__status-card-icon--completed"></div>
+        <div class="booking-details__status-card-content">
+          <div class="booking-details__status-card-title booking-details__status-card-title--completed">{{ getStatusText(booking.status) }}</div>
+        </div>
+      </div>
+
+      <!-- Cancelled Status Card -->
+      <div 
+        v-if="booking.status === 'cancelled'"
+        class="booking-details__status-card booking-details__status-card--cancelled"
+      >
+        <div class="booking-details__status-card-icon booking-details__status-card-icon--cancelled"></div>
+        <div class="booking-details__status-card-content">
+          <div class="booking-details__status-card-title booking-details__status-card-title--cancelled">{{ getStatusText(booking.status) }}</div>
         </div>
       </div>
 
@@ -599,6 +623,32 @@ onUnmounted(() => {
 
 .booking-details__status-card-description--awaiting {
   color: rgba(255, 255, 255, 0.95);
+}
+
+/* Completed status card styles */
+.booking-details__status-card--completed {
+  background: #EF4444;
+}
+
+.booking-details__status-card-icon--completed {
+  background: #ffffff;
+}
+
+.booking-details__status-card-title--completed {
+  color: #ffffff;
+}
+
+/* Cancelled status card styles */
+.booking-details__status-card--cancelled {
+  background: #EF4444;
+}
+
+.booking-details__status-card-icon--cancelled {
+  background: #ffffff;
+}
+
+.booking-details__status-card-title--cancelled {
+  color: #ffffff;
 }
 
 /* Active Status Card */

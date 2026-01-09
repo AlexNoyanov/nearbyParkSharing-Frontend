@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 type Participant = 'host' | 'guest'
 
@@ -22,6 +22,7 @@ type BookingData = {
 const props = defineProps<{
   contactName?: string
   booking?: BookingData
+  systemMessage?: string
 }>()
 
 const emit = defineEmits<{
@@ -59,10 +60,16 @@ const isAwaitingConfirmation = computed(() => {
   return status === 'Ожидает подтверждения' || status === 'awaiting'
 })
 
-// Проверяем, подтверждено ли бронирование
+// Проверяем, подтверждено ли бронирование (показываем для confirmed и active)
 const isConfirmed = computed(() => {
   const status = bookingData.value.status
   return status === 'Подтверждено' || status === 'confirmed' || status === 'completed' || status === 'Активное' || status === 'active'
+})
+
+// Проверяем, началось ли бронирование (активное) - показываем дополнительный баннер
+const isActive = computed(() => {
+  const status = bookingData.value.status
+  return status === 'Активное' || status === 'active'
 })
 
 // Проверяем, отменено ли бронирование
@@ -138,8 +145,36 @@ const handleTelegramBack = () => {
   handleBack()
 }
 
+// Функция для добавления системного сообщения
+const addSystemMessage = (text: string) => {
+  const messageId = `system-${text}-${Date.now()}`
+  const existingMessage = conversation.value.find(m => m.text === text && m.id.startsWith('system-'))
+  if (existingMessage) return // Сообщение уже добавлено
+  
+  conversation.value.push({
+    id: messageId,
+    from: 'host',
+    text,
+    time: new Intl.DateTimeFormat('ru-RU', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date()),
+    delivered: true,
+  })
+  
+  void scrollToBottom()
+}
+
+// Отслеживаем изменение статуса бронирования на 'active' - баннер показывается автоматически через isActive
+// Убрали добавление текстового сообщения, так как теперь используется зеленый баннер
+
 onMounted(async () => {
   await scrollToBottom()
+
+  // Добавляем системное сообщение, если оно передано через props
+  if (props.systemMessage) {
+    addSystemMessage(props.systemMessage)
+  }
 
   const telegram = window.Telegram?.WebApp
   if (telegram) {
@@ -247,6 +282,16 @@ onBeforeUnmount(() => {
           </svg>
         </div>
         <span class="chat__confirmation-text">Бронирование подтверждено</span>
+      </div>
+
+      <!-- Booking started banner -->
+      <div v-if="isActive" class="chat__confirmation-banner">
+        <div class="chat__confirmation-icon">
+          <svg width="31" height="23" viewBox="0 0 31 23" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M10.3125 22.0898L0.585938 12.3633C0 11.7773 0 10.7812 0.585938 10.1953L2.69531 8.08594C3.28125 7.5 4.21875 7.5 4.80469 8.08594L11.4258 14.6484L25.4883 0.585938C26.0742 0 27.0117 0 27.5977 0.585938L29.707 2.69531C30.293 3.28125 30.293 4.27734 29.707 4.86328L12.4805 22.0898C11.8945 22.6758 10.8984 22.6758 10.3125 22.0898Z" fill="white"/>
+          </svg>
+        </div>
+        <span class="chat__confirmation-text">Бронирование началось</span>
       </div>
 
       <!-- Cancellation banner -->
