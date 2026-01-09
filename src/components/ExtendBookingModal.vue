@@ -25,7 +25,7 @@ const currentY = ref(0)
 const translateY = ref(0)
 
 const handleTouchStart = (e: TouchEvent) => {
-  if (!modalContent.value) return
+  if (!modalContent.value || !e.touches[0]) return
   isDragging.value = true
   startY.value = e.touches[0].clientY
   currentY.value = startY.value
@@ -33,7 +33,7 @@ const handleTouchStart = (e: TouchEvent) => {
 }
 
 const handleTouchMove = (e: TouchEvent) => {
-  if (!isDragging.value || !modalContent.value) return
+  if (!isDragging.value || !modalContent.value || !e.touches[0]) return
   e.preventDefault()
   currentY.value = e.touches[0].clientY
   const deltaY = currentY.value - startY.value
@@ -119,14 +119,6 @@ const surcharge = computed(() => {
   return 160
 })
 
-const formatDateForDisplay = (dateStr: string): string => {
-  const date = new Date(dateStr)
-  const day = String(date.getDate()).padStart(2, '0')
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const year = date.getFullYear()
-  return `${day}/${month}/${year}`
-}
-
 const handleDateChange = (event: Event) => {
   const target = event.target as HTMLInputElement
   selectedDate.value = target.value
@@ -138,6 +130,7 @@ const handleTimeChange = (event: Event) => {
 }
 
 const handleConfirm = () => {
+  if (!selectedDate.value || !selectedTime.value) return
   emit('confirm', {
     date: selectedDate.value,
     time: selectedTime.value

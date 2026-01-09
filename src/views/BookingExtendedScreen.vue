@@ -42,9 +42,10 @@ const addressParts = computed(() => {
   // Разделяем адрес на основную часть и город
   const parts = props.booking.address.split(',')
   if (parts.length >= 2) {
+    const lastPart = parts[parts.length - 1]
     return {
       street: parts.slice(0, -1).join(',').trim(),
-      city: parts[parts.length - 1].trim()
+      city: lastPart ? lastPart.trim() : ''
     }
   }
   return {

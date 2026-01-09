@@ -765,6 +765,7 @@ const handleEarlyBookingPayAndStart = () => {
   
   // Через 2 секунды возвращаемся на экран деталей бронирования
   setTimeout(() => {
+    if (!selectedBooking.value) return
     // Обновляем статус бронирования на 'active'
     const updatedBooking = { ...selectedBooking.value, status: 'active' as const }
     bookings.value = bookings.value.map((b) =>

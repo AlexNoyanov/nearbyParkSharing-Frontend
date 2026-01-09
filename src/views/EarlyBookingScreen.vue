@@ -14,7 +14,7 @@ type Booking = {
   parkingSpotId?: string
 }
 
-const props = defineProps<{
+defineProps<{
   booking: Booking
 }>()
 
