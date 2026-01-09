@@ -246,6 +246,7 @@ onMounted(() => {
   gap: 12px;
   width: 100%;
   margin-top: 3.3px;
+  align-items: flex-start;
 }
 
 .owner-cancelled__step {
@@ -253,6 +254,7 @@ onMounted(() => {
   align-items: flex-start;
   width: 100%;
   min-width: 0;
+  justify-content: flex-start;
 }
 
 .owner-cancelled__step--first {
@@ -262,7 +264,7 @@ onMounted(() => {
 }
 
 .owner-cancelled__step--first .owner-cancelled__step-number {
-  width: 22px;
+  width: 24px;
   height: 24px;
   margin-top: 3px;
 }
@@ -270,6 +272,7 @@ onMounted(() => {
 .owner-cancelled__step--first .owner-cancelled__step-content {
   padding-left: 18px;
   padding-top: 0;
+  text-align: left;
 }
 
 .owner-cancelled__step--second {
@@ -285,8 +288,9 @@ onMounted(() => {
 }
 
 .owner-cancelled__step--second .owner-cancelled__step-content {
-  padding-left: 22px;
+  padding-left: 18px;
   padding-top: 0;
+  text-align: left;
 }
 
 .owner-cancelled__step-number {
