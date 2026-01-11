@@ -33,6 +33,7 @@ import BookingConfirmationScreen from './views/BookingConfirmationScreen.vue'
 import FullScreenMapScreen from './views/FullScreenMapScreen.vue'
 import type { User } from './services/mockAuth'
 import { featureToggles, type FeatureKey } from './services/featureToggles'
+import { authApi } from './services/authApi'
 import chatIconSvg from './assets/icons/bottom-nav-chat.svg?raw'
 import homeIconSvg from './assets/icons/bottom-nav-home.svg?raw'
 import plusIconSvg from './assets/icons/bottom-nav-plus.svg?raw'
@@ -1206,9 +1207,85 @@ watch(stage, async (newStage) => {
   }
 }, { immediate: true })
 
+// Get Telegram initData helper
+const getInitData = (): string => {
+  if (window.Telegram?.WebApp?.initData) {
+    return window.Telegram.WebApp.initData
+  }
+  return ''
+}
+
 onMounted(async () => {
   // Set userName immediately (synchronous)
   userName.value = window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name
+  
+  // Check authentication on app startup
+  try {
+    const initData = getInitData()
+    if (initData) {
+      const loginResponse = await authApi.login(initData)
+      
+      if (loginResponse.status === 'OK' && loginResponse.token && loginResponse.user) {
+        // User is authenticated
+        if (loginResponse.token) {
+          localStorage.setItem('auth_token', loginResponse.token)
+        }
+        
+        const user: User = {
+          id: loginResponse.user.id,
+          name: loginResponse.user.name,
+          phone: loginResponse.user.phone,
+        }
+        
+        // Use handleAuthSuccess to initialize user data
+        currentUser.value = user
+        userName.value = user.name
+        
+        // Initialize user data (bookings, requests) via handleAuthSuccess logic
+        // But skip navigation part since we handle it separately here
+        if (user.phone === '+79990001122') {
+          ownerRequests.value = [
+            {
+              id: 'owner-req-1',
+              address: 'Москва, Тверская, 15',
+              startDate: '2025-12-15',
+              endDate: '2025-12-15',
+              startTime: '10:00',
+              endTime: '14:00',
+              renterName: 'Михаил',
+              status: 'awaiting',
+            },
+          ]
+          bookings.value = []
+          bookingsCount.value = 0
+        } else {
+          ownerRequests.value = []
+          bookings.value = []
+          bookingsCount.value = 0
+        }
+        
+        // Navigate to home if authenticated
+        const onboarding1Enabled = await isFeatureEnabled('onboarding1')
+        if (onboarding1Enabled) {
+          stage.value = 'home'
+          navSelection.value = 'home'
+        } else {
+          placeholderMessage.value = featureToggles.getPlaceholderMessage('onboarding1')
+          stage.value = 'placeholder'
+        }
+        return
+      } else if (loginResponse.status === 'NEED_PHONE') {
+        // User needs phone verification - continue to onboarding/login flow
+        console.log('[App] User needs phone verification')
+      }
+    } else {
+      // No Telegram initData - continue to normal flow
+      console.log('[App] No Telegram initData available')
+    }
+  } catch (error) {
+    console.error('[App] Error checking authentication:', error)
+    // Continue to normal flow on error
+  }
   
   // Check feature toggle asynchronously after component has rendered
   try {

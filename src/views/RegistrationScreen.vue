@@ -3,7 +3,6 @@ import { ref } from 'vue'
 import { mockAuth } from '../services/mockAuth'
 import backIconSvg from '../assets/icons/icon-back.svg?raw'
 import userPlusIconSvg from '../assets/icons/icon-user-plus.svg?raw'
-import checkIconSvg from '../assets/icons/icon-check.svg?raw'
 
 const props = defineProps<{
   onBack: () => void
@@ -16,6 +15,7 @@ const name = ref('')
 const phone = ref('')
 const isLoading = ref(false)
 const error = ref('')
+const contentRef = ref<HTMLElement | null>(null)
 
 const formatPhone = (value: string): string => {
   // Remove all non-digits
@@ -38,6 +38,44 @@ const handlePhoneInput = (e: Event) => {
 
 const handleNameInput = () => {
   error.value = ''
+}
+
+const handleInputFocus = (e: Event) => {
+  const target = e.target as HTMLElement
+  if (!contentRef.value) return
+  
+  // Wait for keyboard to appear on iOS
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      const inputRect = target.getBoundingClientRect()
+      const contentRect = contentRef.value!.getBoundingClientRect()
+      const headerHeight = 180
+      const viewportHeight = window.innerHeight
+      const keyboardHeight = viewportHeight - contentRect.bottom
+      const availableHeight = viewportHeight - headerHeight - keyboardHeight
+      
+      // Calculate if input is hidden under header
+      const inputTop = inputRect.top
+      const inputBottom = inputRect.bottom
+      const headerBottom = headerHeight
+      
+      if (inputTop < headerBottom) {
+        // Input is hidden under header, scroll to show it
+        const scrollAmount = headerBottom - inputTop + 20 // 20px padding
+        contentRef.value!.scrollBy({
+          top: scrollAmount,
+          behavior: 'smooth'
+        })
+      } else if (inputBottom > availableHeight + headerHeight) {
+        // Input is below visible area, scroll to show it
+        const scrollAmount = inputBottom - (availableHeight + headerHeight) + 20
+        contentRef.value!.scrollBy({
+          top: scrollAmount,
+          behavior: 'smooth'
+        })
+      }
+    }, 400)
+  })
 }
 
 const handleSubmit = async () => {
@@ -89,7 +127,7 @@ const handleSubmit = async () => {
         <h1 class="registration-screen__title">Создать аккаунт</h1>
       </div>
 
-      <div class="registration-screen__content">
+      <div ref="contentRef" class="registration-screen__content">
         <div class="registration-screen__form">
           <div class="registration-screen__field">
             <label class="registration-screen__label">Ваше имя</label>
@@ -100,6 +138,7 @@ const handleSubmit = async () => {
                 class="registration-screen__input"
                 placeholder="Введите имя"
                 @input="handleNameInput"
+                @focus="handleInputFocus"
                 :disabled="isLoading"
               />
               <svg width="14" height="16" viewBox="0 0 14 16" fill="none" xmlns="http://www.w3.org/2000/svg" class="registration-screen__input-icon registration-screen__input-icon--name">
@@ -117,6 +156,7 @@ const handleSubmit = async () => {
                 class="registration-screen__input registration-screen__input--phone"
                 placeholder="+7 (999) 123-45-67"
                 @input="handlePhoneInput"
+                @focus="handleInputFocus"
                 :disabled="isLoading"
               />
               <svg width="17" height="17" viewBox="0 0 17 17" fill="none" xmlns="http://www.w3.org/2000/svg" class="registration-screen__input-icon">
@@ -134,19 +174,6 @@ const handleSubmit = async () => {
           </div>
         </div>
 
-        <div class="registration-screen__advantages">
-          <h3 class="registration-screen__advantages-title">Преимущества ParkShare:</h3>
-          <ul class="registration-screen__advantages-list">
-            <li class="registration-screen__advantages-item">
-              <span v-html="checkIconSvg" class="registration-screen__advantages-icon"></span>
-              <span>Быстрый поиск парковки рядом</span>
-            </li>
-            <li class="registration-screen__advantages-item">
-              <span v-html="checkIconSvg" class="registration-screen__advantages-icon"></span>
-              <span>Заработок на своем месте</span>
-            </li>
-          </ul>
-        </div>
       </div>
 
       <div class="registration-screen__footer">
@@ -198,7 +225,8 @@ const handleSubmit = async () => {
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  height: 100dvh;
+  height: 100%;
+  min-height: 100%;
   border-radius: 0;
   overflow: hidden;
   box-shadow: none;
@@ -215,7 +243,9 @@ const handleSubmit = async () => {
   gap: 0;
   position: relative;
   flex-shrink: 0;
+  flex-grow: 0;
   height: 180px;
+  min-height: 180px;
 }
 
 .registration-screen__back {
@@ -301,6 +331,7 @@ const handleSubmit = async () => {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  scroll-padding-top: 20px;
 }
 
 .registration-screen__form {
@@ -466,6 +497,7 @@ const handleSubmit = async () => {
   gap: 16px;
   background: #ffffff;
   flex-shrink: 0;
+  flex-grow: 0;
 }
 
 .registration-screen__footer-link {

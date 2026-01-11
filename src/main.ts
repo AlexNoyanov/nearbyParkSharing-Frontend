@@ -33,6 +33,15 @@ const initTelegramWebApp = () => {
 const bootstrap = async () => {
   initTelegramWebApp();
   await initAnalytics();
+  
+  // Initialize test mode (enabled by default)
+  const { testMode } = await import('./services/testMode')
+  if (testMode.isEnabled()) {
+    console.log('[App] Test mode is ENABLED - using mock authentication')
+  } else {
+    console.log('[App] Test mode is DISABLED - using real API')
+  }
+  
   mountApp();
 };
 

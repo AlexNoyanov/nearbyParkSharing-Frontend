@@ -24,31 +24,45 @@ const getInitData = (): string => {
   if (window.Telegram?.WebApp?.initData) {
     return window.Telegram.WebApp.initData
   }
-  // Fallback for testing - return empty string to use mock
+  // Fallback for testing/development - use empty string or test data
+  // This allows the API to work even without Telegram WebApp
   return ''
 }
 
 // Initialize call verification and get phone number
 onMounted(async () => {
   isInitializing.value = true
+  error.value = ''
   try {
     const initData = getInitData()
-    if (!initData) {
-      error.value = 'Telegram Mini App не доступен. Пожалуйста, откройте приложение через Telegram.'
-      isInitializing.value = false
-      return
-    }
-
     // Use phone from props, or empty string if not provided
     const phoneNumber = props.phone || ''
     
+    console.log('[CallVerification] Initializing call check with:', {
+      hasInitData: !!initData,
+      initDataLength: initData.length,
+      phoneNumber: phoneNumber || '(empty)'
+    })
+    
+    // Try to call the API even if initData is empty (for testing/development)
+    // The API should handle empty initData appropriately
     const response = await authApi.initCallCheck(initData, phoneNumber)
+    
+    if (!response.prettyPhone || !response.rawPhone) {
+      throw new Error('Invalid response: missing phone number')
+    }
+    
     verificationPhone.value = response.prettyPhone
     rawPhone.value = response.rawPhone
-  } catch (err) {
+    console.log('[CallVerification] Call check initialized successfully:', {
+      prettyPhone: response.prettyPhone,
+      rawPhone: response.rawPhone
+    })
+  } catch (err: any) {
     console.error('[CallVerification] Error initializing call check:', err)
-    error.value = 'Ошибка при получении номера для звонка. Попробуйте еще раз.'
-    // Keep default phone number on error
+    const errorMessage = err?.message || 'Неизвестная ошибка'
+    error.value = `Ошибка при получении номера для звонка: ${errorMessage}. Попробуйте еще раз.`
+    // Keep default phone number on error - but don't show it if there's an error
   } finally {
     isInitializing.value = false
   }

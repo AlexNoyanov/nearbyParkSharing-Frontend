@@ -222,6 +222,9 @@ const addressParts = computed(() => {
   width: 8px;
   height: 8px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .booking-extended__status-text {

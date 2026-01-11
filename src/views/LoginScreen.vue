@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { authApi } from '../services/authApi'
-import type { User } from '../services/mockAuth'
+import { testMode } from '../services/testMode'
+import { mockUsers, type User } from '../services/mockAuth'
 import backIconSvg from '../assets/icons/icon-back.svg?raw'
 
 const props = defineProps<{
@@ -48,6 +49,51 @@ const handleSubmit = async () => {
   error.value = ''
 
   try {
+    // Test mode: use mock users for login
+    if (testMode.isEnabled()) {
+      console.log('[LoginScreen] Test mode: Using mock authentication')
+      
+      const phoneDigits = phone.value.replace(/\D/g, '')
+      const phoneToCheck = phoneDigits ? `+${phoneDigits}` : ''
+      
+      if (!phoneToCheck || phoneToCheck.length < 12) {
+        error.value = 'Введите номер телефона'
+        isLoading.value = false
+        return
+      }
+      
+      // Find user by phone number
+      const mockUser = mockUsers.find(user => user.phone === phoneToCheck)
+      
+      if (mockUser) {
+        // User found - login directly
+        console.log('[LoginScreen] Test mode: Found mock user:', mockUser)
+        if (props.onAuthSuccess) {
+          props.onAuthSuccess(mockUser)
+        } else {
+          // Fallback: navigate to call verification
+          if (props.onCallVerification) {
+            props.onCallVerification(mockUser.phone)
+          } else {
+            props.onLogin(mockUser.phone)
+          }
+        }
+        isLoading.value = false
+        return
+      } else {
+        // User not found - go to call verification (for new users)
+        console.log('[LoginScreen] Test mode: User not found, going to call verification')
+        if (props.onCallVerification) {
+          props.onCallVerification(phoneToCheck)
+        } else {
+          props.onLogin(phoneToCheck)
+        }
+        isLoading.value = false
+        return
+      }
+    }
+
+    // Production mode: use Telegram API
     const initData = getInitData()
     
     if (!initData) {

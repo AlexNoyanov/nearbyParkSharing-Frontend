@@ -78,7 +78,7 @@ const getStatusText = (status: Booking['status']): string => {
 
 const getStatusDescription = (status: Booking['status']): string => {
   if (status === 'confirmed') {
-    return 'Вы еще на сообщили о прибытии на место'
+    return 'Вы ещё не сообщили о прибытии на место'
   }
   if (status === 'awaiting') {
     return 'Арендатор еще не подтвердил, что место будет свободно'
