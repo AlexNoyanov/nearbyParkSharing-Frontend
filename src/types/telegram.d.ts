@@ -11,6 +11,7 @@ declare global {
     offClick: (handler: () => void) => void
   }
     themeParams?: Record<string, string>
+    initData?: string
     initDataUnsafe?: {
       user?: {
         id?: number

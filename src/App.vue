@@ -12,6 +12,7 @@ import OnboardingScreen2 from './views/OnboardingScreen2.vue'
 import LoginScreen from './views/LoginScreen.vue'
 import RegistrationScreen from './views/RegistrationScreen.vue'
 import CodeVerificationScreen from './views/CodeVerificationScreen.vue'
+import CallVerificationScreen from './views/CallVerificationScreen.vue'
 import GeoConfirmationScreen from './views/GeoConfirmationScreen.vue'
 import ParkingDetailsScreen from './views/ParkingDetailsScreen.vue'
 import PlaceholderScreen from './views/PlaceholderScreen.vue'
@@ -60,6 +61,7 @@ type Stage =
   | 'login'
   | 'registration'
   | 'code-verification'
+  | 'call-verification'
   | 'geo-confirmation'
   | 'home'
   | 'search'
@@ -159,6 +161,7 @@ const featureStates = ref<Record<FeatureKey, boolean | null>>({
   'login': null,
   'registration': null,
   'code-verification': null,
+  'call-verification': null,
   'home': null,
   'search': null,
   'details': null,
@@ -230,6 +233,7 @@ const isNavVisible = computed(() =>
   stage.value !== 'login' &&
   stage.value !== 'registration' &&
   stage.value !== 'code-verification' &&
+  stage.value !== 'call-verification' &&
   stage.value !== 'geo-confirmation' &&
   stage.value !== 'map-selection' &&
   stage.value !== 'rent-map' &&
@@ -319,6 +323,23 @@ const goToRegistration = async () => {
 const goToCodeVerification = async (arg1: string, arg2?: string) => {
   await checkFeatureAndNavigate('code-verification', 'code-verification')
   if (stage.value === 'code-verification') {
+    // If called from RegistrationScreen: (name, phone)
+    // If called from LoginScreen: (phone) only
+    if (arg2) {
+      // Registration flow: arg1 is name, arg2 is phone
+      authName.value = arg1
+      authPhone.value = arg2
+    } else {
+      // Login flow: arg1 is phone
+      authPhone.value = arg1
+      authName.value = ''
+    }
+  }
+}
+
+const goToCallVerification = async (arg1: string, arg2?: string) => {
+  await checkFeatureAndNavigate('call-verification', 'call-verification')
+  if (stage.value === 'call-verification') {
     // If called from RegistrationScreen: (name, phone)
     // If called from LoginScreen: (phone) only
     if (arg2) {
@@ -1241,17 +1262,29 @@ onMounted(async () => {
       :on-back="() => stage = 'onboarding-final'"
       :on-login="goToCodeVerification"
       :on-register="goToRegistration"
+      :on-call-verification="(phone: string) => goToCallVerification(phone)"
+      :on-auth-success="handleAuthSuccess"
     />
 
     <RegistrationScreen
       v-else-if="stage === 'registration'"
       :on-back="() => stage = 'onboarding-final'"
       :on-register="goToCodeVerification"
+      :on-call-verification="goToCallVerification"
       :on-login="goToLogin"
     />
 
     <CodeVerificationScreen
       v-else-if="stage === 'code-verification'"
+      :phone="authPhone"
+      :name="authName"
+      :is-registration="isRegistrationFlow"
+      :on-back="isRegistrationFlow ? () => stage = 'registration' : () => stage = 'login'"
+      :on-success="handleAuthSuccess"
+    />
+
+    <CallVerificationScreen
+      v-else-if="stage === 'call-verification'"
       :phone="authPhone"
       :name="authName"
       :is-registration="isRegistrationFlow"

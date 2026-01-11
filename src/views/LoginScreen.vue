@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { mockAuth } from '../services/mockAuth'
+import { authApi } from '../services/authApi'
+import type { User } from '../services/mockAuth'
 import backIconSvg from '../assets/icons/icon-back.svg?raw'
 
 const props = defineProps<{
   onBack: () => void
   onLogin: (phone: string) => void
   onRegister: () => void
+  onCallVerification?: (phone: string) => void
+  onAuthSuccess?: (user: User) => void
 }>()
 
 const phone = ref('')
@@ -32,27 +35,74 @@ const handlePhoneInput = (e: Event) => {
   error.value = ''
 }
 
-const handleSubmit = async () => {
-  if (!phone.value || phone.value.length < 18) {
-    error.value = 'Введите корректный номер телефона'
-    return
+// Get Telegram initData
+const getInitData = (): string => {
+  if (window.Telegram?.WebApp?.initData) {
+    return window.Telegram.WebApp.initData
   }
+  return ''
+}
 
+const handleSubmit = async () => {
   isLoading.value = true
   error.value = ''
 
   try {
-    // Extract digits only for the phone number
-    const phoneDigits = phone.value.replace(/\D/g, '')
-    const fullPhone = `+${phoneDigits}`
-
-    // Send verification code
-    await mockAuth.sendVerificationCode(fullPhone, false)
+    const initData = getInitData()
     
-    // Navigate to code verification
-    props.onLogin(fullPhone)
+    if (!initData) {
+      error.value = 'Telegram Mini App не доступен. Пожалуйста, откройте приложение через Telegram.'
+      isLoading.value = false
+      return
+    }
+
+    // Try to login with Telegram initData
+    const loginResponse = await authApi.login(initData)
+    
+    if (loginResponse.status === 'OK' && loginResponse.token && loginResponse.user) {
+      // Login successful
+      if (loginResponse.token) {
+        localStorage.setItem('auth_token', loginResponse.token)
+      }
+
+      // Convert API user to app User format
+      const user: User = {
+        id: loginResponse.user.id,
+        name: loginResponse.user.name,
+        phone: loginResponse.user.phone,
+      }
+
+      // Call success callback if provided
+      if (props.onAuthSuccess) {
+        props.onAuthSuccess(user)
+      } else {
+        // Fallback: navigate to call verification with phone from user
+        if (props.onCallVerification) {
+          props.onCallVerification(loginResponse.user.phone)
+        } else {
+          props.onLogin(loginResponse.user.phone)
+        }
+      }
+    } else if (loginResponse.status === 'NEED_PHONE') {
+      // Phone verification needed - navigate to call verification
+      // The phone number will be sent when CallVerificationScreen calls initCallCheck
+      // Use phone from input if provided, otherwise use empty string (API might handle it)
+      const phoneToUse = phone.value && phone.value.length >= 18 
+        ? phone.value.replace(/\D/g, '').replace(/^/, '+')
+        : ''
+      
+      if (props.onCallVerification) {
+        props.onCallVerification(phoneToUse)
+      } else {
+        // Fallback to code verification if call verification not available
+        props.onLogin(phoneToUse || '+79999999999')
+      }
+    } else {
+      error.value = 'Ошибка при входе. Попробуйте еще раз.'
+    }
   } catch (err) {
-    error.value = 'Ошибка при отправке кода. Попробуйте еще раз.'
+    console.error('[LoginScreen] Login error:', err)
+    error.value = 'Ошибка при входе. Попробуйте еще раз.'
   } finally {
     isLoading.value = false
   }
@@ -92,9 +142,6 @@ const handleSubmit = async () => {
                 <path d="M15.4688 0.84375C15.8125 0.9375 16.0625 1.21875 16.0625 1.5625C16.0625 9.59375 9.5625 16.0625 1.5625 16.0625C1.1875 16.0625 0.90625 15.8438 0.8125 15.5L0.0625 12.25C0 11.9062 0.15625 11.5312 0.5 11.375L4 9.875C4.3125 9.75 4.65625 9.84375 4.875 10.0938L6.4375 12C8.875 10.8438 10.8438 8.84375 11.9688 6.46875L10.0625 4.90625C9.8125 4.6875 9.71875 4.34375 9.84375 4.03125L11.3438 0.53125C11.5 0.1875 11.875 0 12.2188 0.09375L15.4688 0.84375Z" fill="#9CA3AF"/>
               </svg>
             </div>
-            <p class="login-screen__hint">
-              Мы отправим SMS с кодом для входа
-            </p>
           </div>
 
           <div v-if="error" class="login-screen__error">
@@ -102,17 +149,6 @@ const handleSubmit = async () => {
           </div>
         </div>
 
-        <div class="login-screen__info">
-          <div class="login-screen__info-icon">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M7.75 0C12 0 15.5 3.5 15.5 7.75C15.5 12.0312 12 15.5 7.75 15.5C3.46875 15.5 0 12.0312 0 7.75C0 3.5 3.46875 0 7.75 0ZM7.75 3.4375C7 3.4375 6.4375 4.03125 6.4375 4.75C6.4375 5.5 7 6.0625 7.75 6.0625C8.46875 6.0625 9.0625 5.5 9.0625 4.75C9.0625 4.03125 8.46875 3.4375 7.75 3.4375ZM9.5 11.375V10.625C9.5 10.4375 9.3125 10.25 9.125 10.25H8.75V7.125C8.75 6.9375 8.5625 6.75 8.375 6.75H6.375C6.15625 6.75 6 6.9375 6 7.125V7.875C6 8.09375 6.15625 8.25 6.375 8.25H6.75V10.25H6.375C6.15625 10.25 6 10.4375 6 10.625V11.375C6 11.5938 6.15625 11.75 6.375 11.75H9.125C9.3125 11.75 9.5 11.5938 9.5 11.375Z" fill="#2563EB"/>
-            </svg>
-          </div>
-          <div class="login-screen__info-content">
-            <h3 class="login-screen__info-title">Быстрый и безопасный вход</h3>
-            <p class="login-screen__info-text">Введите номер телефона, и мы отправим код подтверждения для входа в аккаунт</p>
-          </div>
-        </div>
       </div>
 
       <div class="login-screen__footer">
@@ -120,9 +156,9 @@ const handleSubmit = async () => {
           type="button"
           class="login-screen__button login-screen__button--primary"
           @click="handleSubmit"
-          :disabled="isLoading || !phone || phone.length < 18"
+          :disabled="isLoading"
         >
-          {{ isLoading ? 'Отправка...' : 'Получить код входа' }}
+          {{ isLoading ? 'Вход...' : 'Войти' }}
         </button>
         <div class="login-screen__footer-link">
           <p class="login-screen__footer-text">
@@ -252,7 +288,7 @@ const handleSubmit = async () => {
   flex-direction: column;
   gap: 18px;
   flex: 1;
-  justify-content: flex-start;
+  justify-content: center;
   min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -325,6 +361,7 @@ const handleSubmit = async () => {
 
 .login-screen__field--phone {
   height: auto;
+  margin-top: 24px;
 }
 
 .login-screen__hint {
@@ -407,7 +444,7 @@ const handleSubmit = async () => {
 }
 
 .login-screen__footer {
-  padding: 18px 18px 16.5px;
+  padding: 18px 18px 48px;
   display: flex;
   flex-direction: column;
   gap: 9.5px;

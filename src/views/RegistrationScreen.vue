@@ -8,6 +8,7 @@ import checkIconSvg from '../assets/icons/icon-check.svg?raw'
 const props = defineProps<{
   onBack: () => void
   onRegister: (name: string, phone: string) => void
+  onCallVerification: (name: string, phone: string) => void
   onLogin: () => void
 }>()
 
@@ -63,16 +64,12 @@ const handleSubmit = async () => {
   error.value = ''
 
   try {
-    // Send verification code
-    console.log('[RegistrationScreen] Sending verification code for:', fullPhone)
-    await mockAuth.sendVerificationCode(fullPhone, true)
-    
-    // Navigate to code verification
-    console.log('[RegistrationScreen] Navigating to code verification with phone:', fullPhone, 'name:', name.value.trim())
-    props.onRegister(name.value.trim(), fullPhone)
+    // Navigate to call verification
+    console.log('[RegistrationScreen] Navigating to call verification with phone:', fullPhone, 'name:', name.value.trim())
+    props.onCallVerification(name.value.trim(), fullPhone)
   } catch (err) {
-    console.error('[RegistrationScreen] Error sending code:', err)
-    error.value = 'Ошибка при отправке кода. Попробуйте еще раз.'
+    console.error('[RegistrationScreen] Error:', err)
+    error.value = 'Ошибка. Попробуйте еще раз.'
   } finally {
     isLoading.value = false
   }
@@ -127,8 +124,8 @@ const handleSubmit = async () => {
               </svg>
             </div>
             <p class="registration-screen__hint">
-              <span>На этот номер придет SMS с кодом</span><br>
-              <span>подтверждения</span>
+              <span>Для подтверждения нужно будет</span><br>
+              <span>позвонить на указанный номер</span>
             </p>
           </div>
 
@@ -159,7 +156,7 @@ const handleSubmit = async () => {
           @click="handleSubmit"
           :disabled="isLoading || !name.trim() || !phone || phone.length < 18"
         >
-          {{ isLoading ? 'Отправка...' : 'Создать аккаунт' }}
+          {{ isLoading ? 'Загрузка...' : 'Зарегистрироваться' }}
         </button>
         <div class="registration-screen__footer-link">
           <p class="registration-screen__footer-text">

@@ -8,6 +8,7 @@ export type FeatureKey =
   | 'login'
   | 'registration'
   | 'code-verification'
+  | 'call-verification'
   | 'home'
   | 'search'
   | 'details'
@@ -35,6 +36,7 @@ const defaultFeatureStates: Record<FeatureKey, boolean> = {
   'login': true,
   'registration': true,
   'code-verification': true,
+  'call-verification': true,
   'home': true,
   'search': true,
   'details': true,
@@ -70,6 +72,10 @@ const placeholderMessages: Record<FeatureKey, { title: string; description: stri
   },
   'code-verification': {
     title: 'Подтверждение кода временно недоступно',
+    description: 'Мы обновляем систему подтверждения. Пожалуйста, попробуйте позже.',
+  },
+  'call-verification': {
+    title: 'Подтверждение через звонок временно недоступно',
     description: 'Мы обновляем систему подтверждения. Пожалуйста, попробуйте позже.',
   },
   'home': {
