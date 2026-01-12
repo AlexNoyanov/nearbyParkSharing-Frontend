@@ -107,14 +107,23 @@ const addressParts = computed(() => {
         <div class="booking-extended__status-text">Период свободен. Подтверждено.</div>
       </div>
 
-      <!-- Action Button -->
-      <button
-        type="button"
-        class="booking-extended__button"
-        @click="emit('send-message')"
-      >
-        Отправить сообщение в чат
-      </button>
+      <!-- Action Buttons: две кнопки -->
+      <div class="booking-extended__buttons">
+        <button
+          type="button"
+          class="booking-extended__button booking-extended__button--secondary"
+          @click="emit('send-message')"
+        >
+          Отправить сообщение в чат
+        </button>
+        <button
+          type="button"
+          class="booking-extended__button booking-extended__button--primary"
+          @click="emit('close')"
+        >
+          ОК
+        </button>
+      </div>
     </div>
   </section>
 </template>
@@ -235,28 +244,65 @@ const addressParts = computed(() => {
   color: white;
 }
 
+.booking-extended__buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+}
+
 .booking-extended__button {
   width: 100%;
   padding: 16px;
   border: none;
   border-radius: 12px;
-  background: white;
-  color: #9333ea;
   font-family: Inter, sans-serif;
   font-weight: 600;
   font-size: 16px;
   line-height: 1.5;
   cursor: pointer;
-  transition: background-color 0.2s;
-  margin-top: 4px;
+  transition: background-color 0.2s, opacity 0.2s;
 }
 
-.booking-extended__button:hover {
+.booking-extended__button--primary {
+  background: white;
+  color: #9333ea;
+}
+
+.booking-extended__button--primary:hover {
   background: #F3F4F6;
 }
 
-.booking-extended__button:active {
+.booking-extended__button--primary:active {
   background: #E5E7EB;
+}
+
+.booking-extended__button--secondary {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.booking-extended__button--secondary:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.booking-extended__button--secondary:active {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.booking-extended__button--back {
+  background: transparent;
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.booking-extended__button--back:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.booking-extended__button--back:active {
+  background: rgba(255, 255, 255, 0.15);
 }
 </style>
 

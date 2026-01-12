@@ -65,32 +65,33 @@ const handleSubmit = async () => {
       // Find user by phone number
       const mockUser = mockUsers.find(user => user.phone === phoneToCheck)
       
+      // In test mode, always login directly without call verification
       if (mockUser) {
         // User found - login directly
         console.log('[LoginScreen] Test mode: Found mock user:', mockUser)
         if (props.onAuthSuccess) {
           props.onAuthSuccess(mockUser)
-        } else {
-          // Fallback: navigate to call verification
-          if (props.onCallVerification) {
-            props.onCallVerification(mockUser.phone)
-          } else {
-            props.onLogin(mockUser.phone)
-          }
+          isLoading.value = false
+          return
         }
-        isLoading.value = false
-        return
       } else {
-        // User not found - go to call verification (for new users)
-        console.log('[LoginScreen] Test mode: User not found, going to call verification')
-        if (props.onCallVerification) {
-          props.onCallVerification(phoneToCheck)
-        } else {
-          props.onLogin(phoneToCheck)
+        // User not found - create a temporary test user and login
+        console.log('[LoginScreen] Test mode: User not found, creating temporary test user')
+        const tempUser: User = {
+          id: String(mockUsers.length + 1),
+          name: 'Test User',
+          phone: phoneToCheck,
         }
-        isLoading.value = false
-        return
+        if (props.onAuthSuccess) {
+          props.onAuthSuccess(tempUser)
+          isLoading.value = false
+          return
+        }
       }
+      
+      // Fallback: should not reach here if onAuthSuccess is provided
+      error.value = 'Ошибка авторизации. Проверьте настройки.'
+      isLoading.value = false
     }
 
     // Production mode: use Telegram API

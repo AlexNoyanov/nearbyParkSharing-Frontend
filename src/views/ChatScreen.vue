@@ -78,6 +78,17 @@ const isCancelled = computed(() => {
   return status === 'Отменено' || status === 'cancelled'
 })
 
+// Проверяем, завершена ли аренда
+const isCompleted = computed(() => {
+  const status = bookingData.value.status
+  return status === 'Завершено' || status === 'completed'
+})
+
+// Проверяем, должен ли чат быть неактивным
+const isChatDisabled = computed(() => {
+  return isAwaitingConfirmation.value || isCompleted.value
+})
+
 const conversation = ref<Message[]>([])
 
 const composerValue = ref('')
@@ -364,7 +375,10 @@ onBeforeUnmount(() => {
     </section>
 
     <footer class="chat__composer">
-      <form class="chat__composer-form" @submit="handleSubmit">
+      <div v-if="isCompleted" class="chat__completed-message">
+        <span class="chat__completed-text">Аренда завершена</span>
+      </div>
+      <form v-else class="chat__composer-form" @submit="handleSubmit">
         <label class="chat__composer-field">
           <span class="sr-only">Сообщение</span>
           <textarea
@@ -372,7 +386,7 @@ onBeforeUnmount(() => {
             class="chat__composer-input"
             placeholder="Написать сообщение..."
             rows="1"
-            :disabled="isAwaitingConfirmation"
+            :disabled="isChatDisabled"
             @keydown.enter.exact.prevent="handleSubmit"
           />
         </label>
@@ -380,7 +394,7 @@ onBeforeUnmount(() => {
         <button
           type="submit"
           class="chat__composer-send"
-          :disabled="isAwaitingConfirmation"
+          :disabled="isChatDisabled"
           aria-label="Отправить сообщение"
         >
           <svg width="17" height="17" viewBox="0 0 17 17" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1019,6 +1033,29 @@ onBeforeUnmount(() => {
 
 .chat__composer-input:focus-visible {
   outline: none;
+}
+
+.chat__composer-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.chat__completed-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 16px;
+  border-radius: 20px;
+  background: #e5e7eb;
+}
+
+.chat__completed-text {
+  font-family: Inter, sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #6b7280;
+  text-align: center;
 }
 
 .sr-only {

@@ -1,6 +1,8 @@
 // Feature toggle service
 // Checks feature availability from noyanov.com/Apps/ParkShare/config.php
 
+import { testMode } from './testMode'
+
 export type FeatureKey =
   | 'onboarding1'
   | 'onboarding2'
@@ -123,6 +125,17 @@ export const featureToggles = {
    * @returns Promise<boolean> - True if feature is enabled, false otherwise
    */
   async isEnabled(featureKey: FeatureKey): Promise<boolean> {
+    // In test mode, skip network requests and use default states
+    if (testMode.isEnabled()) {
+      const defaultEnabled = defaultFeatureStates[featureKey]
+      // Cache the default state
+      featureToggleCache.set(featureKey, {
+        enabled: defaultEnabled,
+        timestamp: Date.now(),
+      })
+      return defaultEnabled
+    }
+
     // Check cache first
     const cached = featureToggleCache.get(featureKey)
     if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
