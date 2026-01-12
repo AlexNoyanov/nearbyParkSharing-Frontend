@@ -83,16 +83,6 @@ const getStatusColor = (status: Booking['status']): string => {
   }
 }
 
-const getUserRole = (booking: Booking): { label: string; color: string } => {
-  // Определяем роль пользователя на основе бронирования
-  // Если статус awaiting - пользователь арендует, иначе сдает
-  if (booking.status === 'awaiting') {
-    return { label: 'Вы арендуете', color: '#2563EB' }
-  } else {
-    return { label: 'Вы сдаете', color: '#60A5FA' }
-  }
-}
-
 const getContactName = (booking: Booking): { name: string; role: string } => {
   // Моковые данные для контакта
   if (booking.status === 'awaiting') {
@@ -165,8 +155,8 @@ onMounted(async () => {
             </span>
           </div>
           
-          <div class="chat-list__booking-role-tag" :style="{ backgroundColor: getUserRole(booking).color === '#2563EB' ? '#DBEAFE' : '#EFF6FF', color: getUserRole(booking).color }">
-            {{ getUserRole(booking).label }}
+          <div class="chat-list__booking-role-tag" style="background-color: rgb(219, 234, 254) !important; color: rgb(37, 99, 235) !important;">
+            Вы арендуете
           </div>
 
           <div class="chat-list__booking-content">

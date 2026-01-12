@@ -593,6 +593,10 @@ const handleOpenOwnerRequestFromHome = (request: OwnerRequest) => {
 }
 
 const handleOpenChatFromList = (booking: Booking) => {
+  // Сохраняем текущий экран перед открытием чата
+  // Это позволит вернуться на правильный экран при нажатии "Назад" из чата
+  previousStageBeforeChat.value = stage.value
+  
   // Определяем имя контакта на основе статуса бронирования
   // Если статус awaiting - пользователь арендует, контакт - владелец места
   // Иначе - пользователь сдает, контакт - арендатор
@@ -653,6 +657,7 @@ const handleOpenChatFromList = (booking: Booking) => {
 
 const selectedChatName = ref<string | undefined>(undefined)
 const selectedChatBooking = ref<{ address?: string; date?: string; time?: string; price?: string; status?: string } | undefined>(undefined)
+const previousStageBeforeChat = ref<Stage | null>(null) // Сохраняем экран, с которого открыли чат
 
 const handleOwnerRequestConfirm = () => {
   if (!selectedOwnerRequest.value) return
@@ -679,6 +684,9 @@ const handleOwnerBookingConfirmedGoHome = () => {
 const handleOwnerBookingConfirmedChat = () => {
   if (!selectedOwnerRequest.value) return
   
+  // Сохраняем текущий экран перед открытием чата
+  previousStageBeforeChat.value = stage.value
+  
   selectedChatName.value = selectedOwnerRequest.value.renterName
   selectedChatBooking.value = {
     address: selectedOwnerRequest.value.address,
@@ -703,6 +711,9 @@ const handleOwnerCancelledBookingGoHome = () => {
 const handleOwnerCompletedBookingChat = () => {
   if (!selectedOwnerRequest.value) return
   
+  // Сохраняем текущий экран перед открытием чата
+  previousStageBeforeChat.value = stage.value
+  
   selectedChatName.value = selectedOwnerRequest.value.renterName
   selectedChatBooking.value = {
     address: selectedOwnerRequest.value.address,
@@ -712,6 +723,37 @@ const handleOwnerCompletedBookingChat = () => {
     status: 'Завершено',
   }
   stage.value = 'chat'
+}
+
+const handleChatBack = () => {
+  // Очищаем данные чата перед возвратом
+  selectedChatName.value = undefined
+  selectedChatBooking.value = undefined
+  
+  // Если открыто из страницы "Мои брони", возвращаемся на неё
+  // Иначе возвращаемся на страницу "Мои чаты"
+  if (previousStageBeforeChat.value === 'booking-list') {
+    stage.value = 'booking-list'
+    navSelection.value = 'home'
+  } else {
+    // Возвращаемся на страницу "Мои чаты"
+    stage.value = 'chat-list'
+    navSelection.value = 'chat'
+  }
+  
+  // Очищаем сохраненный экран
+  previousStageBeforeChat.value = null
+}
+
+const handleChatListBack = () => {
+  // Для арендатора возвращаемся на список бронирований, для арендодателя - на главную
+  const isOwner = ownerRequests.value && ownerRequests.value.length > 0
+  if (!isOwner && bookings.value.length > 0) {
+    stage.value = 'booking-list'
+    navSelection.value = 'home'
+  } else {
+    goHome()
+  }
 }
 
 const handleOwnerRequestDecline = () => {
@@ -1552,7 +1594,8 @@ onMounted(async () => {
         <ChatListScreen
           v-else-if="stage === 'chat-list' && featureStates['chat'] !== false"
           :bookings="bookings"
-          @back="goHome"
+          :owner-requests="ownerRequests"
+          @back="handleChatListBack"
           @open-chat="handleOpenChatFromList"
         />
 
@@ -1637,7 +1680,7 @@ onMounted(async () => {
           v-else-if="stage === 'chat' && featureStates['chat'] !== false"
           :contact-name="selectedChatName"
           :booking="selectedChatBooking"
-          @back="() => { stage = 'chat-list'; selectedChatName = undefined; selectedChatBooking = undefined; }"
+          @back="handleChatBack"
         />
 
         <PlaceholderScreen
