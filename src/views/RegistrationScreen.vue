@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { mockAuth } from '../services/mockAuth'
 import backIconSvg from '../assets/icons/icon-back.svg?raw'
 import userPlusIconSvg from '../assets/icons/icon-user-plus.svg?raw'
 
@@ -89,14 +88,9 @@ const handleSubmit = async () => {
     return
   }
 
-  // Check if phone is already registered
+  // Phone validation will be done by the API
   const phoneDigits = phone.value.replace(/\D/g, '')
   const fullPhone = `+${phoneDigits}`
-
-  if (mockAuth.isPhoneRegistered(fullPhone)) {
-    error.value = 'Этот номер телефона уже зарегистрирован'
-    return
-  }
 
   isLoading.value = true
   error.value = ''

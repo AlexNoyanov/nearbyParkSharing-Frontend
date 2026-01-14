@@ -9,9 +9,9 @@ export const testMode = {
    */
   isEnabled(): boolean {
     const stored = localStorage.getItem(TEST_MODE_KEY)
-    // Default to true (enabled) if not set
+    // Default to false (disabled) if not set - use real API by default
     if (stored === null) {
-      return true
+      return false
     }
     return stored === 'true'
   },

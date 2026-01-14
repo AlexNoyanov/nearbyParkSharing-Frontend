@@ -82,47 +82,137 @@ export const authApi = {
    * Returns phone number to call
    */
   async initCallCheck(initData: string, phoneNumber: string): Promise<CallCheckInitResponse> {
-    // Use test mode if enabled
-    if (testMode.isEnabled()) {
-      console.log('[AuthAPI] Test mode: Using mock call check init')
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
-      return {
-        prettyPhone: TEST_CALL_PHONE,
-        rawPhone: TEST_CALL_PHONE_RAW
-      }
+    // ALWAYS USE REAL API FOR REGISTRATION - Test mode is ignored for this endpoint
+    console.log('[AuthAPI] Using REAL API for call check initialization')
+    console.log('[AuthAPI] API Endpoint:', `${API_BASE_URL}/api/v1/auth/call-check/init`)
+    console.log('[AuthAPI] Test mode status:', testMode.isEnabled(), '(ignored for registration)')
+
+    // Validate inputs
+    if (!phoneNumber || phoneNumber.trim().length === 0) {
+      throw new Error('Phone number is required')
     }
 
     try {
-      const requestBody = { initData, phoneNumber }
+      // Prepare request body with proper format
+      const requestBody = {
+        initData: initData || '',
+        phoneNumber: phoneNumber.trim()
+      }
+      
+      // Stringify the body to ensure it's sent correctly
+      const requestBodyString = JSON.stringify(requestBody)
+      
       console.log('[AuthAPI] Init call check request:', { 
         url: `${API_BASE_URL}/api/v1/auth/call-check/init`,
-        body: { ...requestBody, initData: initData ? `${initData.substring(0, 50)}...` : '' }
+        method: 'POST',
+        hasInitData: !!initData,
+        initDataLength: initData?.length || 0,
+        phoneNumber: phoneNumber,
+        requestBody: requestBody,
+        requestBodyString: requestBodyString,
+        bodyPreview: { 
+          initData: initData ? `${initData.substring(0, 50)}...` : '(empty)',
+          phoneNumber: phoneNumber
+        }
       })
       
-      const response = await fetch(`${API_BASE_URL}/api/v1/auth/call-check/init`, {
+      // Make the API call with explicit error handling
+      const apiUrl = `${API_BASE_URL}/api/v1/auth/call-check/init`
+      console.log('[AuthAPI] Sending POST request to:', apiUrl)
+      console.log('[AuthAPI] Request body (stringified):', requestBodyString)
+      console.log('[AuthAPI] Request body (parsed back):', JSON.parse(requestBodyString))
+      
+      // Create fetch options
+      const fetchOptions: RequestInit = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
-        body: JSON.stringify(requestBody),
+        body: requestBodyString,
+        mode: 'cors',
+        credentials: 'omit'
+      }
+      
+      console.log('[AuthAPI] Fetch options:', {
+        method: fetchOptions.method,
+        headers: fetchOptions.headers,
+        body: fetchOptions.body,
+        mode: fetchOptions.mode
+      })
+      
+      const response = await fetch(apiUrl, fetchOptions)
+      
+      console.log('[AuthAPI] Fetch response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: Object.fromEntries(response.headers.entries())
       })
 
       console.log('[AuthAPI] Init call check response status:', response.status, response.statusText)
 
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error('[AuthAPI] Init call check error response:', errorText)
-        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
+        let errorText = ''
+        let errorJson: any = null
+        
+        try {
+          errorText = await response.text()
+          // Try to parse as JSON
+          try {
+            errorJson = JSON.parse(errorText)
+          } catch {
+            // Not JSON, use as text
+          }
+        } catch (e) {
+          errorText = `Failed to read error response: ${e}`
+        }
+
+        console.error('[AuthAPI] Init call check error response:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorText,
+          errorJson
+        })
+
+        // Provide more detailed error message
+        if (errorJson) {
+          const errorMessage = errorJson.detail || errorJson.message || errorText
+          throw new Error(`Server error (${response.status}): ${errorMessage}`)
+        } else {
+          throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
+        }
       }
 
       const result = await response.json()
       console.log('[AuthAPI] Init call check success:', result)
+      console.log('[AuthAPI] Response data:', JSON.stringify(result, null, 2))
       return result
-    } catch (error) {
+    } catch (error: any) {
       console.error('[AuthAPI] Init call check error:', error)
-      throw error
+      console.error('[AuthAPI] Error details:', {
+        name: error?.name,
+        message: error?.message,
+        stack: error?.stack,
+        cause: error?.cause
+      })
+      
+      // Handle "Failed to fetch" errors specifically
+      if (error?.message?.includes('Failed to fetch') || error?.name === 'TypeError') {
+        console.error('[AuthAPI] Network error detected. Possible causes:')
+        console.error('  - CORS issue with the API server')
+        console.error('  - Network connectivity problem')
+        console.error('  - API server is down or unreachable')
+        console.error('  - Request was blocked by browser security')
+        throw new Error(`Network error: Unable to connect to API server. Please check your internet connection and try again.`)
+      }
+      
+      // Re-throw with more context if it's not already an Error
+      if (error instanceof Error) {
+        throw error
+      } else {
+        throw new Error(`Failed to initialize call check: ${String(error)}`)
+      }
     }
   },
 

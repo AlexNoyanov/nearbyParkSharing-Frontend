@@ -53,6 +53,7 @@ import ExtendBookingModal from './components/ExtendBookingModal.vue'
 import EarlyBookingScreen from './views/EarlyBookingScreen.vue'
 import RentalCompletionScreen from './views/RentalCompletionScreen.vue'
 import BookingExtendedScreen from './views/BookingExtendedScreen.vue'
+import ProfileScreen from './views/ProfileScreen.vue'
 
 type Stage =
   | 'onboarding1'
@@ -215,7 +216,6 @@ const bottomNavItems = computed(() => [
     label: 'Профиль',
     icon: profileInactiveIcon,
     activeIcon: profileActiveIcon,
-    disabled: true,
   },
   {
     id: 'chat',
@@ -339,19 +339,31 @@ const goToCodeVerification = async (arg1: string, arg2?: string) => {
 }
 
 const goToCallVerification = async (arg1: string, arg2?: string) => {
+  console.log('[App] goToCallVerification called with:', { arg1, arg2, hasArg2: !!arg2 })
+  
+  // Set registration flow flag
+  isRegistrationFlow.value = !!arg2
+  
+  // Set phone and name BEFORE navigation to ensure props are available
+  if (arg2) {
+    // Registration flow: arg1 is name, arg2 is phone
+    console.log('[App] Registration flow - setting name:', arg1, 'phone:', arg2)
+    authName.value = arg1
+    authPhone.value = arg2
+  } else {
+    // Login flow: arg1 is phone
+    console.log('[App] Login flow - setting phone:', arg1)
+    authPhone.value = arg1
+    authName.value = ''
+  }
+  
+  console.log('[App] Values set - authPhone:', authPhone.value, 'authName:', authName.value)
+  
   await checkFeatureAndNavigate('call-verification', 'call-verification')
+  
+  // Verify values are still set after navigation
   if (stage.value === 'call-verification') {
-    // If called from RegistrationScreen: (name, phone)
-    // If called from LoginScreen: (phone) only
-    if (arg2) {
-      // Registration flow: arg1 is name, arg2 is phone
-      authName.value = arg1
-      authPhone.value = arg2
-    } else {
-      // Login flow: arg1 is phone
-      authPhone.value = arg1
-      authName.value = ''
-    }
+    console.log('[App] After navigation - authPhone:', authPhone.value, 'authName:', authName.value)
   }
 }
 
@@ -1062,12 +1074,21 @@ const handleCarSelectionBack = () => {
 
 const handleSelectCar = (car: { id: string; brand: string; model: string; number: string; region?: string; color?: string; isForeign: boolean }) => {
   userCar.value = car
+  // Сохраняем предыдущий экран перед переходом на экран подтверждения
+  const prevStage = previousStage.value || 'rent-booking-dates'
+  previousStage.value = prevStage
   stage.value = 'car-changed'
-  previousStage.value = null
 }
 
 const handleCarChangedConfirm = () => {
-  stage.value = 'rent-booking-dates'
+  // Если был сохранен предыдущий экран, возвращаемся туда, иначе на экран бронирования
+  const prevStage = previousStage.value
+  if (prevStage) {
+    stage.value = prevStage
+    previousStage.value = null
+  } else {
+    stage.value = 'rent-booking-dates'
+  }
 }
 
 const handlePaymentCardsBack = () => {
@@ -1200,6 +1221,25 @@ const handleOpenFullScreenMap = () => {
 const handleCloseFullScreenMap = () => {
   stage.value = 'rent-map-details'
   fullScreenMapLocation.value = null
+}
+
+const handleLogout = () => {
+  // Clear user data
+  currentUser.value = null
+  userName.value = undefined
+  userCar.value = null
+  userCars.value = []
+  selectedPaymentCard.value = null
+  bookings.value = []
+  bookingsCount.value = 0
+  ownerRequests.value = []
+  
+  // Clear auth token
+  localStorage.removeItem('auth_token')
+  
+  // Navigate to login
+  stage.value = 'login'
+  navSelection.value = 'home'
 }
 
 const handleSaveCar = (car: { brand: string; model: string; number: string; region?: string; color?: string; isForeign: boolean }) => {
@@ -1585,10 +1625,20 @@ onMounted(async () => {
           @select-address="(addr) => { selectedAddress = addr; stage = 'rent'; }"
         />
 
-        <PlaceholderScreen
+        <ProfileScreen
           v-else-if="stage === 'profile'"
-          title="Профиль в разработке"
-          description="Здесь будут храниться ваши брони, история поездок и персональные настройки."
+          :current-user="currentUser"
+          :user-car="userCar"
+          :payment-card="selectedPaymentCard"
+          @back="goHome"
+          @edit-name="() => {}"
+          @edit-phone="() => {}"
+          @edit-car="handleChangeCar"
+          @edit-payment="handleChangePaymentCard"
+          @help-support="() => {}"
+          @login-another="goToLogin"
+          @logout="handleLogout"
+          @settings="() => {}"
         />
 
         <ChatListScreen

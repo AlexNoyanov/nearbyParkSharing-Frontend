@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { mockAuth, type User } from '../services/mockAuth'
 import { authApi } from '../services/authApi'
 
@@ -18,34 +18,106 @@ const verificationPhone = ref('')
 const rawPhone = ref('')
 const statusPollInterval = ref<number | null>(null)
 const isInitializing = ref(true)
+const hasInitialized = ref(false)
+
+// Watch for props changes in case they're set after mount
+watch(() => props.phone, (newPhone) => {
+  console.log('[CallVerification] Phone prop changed:', newPhone)
+  if (newPhone && !hasInitialized.value) {
+    console.log('[CallVerification] Phone prop updated, initializing...')
+    initializeCallCheck()
+  }
+}, { immediate: true })
 
 // Get Telegram initData
 const getInitData = (): string => {
   if (window.Telegram?.WebApp?.initData) {
     return window.Telegram.WebApp.initData
   }
-  // Fallback for testing/development - use empty string or test data
+  // Fallback for testing/development - use test initData
   // This allows the API to work even without Telegram WebApp
-  return ''
+  const testInitData = 'auth_date=1768317980&query_id=AAHdF6IQAAAAAN0XohDhrOrc&user=%7B%22id%22%3A111222333%2C%22first_name%22%3A%22Test%22%2C%22last_name%22%3A%22User%22%2C%22username%22%3A%22Alexander%22%2C%22language_code%22%3A%22en%22%7D&hash=77794dcb2dd54b35f40010f1dcede46444340c01530bfd17849802cd6295c527'
+  console.log('[CallVerification] Using test initData (Telegram WebApp not available)')
+  return testInitData
 }
 
 // Initialize call verification and get phone number
-onMounted(async () => {
+const initializeCallCheck = async () => {
+  if (hasInitialized.value) {
+    console.log('[CallVerification] Already initialized, skipping...')
+    return
+  }
+  
   isInitializing.value = true
   error.value = ''
+  hasInitialized.value = true
+  
   try {
-    const initData = getInitData()
-    // Use phone from props, or empty string if not provided
-    const phoneNumber = props.phone || ''
-    
-    console.log('[CallVerification] Initializing call check with:', {
-      hasInitData: !!initData,
-      initDataLength: initData.length,
-      phoneNumber: phoneNumber || '(empty)'
+    // Log props to debug
+    console.log('[CallVerification] Initializing call check with props:', {
+      phone: props.phone,
+      name: props.name,
+      isRegistration: props.isRegistration,
+      phoneType: typeof props.phone,
+      phoneLength: props.phone?.length || 0
     })
     
-    // Try to call the API even if initData is empty (for testing/development)
-    // The API should handle empty initData appropriately
+    // Import testMode to check and ensure it's disabled for registration
+    const { testMode } = await import('../services/testMode')
+    if (testMode.isEnabled()) {
+      console.warn('[CallVerification] WARNING: Test mode is enabled! Disabling for registration...')
+      testMode.disable()
+    }
+    
+    const initData = getInitData()
+    // Use phone from props - ensure it's a string and not empty
+    let phoneNumber = props.phone || ''
+    
+    // If phone is still empty, wait a bit for props to update (Vue reactivity)
+    if (!phoneNumber || phoneNumber.trim().length === 0) {
+      console.warn('[CallVerification] Phone number is empty, waiting for props update...')
+      await new Promise(resolve => setTimeout(resolve, 200))
+      phoneNumber = props.phone || ''
+      console.log('[CallVerification] Phone number after wait:', phoneNumber)
+    }
+    
+    console.log('[CallVerification] Final values before API call:', {
+      hasInitData: !!initData,
+      initData: initData || '(empty)',
+      initDataLength: initData ? initData.length : 0,
+      phoneNumber: phoneNumber || '(empty)',
+      phoneNumberTrimmed: phoneNumber.trim(),
+      isRegistration: props.isRegistration,
+      name: props.name || '(not provided)',
+      testModeEnabled: testMode.isEnabled()
+    })
+    
+    // Validate required data
+    if (!phoneNumber || phoneNumber.trim().length === 0) {
+      console.error('[CallVerification] ERROR: Phone number is still empty!')
+      console.error('[CallVerification] Props at error:', {
+        phone: props.phone,
+        name: props.name,
+        isRegistration: props.isRegistration
+      })
+      hasInitialized.value = false // Allow retry
+      throw new Error('Phone number is required')
+    }
+    
+    // Validate initData is available
+    if (!initData || initData.trim().length === 0) {
+      console.warn('[CallVerification] WARNING: initData is empty. API may require valid Telegram initData.')
+    }
+    
+    // Prepare request payload for logging
+    const requestPayload = {
+      initData: initData || '',
+      phoneNumber: phoneNumber.trim()
+    }
+    console.log('[CallVerification] Request payload to be sent:', requestPayload)
+    console.log('[CallVerification] Calling REAL API to get verification phone number...')
+    console.log('[CallVerification] API URL: https://test-app-iuwehfvnlw23275vb.koalanearby.com/parkshare/api/v1/auth/call-check/init')
+    
     const response = await authApi.initCallCheck(initData, phoneNumber)
     
     if (!response.prettyPhone || !response.rawPhone) {
@@ -59,13 +131,40 @@ onMounted(async () => {
       rawPhone: response.rawPhone
     })
   } catch (err: any) {
+    hasInitialized.value = false // Allow retry on error
     console.error('[CallVerification] Error initializing call check:', err)
-    const errorMessage = err?.message || 'Неизвестная ошибка'
-    error.value = `Ошибка при получении номера для звонка: ${errorMessage}. Попробуйте еще раз.`
+    console.error('[CallVerification] Error details:', {
+      name: err?.name,
+      message: err?.message,
+      stack: err?.stack
+    })
+    
+    let errorMessage = err?.message || 'Неизвестная ошибка'
+    
+    // Provide user-friendly error messages
+    if (errorMessage.includes('500') || errorMessage.includes('Internal Server Error')) {
+      errorMessage = 'Сервер временно недоступен. Пожалуйста, попробуйте позже или обратитесь в поддержку.'
+    } else if (errorMessage.includes('401') || errorMessage.includes('Invalid Telegram data')) {
+      errorMessage = 'Ошибка авторизации. Убедитесь, что вы открыли приложение через Telegram.'
+    } else if (errorMessage.includes('Phone number is required')) {
+      errorMessage = 'Номер телефона не указан. Пожалуйста, вернитесь назад и введите номер.'
+    } else if (errorMessage.includes('Network error') || errorMessage.includes('Failed to fetch') || errorMessage.includes('fetch')) {
+      errorMessage = 'Проблема с подключением к интернету. Проверьте соединение и попробуйте снова.'
+    }
+    
+    error.value = `Ошибка при получении номера для звонка: ${errorMessage}`
     // Keep default phone number on error - but don't show it if there's an error
   } finally {
     isInitializing.value = false
   }
+}
+
+// Initialize call verification and get phone number
+onMounted(async () => {
+  console.log('[CallVerification] Component mounted')
+  // Wait a bit for props to be set, then initialize
+  await new Promise(resolve => setTimeout(resolve, 50))
+  await initializeCallCheck()
 })
 
 // Cleanup polling on unmount
@@ -95,11 +194,9 @@ const startStatusPolling = () => {
 
   const initData = getInitData()
   if (!initData) {
-    // Fallback to mock auth if no initData
-    console.warn('[CallVerification] No initData, using mock verification')
-    setTimeout(() => {
-      handleMockVerify()
-    }, 3000)
+    // Require Telegram initData for real API
+    console.error('[CallVerification] No initData available - cannot verify call status')
+    error.value = 'Ошибка авторизации. Убедитесь, что вы открыли приложение через Telegram.'
     return
   }
 
