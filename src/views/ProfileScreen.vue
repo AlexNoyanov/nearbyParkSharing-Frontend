@@ -275,7 +275,7 @@ const paymentCardNumberText = computed(() => {
 <style scoped>
 .profile {
   min-height: 100vh;
-  background-color: #f8fafc;
+  background-color: #ffffff;
   display: flex;
   flex-direction: column;
 }
@@ -451,7 +451,7 @@ const paymentCardNumberText = computed(() => {
 }
 
 .profile__card {
-  background: #ffffff;
+  background: #F9FAFB;
   border-radius: 16px;
   padding: 14px 16px;
   display: flex;
@@ -459,7 +459,6 @@ const paymentCardNumberText = computed(() => {
   gap: 8px;
   margin-bottom: 0;
   border: 1px solid #e5e7eb;
-  box-shadow: 0px 10px 10px -5px rgba(0, 0, 0, 0.04), 0px 20px 25px -5px rgba(0, 0, 0, 0.08);
 }
 
 .profile__card:not(:last-child) {
@@ -560,7 +559,7 @@ const paymentCardNumberText = computed(() => {
 
 /* Help Card */
 .profile__help-card {
-  background: white;
+  background: #F9FAFB;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
   padding: 12px 14px;
@@ -568,7 +567,6 @@ const paymentCardNumberText = computed(() => {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  box-shadow: 0px 1px 2px 0px rgba(0, 0, 0, 0.05);
 }
 
 .profile__help-content {
