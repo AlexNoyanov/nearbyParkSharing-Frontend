@@ -94,11 +94,43 @@ const handleSubmit = async () => {
       isLoading.value = false
     }
 
-    // Production mode: use Telegram API
+    // Production mode: use Telegram API (if available)
     const initData = getInitData()
     
     if (!initData) {
-      error.value = 'Telegram Mini App не доступен. Пожалуйста, откройте приложение через Telegram.'
+      // Allow login outside Telegram using test numbers (mock auth).
+      // This is useful for demo/testing in a normal browser.
+      console.warn('[LoginScreen] Telegram WebApp initData is not available. Falling back to test login by phone number.')
+
+      const phoneDigits = phone.value.replace(/\D/g, '')
+      const phoneToCheck = phoneDigits ? `+${phoneDigits}` : ''
+
+      if (!phoneToCheck || phoneToCheck.length < 12) {
+        error.value = 'Введите номер телефона (тестовый вход доступен без Telegram)'
+        isLoading.value = false
+        return
+      }
+
+      const mockUser = mockUsers.find(user => user.phone === phoneToCheck)
+
+      const userToLogin: User = mockUser ?? {
+        id: String(mockUsers.length + 1),
+        name: 'Test User',
+        phone: phoneToCheck,
+      }
+
+      if (props.onAuthSuccess) {
+        props.onAuthSuccess(userToLogin)
+        isLoading.value = false
+        return
+      }
+
+      // Fallback: if parent didn't pass onAuthSuccess, go through existing navigation
+      if (props.onCallVerification) {
+        props.onCallVerification(phoneToCheck)
+      } else {
+        props.onLogin(phoneToCheck)
+      }
       isLoading.value = false
       return
     }

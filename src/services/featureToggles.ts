@@ -45,7 +45,7 @@ const defaultFeatureStates: Record<FeatureKey, boolean> = {
   'summary': true,
   'active': true,
   'rent': true,  // Enabled - доступно через "Найти парковку"
-  'profile': false,
+  'profile': true,
   'chat': true,
   'booking-details': true,
 }

@@ -2,11 +2,13 @@
 
 import { testMode } from './testMode'
 
-const API_BASE_URL = 'https://test-app-iuwehfvnlw23275vb.koalanearby.com/parkshare'
+const PROD_API_BASE_URL = 'https://test-app-iuwehfvnlw23275vb.koalanearby.com/parkshare'
+// In dev, use Vite proxy to avoid backend CORS (see vite.config.ts)
+const API_BASE_URL = import.meta.env.DEV ? '/parkshare' : PROD_API_BASE_URL
 
-// Test phone number for call verification
-const TEST_CALL_PHONE = '+7 (800) 123-45-67'
-const TEST_CALL_PHONE_RAW = '+78001234567'
+// Dev-only fallback initData (only used when not running inside Telegram WebApp)
+const DEV_FALLBACK_INIT_DATA =
+  'auth_date=1768317980&query_id=AAHdF6IQAAAAAN0XohDhrOrc&user=%7B%22id%22%3A111222333%2C%22first_name%22%3A%22Test%22%2C%22last_name%22%3A%22User%22%2C%22username%22%3A%22Alexander%22%2C%22language_code%22%3A%22en%22%7D&hash=77794dcb2dd54b35f40010f1dcede46444340c01530bfd17849802cd6295c527'
 
 export interface LoginResponse {
   status: 'OK' | 'NEED_PHONE'
@@ -83,62 +85,103 @@ export const authApi = {
    */
   async initCallCheck(initData: string, phoneNumber: string): Promise<CallCheckInitResponse> {
     // ALWAYS USE REAL API FOR REGISTRATION - Test mode is ignored for this endpoint
+    console.log('[AuthAPI] ===== INIT CALL CHECK START =====')
     console.log('[AuthAPI] Using REAL API for call check initialization')
     console.log('[AuthAPI] API Endpoint:', `${API_BASE_URL}/api/v1/auth/call-check/init`)
-    console.log('[AuthAPI] Test mode status:', testMode.isEnabled(), '(ignored for registration)')
+    
+    // Use real Telegram initData (must be passed in from Telegram Mini App runtime).
+    // In local dev only, fall back to a known-good initData for debugging.
+    const finalInitData =
+      (initData && initData.trim()) ? initData.trim() : (import.meta.env.DEV ? DEV_FALLBACK_INIT_DATA : '')
 
-    // Validate inputs
-    if (!phoneNumber || phoneNumber.trim().length === 0) {
-      throw new Error('Phone number is required')
+    // Use user-provided phone number (but never send empty)
+    const finalPhoneNumber = (phoneNumber && phoneNumber.trim()) ? phoneNumber.trim() : ''
+
+    // Validate required values
+    if (!finalInitData) {
+      throw new Error('initData is empty. Open the app inside Telegram Mini App so Telegram.WebApp.initData is available.')
+    }
+    if (!finalPhoneNumber) {
+      throw new Error('phoneNumber is empty. It must come from the user registration phone field.')
     }
 
+    console.log('[AuthAPI] FINAL VALUES TO SEND:')
+    console.log('[AuthAPI] - initData length:', finalInitData.length)
+    console.log('[AuthAPI] - initData preview:', finalInitData.substring(0, 100) + '...')
+    console.log('[AuthAPI] - phoneNumber:', finalPhoneNumber)
+    console.log('[AuthAPI] - phoneNumber length:', finalPhoneNumber.length)
+
     try {
-      // Prepare request body with proper format
-      const requestBody = {
-        initData: initData || '',
-        phoneNumber: phoneNumber.trim()
+      // Prepare request body
+      const requestBody: { initData: string; phoneNumber: string } = {
+        initData: finalInitData,
+        phoneNumber: finalPhoneNumber
       }
       
-      // Stringify the body to ensure it's sent correctly
-      const requestBodyString = JSON.stringify(requestBody)
+      // Double-check the body is not empty
+      if (!requestBody.initData || requestBody.initData.length === 0) {
+        throw new Error('requestBody.initData is empty after construction!')
+      }
+      if (!requestBody.phoneNumber || requestBody.phoneNumber.length === 0) {
+        throw new Error('requestBody.phoneNumber is empty after construction!')
+      }
       
-      console.log('[AuthAPI] Init call check request:', { 
-        url: `${API_BASE_URL}/api/v1/auth/call-check/init`,
-        method: 'POST',
-        hasInitData: !!initData,
-        initDataLength: initData?.length || 0,
-        phoneNumber: phoneNumber,
-        requestBody: requestBody,
-        requestBodyString: requestBodyString,
-        bodyPreview: { 
-          initData: initData ? `${initData.substring(0, 50)}...` : '(empty)',
-          phoneNumber: phoneNumber
-        }
+      console.log('[AuthAPI] Request body object:', requestBody)
+      console.log('[AuthAPI] Request body initData length:', requestBody.initData.length)
+      console.log('[AuthAPI] Request body phoneNumber:', requestBody.phoneNumber)
+      
+      console.log('[AuthAPI] Request body constructed:', {
+        initDataLength: requestBody.initData.length,
+        phoneNumber: requestBody.phoneNumber,
+        initDataPreview: requestBody.initData.substring(0, 100) + '...'
       })
       
-      // Make the API call with explicit error handling
-      const apiUrl = `${API_BASE_URL}/api/v1/auth/call-check/init`
-      console.log('[AuthAPI] Sending POST request to:', apiUrl)
-      console.log('[AuthAPI] Request body (stringified):', requestBodyString)
-      console.log('[AuthAPI] Request body (parsed back):', JSON.parse(requestBodyString))
+      // Stringify the body
+      const requestBodyString = JSON.stringify(requestBody)
       
-      // Create fetch options
+      // Verify stringified body is not empty
+      if (!requestBodyString || requestBodyString.length === 0) {
+        throw new Error('requestBodyString is empty after JSON.stringify!')
+      }
+      
+      // Verify the stringified body contains the expected data
+      const parsedBack = JSON.parse(requestBodyString)
+      if (!parsedBack.initData || parsedBack.initData.length === 0) {
+        throw new Error('Parsed initData is empty!')
+      }
+      if (!parsedBack.phoneNumber || parsedBack.phoneNumber.length === 0) {
+        throw new Error('Parsed phoneNumber is empty!')
+      }
+      
+      console.log('[AuthAPI] Stringified body:', requestBodyString)
+      console.log('[AuthAPI] Stringified body length:', requestBodyString.length)
+      console.log('[AuthAPI] Parsed back from string:', parsedBack)
+      console.log('[AuthAPI] Parsed initData length:', parsedBack.initData?.length || 0)
+      console.log('[AuthAPI] Parsed phoneNumber:', parsedBack.phoneNumber)
+      
+      // Make the API call
+      const apiUrl = `${API_BASE_URL}/api/v1/auth/call-check/init`
+      console.log('[AuthAPI] Making POST request to:', apiUrl)
+      console.log('[AuthAPI] Request body will be:', requestBodyString)
+      console.log('[AuthAPI] Request body type:', typeof requestBodyString)
+      console.log('[AuthAPI] Request body is empty?', requestBodyString.length === 0)
+      
+      // Create fetch options with explicit body
       const fetchOptions: RequestInit = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        body: requestBodyString,
-        mode: 'cors',
-        credentials: 'omit'
+        body: requestBodyString
       }
       
+      // Log fetch options to verify body is set
       console.log('[AuthAPI] Fetch options:', {
         method: fetchOptions.method,
         headers: fetchOptions.headers,
-        body: fetchOptions.body,
-        mode: fetchOptions.mode
+        bodyLength: fetchOptions.body ? String(fetchOptions.body).length : 0,
+        bodyPreview: fetchOptions.body ? String(fetchOptions.body).substring(0, 100) : '(empty)'
       })
       
       const response = await fetch(apiUrl, fetchOptions)

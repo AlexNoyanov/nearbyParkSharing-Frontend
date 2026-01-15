@@ -22,4 +22,17 @@ export default defineConfig({
       },
     },
   ],
+  server: {
+    /**
+     * Dev-only proxy to bypass backend CORS during local development.
+     * Frontend calls /parkshare/... (same-origin), Vite forwards to backend.
+     */
+    proxy: {
+      "/parkshare": {
+        target: "https://test-app-iuwehfvnlw23275vb.koalanearby.com",
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
 });

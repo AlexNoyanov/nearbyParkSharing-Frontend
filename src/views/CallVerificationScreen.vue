@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
-import { mockAuth, type User } from '../services/mockAuth'
+import type { User } from '../services/mockAuth'
 import { authApi } from '../services/authApi'
 
 const props = defineProps<{
@@ -19,38 +19,44 @@ const rawPhone = ref('')
 const statusPollInterval = ref<number | null>(null)
 const isInitializing = ref(true)
 const hasInitialized = ref(false)
+const isInitializingInProgress = ref(false) // Guard to prevent concurrent calls
 
-// Watch for props changes in case they're set after mount
-watch(() => props.phone, (newPhone) => {
-  console.log('[CallVerification] Phone prop changed:', newPhone)
-  if (newPhone && !hasInitialized.value) {
-    console.log('[CallVerification] Phone prop updated, initializing...')
+// Watch for props changes in case they're set after mount (but not immediate to avoid duplicate calls)
+watch(() => props.phone, (newPhone, oldPhone) => {
+  // Only trigger if phone actually changed (not on initial mount)
+  if (newPhone && newPhone !== oldPhone && !hasInitialized.value && !isInitializingInProgress.value) {
+    console.log('[CallVerification] Phone prop changed after mount, initializing...')
     initializeCallCheck()
   }
-}, { immediate: true })
+})
 
 // Get Telegram initData
 const getInitData = (): string => {
   if (window.Telegram?.WebApp?.initData) {
     return window.Telegram.WebApp.initData
   }
-  // Fallback for testing/development - use test initData
-  // This allows the API to work even without Telegram WebApp
-  const testInitData = 'auth_date=1768317980&query_id=AAHdF6IQAAAAAN0XohDhrOrc&user=%7B%22id%22%3A111222333%2C%22first_name%22%3A%22Test%22%2C%22last_name%22%3A%22User%22%2C%22username%22%3A%22Alexander%22%2C%22language_code%22%3A%22en%22%7D&hash=77794dcb2dd54b35f40010f1dcede46444340c01530bfd17849802cd6295c527'
-  console.log('[CallVerification] Using test initData (Telegram WebApp not available)')
-  return testInitData
+  // Dev-only fallback (allows local debugging without Telegram Mini App)
+  if (import.meta.env.DEV) {
+    const testInitData =
+      'auth_date=1768317980&query_id=AAHdF6IQAAAAAN0XohDhrOrc&user=%7B%22id%22%3A111222333%2C%22first_name%22%3A%22Test%22%2C%22last_name%22%3A%22User%22%2C%22username%22%3A%22Alexander%22%2C%22language_code%22%3A%22en%22%7D&hash=77794dcb2dd54b35f40010f1dcede46444340c01530bfd17849802cd6295c527'
+    console.log('[CallVerification] DEV: Using test initData (Telegram WebApp not available)')
+    return testInitData
+  }
+  return ''
 }
 
 // Initialize call verification and get phone number
 const initializeCallCheck = async () => {
-  if (hasInitialized.value) {
-    console.log('[CallVerification] Already initialized, skipping...')
+  // Prevent duplicate calls - check both flags
+  if (hasInitialized.value || isInitializingInProgress.value) {
+    console.log('[CallVerification] Already initialized or initialization in progress, skipping...')
     return
   }
   
+  // Set guard flags immediately to prevent concurrent calls
+  isInitializingInProgress.value = true
   isInitializing.value = true
   error.value = ''
-  hasInitialized.value = true
   
   try {
     // Log props to debug
@@ -115,10 +121,27 @@ const initializeCallCheck = async () => {
       phoneNumber: phoneNumber.trim()
     }
     console.log('[CallVerification] Request payload to be sent:', requestPayload)
+    console.log('[CallVerification] Phone number value:', phoneNumber)
+    console.log('[CallVerification] Phone number type:', typeof phoneNumber)
+    console.log('[CallVerification] Phone number length:', phoneNumber?.length || 0)
     console.log('[CallVerification] Calling REAL API to get verification phone number...')
     console.log('[CallVerification] API URL: https://test-app-iuwehfvnlw23275vb.koalanearby.com/parkshare/api/v1/auth/call-check/init')
     
-    const response = await authApi.initCallCheck(initData, phoneNumber)
+    // Ensure phoneNumber is a valid string
+    const phoneToSend = phoneNumber?.trim() || ''
+    if (!phoneToSend) {
+      console.error('[CallVerification] CRITICAL: Phone number is empty before API call!')
+      console.error('[CallVerification] props.phone:', props.phone)
+      console.error('[CallVerification] phoneNumber variable:', phoneNumber)
+      throw new Error('Phone number is required')
+    }
+    
+    console.log('[CallVerification] Calling authApi.initCallCheck with:', {
+      initData: initData ? initData.substring(0, 50) + '...' : '(empty)',
+      phoneNumber: phoneToSend
+    })
+    
+    const response = await authApi.initCallCheck(initData, phoneToSend)
     
     if (!response.prettyPhone || !response.rawPhone) {
       throw new Error('Invalid response: missing phone number')
@@ -126,12 +149,14 @@ const initializeCallCheck = async () => {
     
     verificationPhone.value = response.prettyPhone
     rawPhone.value = response.rawPhone
+    hasInitialized.value = true // Mark as successfully initialized
     console.log('[CallVerification] Call check initialized successfully:', {
       prettyPhone: response.prettyPhone,
       rawPhone: response.rawPhone
     })
   } catch (err: any) {
     hasInitialized.value = false // Allow retry on error
+    isInitializingInProgress.value = false // Reset guard on error
     console.error('[CallVerification] Error initializing call check:', err)
     console.error('[CallVerification] Error details:', {
       name: err?.name,
@@ -156,6 +181,7 @@ const initializeCallCheck = async () => {
     // Keep default phone number on error - but don't show it if there's an error
   } finally {
     isInitializing.value = false
+    isInitializingInProgress.value = false // Always reset guard in finally
   }
 }
 
@@ -240,47 +266,6 @@ const startStatusPolling = () => {
       // Continue polling on error, don't show error to user yet
     }
   }, 4000) // Poll every 4 seconds
-}
-
-const handleMockVerify = async () => {
-  isLoading.value = true
-  error.value = ''
-
-  try {
-    let user: User | null = null
-
-    if (props.isRegistration) {
-      if (!props.name) {
-        error.value = 'Имя не указано'
-        isLoading.value = false
-        return
-      }
-
-      // Для регистрации через звонок - автоматически подтверждаем
-      user = await mockAuth.completeRegistration(props.phone, '0000', props.name)
-      
-      if (!user) {
-        error.value = 'Ошибка при регистрации. Попробуйте еще раз.'
-        return
-      }
-    } else {
-      // Для входа через звонок - автоматически подтверждаем
-      user = await mockAuth.verifyCodeAndLogin(props.phone, '0000')
-      
-      if (!user) {
-        error.value = 'Ошибка при входе. Попробуйте еще раз.'
-        return
-      }
-    }
-
-    if (user) {
-      props.onSuccess(user)
-    }
-  } catch (err) {
-    error.value = 'Ошибка при подтверждении. Попробуйте еще раз.'
-  } finally {
-    isLoading.value = false
-  }
 }
 
 const handleVerify = async () => {

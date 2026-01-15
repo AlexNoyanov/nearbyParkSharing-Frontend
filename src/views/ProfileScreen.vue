@@ -2,6 +2,9 @@
 import { computed } from 'vue'
 import type { User } from '../services/mockAuth'
 import backIconSvg from '../assets/icons/icon-back.svg?raw'
+import helpSupportIconSvg from '../assets/icons/icon-help-support.svg?raw'
+import loginAnotherIconSvg from '../assets/icons/icon-login-another.svg?raw'
+import logoutIconSvg from '../assets/icons/icon-logout.svg?raw'
 
 type UserCar = {
   id: string
@@ -110,9 +113,8 @@ const paymentCardNumberText = computed(() => {
         @click="emit('settings')" 
         aria-label="Настройки"
       >
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M10 12.5C11.3807 12.5 12.5 11.3807 12.5 10C12.5 8.61929 11.3807 7.5 10 7.5C8.61929 7.5 7.5 8.61929 7.5 10C7.5 11.3807 8.61929 12.5 10 12.5Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M16.25 10C16.25 10.2083 16.2333 10.4167 16.2083 10.625L17.875 12.2917C18.0417 12.4583 18.0833 12.7083 17.9917 12.9167L17.0333 14.875C16.9417 15.0833 16.7083 15.1667 16.5 15.1083L14.5333 14.5333C14.0333 14.9833 13.4667 15.35 12.8333 15.625L12.625 17.625C12.5833 17.85 12.3833 18.0167 12.1583 18.0167H9.84167C9.61667 18.0167 9.41667 17.85 9.375 17.625L9.16667 15.625C8.53333 15.35 7.96667 14.9833 7.46667 14.5333L5.5 15.1083C5.29167 15.1667 5.05833 15.0833 4.96667 14.875L4.00833 12.9167C3.91667 12.7083 3.95833 12.4583 4.125 12.2917L5.79167 10.625C5.76667 10.4167 5.75 10.2083 5.75 10C5.75 9.79167 5.76667 9.58333 5.79167 9.375L4.125 7.70833C3.95833 7.54167 3.91667 7.29167 4.00833 7.08333L4.96667 5.125C5.05833 4.91667 5.29167 4.83333 5.5 4.89167L7.46667 5.46667C7.96667 5.01667 8.53333 4.65 9.16667 4.375L9.375 2.375C9.41667 2.15 9.61667 1.98333 9.84167 1.98333H12.1583C12.3833 1.98333 12.5833 2.15 12.625 2.375L12.8333 4.375C13.4667 4.65 14.0333 5.01667 14.5333 5.46667L16.5 4.89167C16.7083 4.83333 16.9417 4.91667 17.0333 5.125L17.9917 7.08333C18.0833 7.29167 18.0417 7.54167 17.875 7.70833L16.2083 9.375C16.2333 9.58333 16.25 9.79167 16.25 10Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <svg width="15" height="16" viewBox="0 0 15 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M14.6875 9.6875C14.8438 9.78125 14.9062 9.96875 14.875 10.125C14.5 11.25 13.9375 12.25 13.1562 13.0938C13.0312 13.2188 12.8438 13.25 12.6875 13.1562L11.3438 12.4062C10.7812 12.875 10.1562 13.25 9.46875 13.5V15.0312C9.46875 15.1875 9.34375 15.3438 9.15625 15.4062C8.0625 15.625 6.90625 15.6562 5.75 15.4062C5.59375 15.3438 5.46875 15.1875 5.46875 15.0312V13.5C4.75 13.25 4.125 12.875 3.5625 12.4062L2.21875 13.1562C2.0625 13.25 1.875 13.2188 1.75 13.0938C1 12.25 0.40625 11.25 0.0625 10.125C0 9.96875 0.0625 9.78125 0.21875 9.6875L1.5625 8.9375C1.4375 8.1875 1.4375 7.46875 1.5625 6.71875L0.21875 5.96875C0.0625 5.875 0 5.6875 0.0625 5.53125C0.40625 4.40625 1 3.40625 1.75 2.5625C1.875 2.4375 2.0625 2.40625 2.21875 2.5L3.5625 3.28125C4.125 2.78125 4.75 2.40625 5.46875 2.15625V0.625C5.46875 0.46875 5.5625 0.3125 5.75 0.28125C6.84375 0.03125 8 0 9.15625 0.28125C9.34375 0.3125 9.46875 0.46875 9.46875 0.625V2.15625C10.1562 2.40625 10.7812 2.78125 11.3438 3.25L12.6875 2.5C12.8438 2.40625 13.0312 2.4375 13.1562 2.5625C13.9062 3.40625 14.5 4.40625 14.8438 5.53125C14.9062 5.6875 14.8438 5.875 14.6875 5.96875L13.3438 6.71875C13.5 7.46875 13.5 8.1875 13.3438 8.9375L14.6875 9.6875ZM7.46875 10.3125C8.84375 10.3125 9.96875 9.21875 9.96875 7.8125C9.96875 6.4375 8.84375 5.3125 7.46875 5.3125C6.0625 5.3125 4.96875 6.4375 4.96875 7.8125C4.96875 9.21875 6.0625 10.3125 7.46875 10.3125Z" fill="white"/>
         </svg>
       </button>
     </header>
@@ -153,8 +155,8 @@ const paymentCardNumberText = computed(() => {
           <div class="profile__card-content">
             <div class="profile__card-info">
               <div class="profile__card-icon profile__card-icon--phone">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M18.3333 14.075V16.575C18.3333 17.1 17.9 17.5333 17.375 17.5333C7.78333 17.5333 0.466667 10.2167 0.466667 0.625C0.466667 0.1 0.9 -0.333333 1.425 -0.333333H3.925C4.45 -0.333333 4.88333 0.1 4.88333 0.625V4.225C4.88333 4.75 4.45 5.18333 3.925 5.18333H2.64167C2.64167 6.18333 2.83333 7.15 3.2 8.03333C3.35 8.38333 3.55 8.7 3.79167 8.98333L5.64167 10.8333C7.19167 12.3833 9.25833 13.3583 11.5 13.3583H12.7833C13.3083 13.3583 13.7417 13.7917 13.7417 14.3167V16.8167C13.7417 17.3417 13.3083 17.775 12.7833 17.775H18.3333Z" fill="#2563EB"/>
+                <svg width="17" height="17" viewBox="0 0 17 17" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M15.4688 0.84375C15.8125 0.9375 16.0625 1.21875 16.0625 1.5625C16.0625 9.59375 9.5625 16.0625 1.5625 16.0625C1.1875 16.0625 0.90625 15.8438 0.8125 15.5L0.0625 12.25C0 11.9062 0.15625 11.5312 0.5 11.375L4 9.875C4.3125 9.75 4.65625 9.84375 4.875 10.0938L6.4375 12C8.875 10.8438 10.8438 8.84375 11.9688 6.46875L10.0625 4.90625C9.8125 4.6875 9.71875 4.34375 9.84375 4.03125L11.3438 0.53125C11.5 0.1875 11.875 0 12.2188 0.09375L15.4688 0.84375Z" fill="#2563EB"/>
                 </svg>
               </div>
               <div class="profile__card-text">
@@ -228,11 +230,7 @@ const paymentCardNumberText = computed(() => {
       <div class="profile__help-card">
         <div class="profile__help-content">
           <div class="profile__help-icon">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M10 18.3333C14.6024 18.3333 18.3333 14.6024 18.3333 10C18.3333 5.39763 14.6024 1.66667 10 1.66667C5.39763 1.66667 1.66667 5.39763 1.66667 10C1.66667 14.6024 5.39763 18.3333 10 18.3333Z" stroke="#9333EA" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M10 14.1667V10" stroke="#9333EA" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M10 7.5H10.0083" stroke="#9333EA" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
+            <span v-html="helpSupportIconSvg"></span>
           </div>
           <div class="profile__help-text">
             <span class="profile__help-title">Помощь и поддержка</span>
@@ -258,10 +256,7 @@ const paymentCardNumberText = computed(() => {
           class="profile__action-btn profile__action-btn--login" 
           @click="emit('login-another')"
         >
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M10 5V10M10 10V15M10 10H15M5 10H10" stroke="#2563EB" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M10 18.3333C14.6024 18.3333 18.3333 14.6024 18.3333 10C18.3333 5.39763 14.6024 1.66667 10 1.66667C5.39763 1.66667 1.66667 5.39763 1.66667 10C1.66667 14.6024 5.39763 18.3333 10 18.3333Z" stroke="#2563EB" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
+          <span class="profile__action-icon" v-html="loginAnotherIconSvg"></span>
           <span>Войти в другой аккаунт</span>
         </button>
         <button 
@@ -269,11 +264,7 @@ const paymentCardNumberText = computed(() => {
           class="profile__action-btn profile__action-btn--logout" 
           @click="emit('logout')"
         >
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M7.5 17.5H4.16667C3.24619 17.5 2.5 16.7538 2.5 15.8333V4.16667C2.5 3.24619 3.24619 2.5 4.16667 2.5H7.5" stroke="#DC2626" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M13.3333 14.1667L17.5 10L13.3333 5.83333" stroke="#DC2626" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M17.5 10H7.5" stroke="#DC2626" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
+          <span class="profile__action-icon" v-html="logoutIconSvg"></span>
           <span>Выйти из аккаунта</span>
         </button>
       </div>
@@ -292,7 +283,7 @@ const paymentCardNumberText = computed(() => {
 /* Header */
 .profile__header {
   background: linear-gradient(90deg, rgba(147, 51, 234, 1) 0%, rgba(37, 99, 235, 1) 100%);
-  padding: 18px;
+  padding: 18px 18px 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -347,25 +338,20 @@ const paymentCardNumberText = computed(() => {
   padding: 18px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 
 /* Profile Info Section */
 .profile__info-section {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
-  position: relative;
-  padding-left: 56px;
-  min-height: 60px;
+  width: 100%;
 }
 
 .profile__avatar {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 60px;
-  height: 60px;
+  width: 72px;
+  height: 72px;
   border-radius: 9999px;
   background: linear-gradient(135deg, rgba(168, 85, 247, 1) 0%, rgba(59, 130, 246, 1) 100%);
   display: flex;
@@ -386,28 +372,33 @@ const paymentCardNumberText = computed(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 4px;
+  min-width: 0;
 }
 
 .profile__name-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 4px;
+  flex-wrap: nowrap;
 }
 
 .profile__name {
   font-family: 'Inter', sans-serif;
   font-weight: 700;
-  font-size: 14.8px;
-  line-height: 1.89;
+  font-size: 16px;
+  line-height: 1.5;
   color: #1f2937;
   margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .profile__edit-name-btn {
   width: 18px;
   height: 18px;
+  min-width: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -416,6 +407,7 @@ const paymentCardNumberText = computed(() => {
   border-radius: 9999px;
   cursor: pointer;
   padding: 0;
+  flex-shrink: 0;
 }
 
 .profile__edit-name-btn:hover {
@@ -424,12 +416,15 @@ const paymentCardNumberText = computed(() => {
 
 .profile__edit-name-btn :deep(svg) {
   display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .profile__user-id {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 4px;
+  flex-wrap: wrap;
 }
 
 .profile__user-id-label {
@@ -443,8 +438,8 @@ const paymentCardNumberText = computed(() => {
 .profile__user-id-value {
   font-family: 'Inter', sans-serif;
   font-weight: 400;
-  font-size: 10.9px;
-  line-height: 2.2;
+  font-size: 12px;
+  line-height: 1.6;
   color: #9ca3af;
 }
 
@@ -452,17 +447,19 @@ const paymentCardNumberText = computed(() => {
 .profile__cards {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 12px;
 }
 
 .profile__card {
-  background: #e5e7eb;
+  background: #ffffff;
   border-radius: 16px;
-  padding: 7.5px 12px 9.5px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 0.3px;
+  gap: 8px;
   margin-bottom: 0;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0px 10px 10px -5px rgba(0, 0, 0, 0.04), 0px 20px 25px -5px rgba(0, 0, 0, 0.08);
 }
 
 .profile__card:not(:last-child) {
@@ -566,7 +563,7 @@ const paymentCardNumberText = computed(() => {
   background: white;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
-  padding: 10px 13px;
+  padding: 12px 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -605,7 +602,7 @@ const paymentCardNumberText = computed(() => {
 
 .profile__help-title {
   font-family: 'Inter', sans-serif;
-  font-weight: 400;
+  font-weight: 700;
   font-size: 14px;
   line-height: 1.5;
   color: #1f2937;
@@ -642,7 +639,7 @@ const paymentCardNumberText = computed(() => {
 .profile__actions {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 10px;
 }
 
 .profile__action-btn {
@@ -664,6 +661,10 @@ const paymentCardNumberText = computed(() => {
 .profile__action-btn :deep(svg) {
   display: block;
   flex-shrink: 0;
+}
+
+.profile__action-icon :deep(svg) {
+  display: block;
 }
 
 .profile__action-btn span {
