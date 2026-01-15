@@ -1,0 +1,26 @@
+name: ParkShare-Front
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key:      ${{ secrets.SSH_PRIVATE_KEY }}
+          port:     22
+          script: |
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            # [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # опционально
+
+            cd ~/git
+            bash deploy-park-front.sh "${{ github.ref_name }}"
+
+            echo "Деплой завершён"
