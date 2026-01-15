@@ -1043,6 +1043,15 @@ const handleAddCarFromSelection = () => {
 }
 
 const handleAddCarBack = () => {
+  // Сначала проверяем, был ли сохранен предыдущий экран
+  const prevStage = previousStage.value
+  if (prevStage) {
+    // Если есть сохраненный экран, возвращаемся на него
+    stage.value = prevStage
+    previousStage.value = null
+    return
+  }
+  
   // Определяем, откуда пришли по источнику
   const source = addCarSource.value
   const cars = userCars.value
@@ -1250,12 +1259,18 @@ const handleSaveCar = (car: { brand: string; model: string; number: string; regi
   userCars.value.push(carWithId)
   userCar.value = carWithId
   selectedCarId.value = carWithId.id
+  
+  // Сначала проверяем, был ли сохранен предыдущий экран (например, из профиля)
+  const prevStage = previousStage.value
+  if (prevStage) {
+    // Если есть сохраненный экран, возвращаемся на него
+    stage.value = prevStage
+    previousStage.value = null
+    return
+  }
+  
   // Если пришли с экрана выбора, возвращаемся туда, иначе проверяем количество
   if (addCarSource.value === 'selection') {
-    // Сохраняем предыдущий экран перед возвратом на экран выбора
-    if (!previousStage.value) {
-      previousStage.value = 'rent-booking-dates'
-    }
     stage.value = 'car-selection'
   } else if (userCars.value.length === 1) {
     // Если это первый автомобиль и пришли с бронирования, возвращаемся к бронированию
