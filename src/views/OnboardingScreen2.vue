@@ -484,15 +484,22 @@ const props = defineProps<{
 }
 
 /* Tablet styles (768px and up) - Only applies to tablets and larger, mobile screens remain unchanged */
-@media (min-width: 768px) {
+@media (min-width: 768px) and (max-width: 1023px) {
   .onboarding-2__container {
-    max-width: 100%;
+    max-width: 768px;
+    margin: 0 auto;
     border-radius: 0;
+    height: 100vh;
+    max-height: 100vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
   }
 
   .onboarding-2__header {
-    padding: 80px 48px 48px;
-    gap: 40px;
+    padding: 60px 40px 32px;
+    gap: 28px;
+    flex: 0 0 auto;
   }
 
   .onboarding-2__illustration {
@@ -511,7 +518,7 @@ const props = defineProps<{
     border-radius: 28px;
   }
 
-  .onboarding-2__money-icon {
+  .onboarding-2__center-icon {
     width: 50px;
     height: 50px;
   }
@@ -532,18 +539,22 @@ const props = defineProps<{
   }
 
   .onboarding-2__title {
-    font-size: 42px;
-    max-width: 600px;
+    font-size: 36px;
+    max-width: 550px;
+    margin-top: 8px;
   }
 
   .onboarding-2__subtitle {
-    font-size: 20px;
-    max-width: 600px;
+    font-size: 17px;
+    max-width: 550px;
   }
 
   .onboarding-2__features {
-    padding: 48px 80px 0;
-    gap: 28px;
+    padding: 32px 60px 0;
+    gap: 24px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
   }
 
   .onboarding-2__feature {
@@ -564,19 +575,32 @@ const props = defineProps<{
   }
 
   .onboarding-2__footer {
-    padding: 0 48px 32px;
-    gap: 16px;
+    padding: 0 40px 24px;
+    gap: 12px;
+    flex: 0 0 auto;
+    margin-top: auto;
+  }
+
+  .onboarding-2__progress {
+    padding-top: 12px;
+    padding-bottom: 12px;
   }
 
   .onboarding-2__button {
-    padding: 18px 32px;
-    font-size: 18px;
-    border-radius: 18px;
+    padding: 16px 28px;
+    font-size: 17px;
+    border-radius: 17px;
+    white-space: normal;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
   }
 
   .onboarding-2__button--secondary {
-    padding: 10px 0;
-    font-size: 16px;
+    padding: 8px 0;
+    font-size: 15px;
+    white-space: normal;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
   }
 }
 

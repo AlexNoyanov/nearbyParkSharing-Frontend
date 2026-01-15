@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, nextTick } from 'vue'
 import type { User } from '../services/mockAuth'
 import backIconSvg from '../assets/icons/icon-back.svg?raw'
 import helpSupportIconSvg from '../assets/icons/icon-help-support.svg?raw'
@@ -91,6 +91,22 @@ const paymentCardNumberText = computed(() => {
   if (!props.paymentCard) return ''
   const typeUpper = props.paymentCard.type.toUpperCase()
   return `${typeUpper}***${props.paymentCard.lastFour}`
+})
+
+// Scroll to top when component is mounted
+onMounted(async () => {
+  await nextTick()
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+  // Also scroll the main content container if it exists
+  const contentElement = document.querySelector('.profile__content')
+  if (contentElement) {
+    contentElement.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  // Scroll the app content container
+  const appContent = document.querySelector('.app__content')
+  if (appContent) {
+    appContent.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 })
 </script>
 

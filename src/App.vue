@@ -54,6 +54,7 @@ import EarlyBookingScreen from './views/EarlyBookingScreen.vue'
 import RentalCompletionScreen from './views/RentalCompletionScreen.vue'
 import BookingExtendedScreen from './views/BookingExtendedScreen.vue'
 import ProfileScreen from './views/ProfileScreen.vue'
+import ChangePhoneScreen from './views/ChangePhoneScreen.vue'
 
 type Stage =
   | 'onboarding1'
@@ -85,6 +86,7 @@ type Stage =
   | 'chat'
   | 'chat-list'
   | 'payment-cards'
+  | 'change-phone'
   | 'placeholder'
   | 'owner-request-confirmation'
   | 'owner-request-decline'
@@ -1036,6 +1038,37 @@ const handleChangePaymentCard = () => {
   stage.value = 'payment-cards'
 }
 
+const handleChangePhone = () => {
+  previousStage.value = stage.value
+  stage.value = 'change-phone'
+}
+
+const handleChangePhoneBack = () => {
+  const prevStage = previousStage.value
+  if (prevStage) {
+    stage.value = prevStage
+  } else {
+    stage.value = 'profile'
+  }
+  previousStage.value = null
+}
+
+const handleChangePhoneSubmit = (phone: string) => {
+  // Update user phone number
+  if (currentUser.value) {
+    currentUser.value = {
+      ...currentUser.value,
+      phone: phone
+    }
+  }
+  
+  // Navigate to call verification for phone change
+  authPhone.value = phone
+  authName.value = currentUser.value?.name || ''
+  isRegistrationFlow.value = false
+  stage.value = 'call-verification'
+}
+
 const handleAddCarFromSelection = () => {
   selectedCarId.value = null
   addCarSource.value = 'selection'
@@ -1647,13 +1680,20 @@ onMounted(async () => {
           :payment-card="selectedPaymentCard"
           @back="goHome"
           @edit-name="() => {}"
-          @edit-phone="() => {}"
+          @edit-phone="handleChangePhone"
           @edit-car="handleChangeCar"
           @edit-payment="handleChangePaymentCard"
           @help-support="() => {}"
           @login-another="goToLogin"
           @logout="handleLogout"
           @settings="() => {}"
+        />
+
+        <ChangePhoneScreen
+          v-else-if="stage === 'change-phone'"
+          :current-phone="currentUser?.phone"
+          @back="handleChangePhoneBack"
+          @change-phone="handleChangePhoneSubmit"
         />
 
         <ChatListScreen
