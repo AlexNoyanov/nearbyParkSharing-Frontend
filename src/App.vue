@@ -55,6 +55,7 @@ import RentalCompletionScreen from './views/RentalCompletionScreen.vue'
 import BookingExtendedScreen from './views/BookingExtendedScreen.vue'
 import ProfileScreen from './views/ProfileScreen.vue'
 import ChangePhoneScreen from './views/ChangePhoneScreen.vue'
+import HelpSupportScreen from './views/HelpSupportScreen.vue'
 
 type Stage =
   | 'onboarding1'
@@ -100,6 +101,7 @@ type Stage =
   | 'early-booking'
   | 'rental-completion'
   | 'booking-extended'
+  | 'help-support'
 
 const stage = ref<Stage>('onboarding1')
 const selectedParking = ref<ParkingSpot | null>(null)
@@ -1043,6 +1045,21 @@ const handleChangePhone = () => {
   stage.value = 'change-phone'
 }
 
+const handleHelpSupport = () => {
+  previousStage.value = stage.value
+  stage.value = 'help-support'
+}
+
+const handleHelpSupportBack = () => {
+  const prevStage = previousStage.value
+  if (prevStage) {
+    stage.value = prevStage
+    previousStage.value = null
+  } else {
+    stage.value = 'profile'
+  }
+}
+
 const handleChangePhoneBack = () => {
   const prevStage = previousStage.value
   if (prevStage) {
@@ -1683,7 +1700,7 @@ onMounted(async () => {
           @edit-phone="handleChangePhone"
           @edit-car="handleChangeCar"
           @edit-payment="handleChangePaymentCard"
-          @help-support="() => {}"
+          @help-support="handleHelpSupport"
           @login-another="goToLogin"
           @logout="handleLogout"
           @settings="() => {}"
@@ -1692,8 +1709,14 @@ onMounted(async () => {
         <ChangePhoneScreen
           v-else-if="stage === 'change-phone'"
           :current-phone="currentUser?.phone"
-          @back="handleChangePhoneBack"
-          @change-phone="handleChangePhoneSubmit"
+          :on-back="handleChangePhoneBack"
+          :on-change-phone="handleChangePhoneSubmit"
+        />
+
+        <HelpSupportScreen
+          v-else-if="stage === 'help-support'"
+          @back="handleHelpSupportBack"
+          @contact-support="handleHelpSupportBack"
         />
 
         <ChatListScreen
