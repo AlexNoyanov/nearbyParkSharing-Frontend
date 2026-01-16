@@ -287,7 +287,16 @@ export const authApi = {
         console.error('  - Network connectivity problem')
         console.error('  - API server is down or unreachable')
         console.error('  - Request was blocked by browser security')
-        throw new Error(`Network error: Unable to connect to API server. Please check your internet connection and try again.`)
+        console.error('[AuthAPI] Current URL:', window.location.href)
+        console.error('[AuthAPI] API URL attempted:', API_URL)
+        console.error('[AuthAPI] Full error:', error)
+        
+        // In production, if we're getting CORS errors, it means the backend needs to allow the origin
+        const isCorsError = error?.message?.includes('CORS') || error?.message?.includes('Access-Control')
+        const errorMsg = isCorsError
+          ? `CORS error: The API server needs to allow requests from ${window.location.origin}`
+          : `Network error: Unable to connect to API server. Please check your internet connection and try again.`
+        throw new Error(errorMsg)
       }
       
       // Re-throw with more context if it's not already an Error

@@ -174,8 +174,13 @@ const initializeCallCheck = async () => {
       errorMessage = 'Ошибка авторизации. Убедитесь, что вы открыли приложение через Telegram.'
     } else if (errorMessage.includes('Phone number is required')) {
       errorMessage = 'Номер телефона не указан. Пожалуйста, вернитесь назад и введите номер.'
-    } else if (errorMessage.includes('Network error') || errorMessage.includes('Failed to fetch') || errorMessage.includes('fetch')) {
-      errorMessage = 'Проблема с подключением к интернету. Проверьте соединение и попробуйте снова.'
+    } else if (errorMessage.includes('Network error') || errorMessage.includes('Failed to fetch') || errorMessage.includes('fetch') || errorMessage.includes('CORS')) {
+      // Check if it's a CORS error specifically
+      if (errorMessage.includes('CORS')) {
+        errorMessage = 'Ошибка подключения к серверу. Обратитесь в поддержку.'
+      } else {
+        errorMessage = 'Проблема с подключением к интернету. Проверьте соединение и попробуйте снова.'
+      }
     }
     
     error.value = `Ошибка при получении номера для звонка: ${errorMessage}`
