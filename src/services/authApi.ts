@@ -35,6 +35,32 @@ export interface CallCheckStatusResponse {
   }
 }
 
+/**
+ * Parse Telegram initData query string to extract auth_date
+ * @param initData - Telegram initData query string (e.g., "auth_date=1768317980&query_id=...")
+ * @returns auth_date as number, or null if not found
+ */
+function parseAuthDate(initData: string): number | null {
+  if (!initData || !initData.trim()) {
+    return null
+  }
+  
+  try {
+    const params = new URLSearchParams(initData)
+    const authDateStr = params.get('auth_date')
+    if (authDateStr) {
+      const authDate = parseInt(authDateStr, 10)
+      if (!isNaN(authDate)) {
+        return authDate
+      }
+    }
+  } catch (error) {
+    console.error('[AuthAPI] Error parsing auth_date from initData:', error)
+  }
+  
+  return null
+}
+
 export const authApi = {
   /**
    * Login with Telegram initData
@@ -111,17 +137,26 @@ export const authApi = {
       throw new Error('phoneNumber is empty. It must come from the user registration phone field.')
     }
 
+    // Extract auth_date from initData
+    const authDate = parseAuthDate(finalInitData)
+    
     console.log('[AuthAPI] FINAL VALUES TO SEND:')
     console.log('[AuthAPI] - initData length:', finalInitData.length)
     console.log('[AuthAPI] - initData preview:', finalInitData.substring(0, 100) + '...')
     console.log('[AuthAPI] - phoneNumber:', finalPhoneNumber)
     console.log('[AuthAPI] - phoneNumber length:', finalPhoneNumber.length)
+    console.log('[AuthAPI] - auth_date:', authDate)
 
     try {
-      // Prepare request body
-      const requestBody: { initData: string; phoneNumber: string } = {
+      // Prepare request body with auth_date extracted from initData
+      const requestBody: { initData: string; phoneNumber: string; auth_date?: number } = {
         initData: finalInitData,
         phoneNumber: finalPhoneNumber
+      }
+      
+      // Add auth_date if successfully parsed
+      if (authDate !== null) {
+        requestBody.auth_date = authDate
       }
       
       // Double-check the body is not empty
