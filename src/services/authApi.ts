@@ -109,7 +109,7 @@ export const authApi = {
    * Initialize call verification
    * Returns phone number to call
    */
-  async initCallCheck(initData: string, phoneNumber: string): Promise<CallCheckInitResponse> {
+  async initCallCheck(initData: string, phoneNumber: string, name?: string): Promise<CallCheckInitResponse> {
     // ALWAYS USE REAL API FOR REGISTRATION - Test mode is ignored for this endpoint
     // In dev mode, use proxy to avoid CORS issues (vite.config.ts forwards /parkshare to production)
     // In production, use full URL
@@ -128,6 +128,8 @@ export const authApi = {
 
     // Use user-provided phone number (but never send empty)
     const finalPhoneNumber = (phoneNumber && phoneNumber.trim()) ? phoneNumber.trim() : ''
+    // Use user-provided name (required by server)
+    const finalName = (name && name.trim()) ? name.trim() : ''
 
     // Validate required values
     if (!finalInitData) {
@@ -135,6 +137,9 @@ export const authApi = {
     }
     if (!finalPhoneNumber) {
       throw new Error('phoneNumber is empty. It must come from the user registration phone field.')
+    }
+    if (!finalName) {
+      throw new Error('name is empty. It must come from the user registration name field.')
     }
 
     // Extract auth_date from initData
@@ -145,13 +150,15 @@ export const authApi = {
     console.log('[AuthAPI] - initData preview:', finalInitData.substring(0, 100) + '...')
     console.log('[AuthAPI] - phoneNumber:', finalPhoneNumber)
     console.log('[AuthAPI] - phoneNumber length:', finalPhoneNumber.length)
+    console.log('[AuthAPI] - name:', finalName)
     console.log('[AuthAPI] - auth_date:', authDate)
 
     try {
-      // Prepare request body with auth_date extracted from initData
-      const requestBody: { initData: string; phoneNumber: string; auth_date?: number } = {
+      // Prepare request body with auth_date extracted from initData and name
+      const requestBody: { initData: string; phoneNumber: string; name: string; auth_date?: number } = {
         initData: finalInitData,
-        phoneNumber: finalPhoneNumber
+        phoneNumber: finalPhoneNumber,
+        name: finalName
       }
       
       // Add auth_date if successfully parsed
@@ -165,6 +172,9 @@ export const authApi = {
       }
       if (!requestBody.phoneNumber || requestBody.phoneNumber.length === 0) {
         throw new Error('requestBody.phoneNumber is empty after construction!')
+      }
+      if (!requestBody.name || requestBody.name.length === 0) {
+        throw new Error('requestBody.name is empty after construction!')
       }
       
       console.log('[AuthAPI] Request body object:', requestBody)
@@ -257,11 +267,28 @@ export const authApi = {
           errorText,
           errorJson
         })
+        
+        // Log the request that was sent for debugging
+        console.error('[AuthAPI] Request that failed:', {
+          url: API_URL,
+          method: fetchOptions.method,
+          headers: fetchOptions.headers,
+          body: requestBody,
+          bodyString: requestBodyString
+        })
 
-        // Provide more detailed error message
+        // Provide more detailed error message with validation details
         if (errorJson) {
           const errorMessage = errorJson.detail || errorJson.message || errorText
-          throw new Error(`Server error (${response.status}): ${errorMessage}`)
+          const validationErrors = errorJson.errors || errorJson.validation_errors || errorJson.error_details
+          
+          // Include validation errors if present
+          let fullErrorMessage = `Server error (${response.status}): ${errorMessage}`
+          if (validationErrors) {
+            fullErrorMessage += `\nValidation errors: ${JSON.stringify(validationErrors, null, 2)}`
+          }
+          
+          throw new Error(fullErrorMessage)
         } else {
           throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
         }

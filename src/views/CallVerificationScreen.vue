@@ -139,10 +139,11 @@ const initializeCallCheck = async () => {
     
     console.log('[CallVerification] Calling authApi.initCallCheck with:', {
       initData: initData ? initData.substring(0, 50) + '...' : '(empty)',
-      phoneNumber: phoneToSend
+      phoneNumber: phoneToSend,
+      name: props.name
     })
     
-    const response = await authApi.initCallCheck(initData, phoneToSend)
+    const response = await authApi.initCallCheck(initData, phoneToSend, props.name)
     
     if (!response.prettyPhone || !response.rawPhone) {
       throw new Error('Invalid response: missing phone number')
