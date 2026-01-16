@@ -23,12 +23,13 @@ const isInitializingInProgress = ref(false) // Guard to prevent concurrent calls
 
 // Watch for props changes in case they're set after mount (but not immediate to avoid duplicate calls)
 watch(() => props.phone, (newPhone, oldPhone) => {
-  // Only trigger if phone actually changed (not on initial mount)
-  if (newPhone && newPhone !== oldPhone && !hasInitialized.value && !isInitializingInProgress.value) {
+  // Only trigger if phone actually changed (not on initial mount) and hasn't been initialized yet
+  // Also check that we're not already in the mounting phase
+  if (newPhone && newPhone !== oldPhone && oldPhone !== undefined && !hasInitialized.value && !isInitializingInProgress.value) {
     console.log('[CallVerification] Phone prop changed after mount, initializing...')
     initializeCallCheck()
   }
-})
+}, { flush: 'post' }) // Use 'post' flush to ensure this runs after onMounted
 
 // Get Telegram initData
 const getInitData = (): string => {
@@ -189,8 +190,13 @@ const initializeCallCheck = async () => {
 onMounted(async () => {
   console.log('[CallVerification] Component mounted')
   // Wait a bit for props to be set, then initialize
-  await new Promise(resolve => setTimeout(resolve, 50))
-  await initializeCallCheck()
+  // Only initialize if not already initialized (prevent duplicate calls)
+  if (!hasInitialized.value && !isInitializingInProgress.value) {
+    await new Promise(resolve => setTimeout(resolve, 50))
+    await initializeCallCheck()
+  } else {
+    console.log('[CallVerification] Already initialized or initialization in progress, skipping onMounted init')
+  }
 })
 
 // Cleanup polling on unmount

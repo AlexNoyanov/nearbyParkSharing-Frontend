@@ -85,9 +85,15 @@ export const authApi = {
    */
   async initCallCheck(initData: string, phoneNumber: string): Promise<CallCheckInitResponse> {
     // ALWAYS USE REAL API FOR REGISTRATION - Test mode is ignored for this endpoint
+    // In dev mode, use proxy to avoid CORS issues (vite.config.ts forwards /parkshare to production)
+    // In production, use full URL
+    const API_URL = import.meta.env.DEV 
+      ? '/parkshare/api/v1/auth/call-check/init'  // Use proxy in dev to avoid CORS
+      : 'https://test-app-iuwehfvnlw23275vb.koalanearby.com/parkshare/api/v1/auth/call-check/init'  // Direct URL in production
+    
     console.log('[AuthAPI] ===== INIT CALL CHECK START =====')
     console.log('[AuthAPI] Using REAL API for call check initialization')
-    console.log('[AuthAPI] API Endpoint:', `${API_BASE_URL}/api/v1/auth/call-check/init`)
+    console.log('[AuthAPI] API Endpoint:', API_URL)
     
     // Use real Telegram initData (must be passed in from Telegram Mini App runtime).
     // In local dev only, fall back to a known-good initData for debugging.
@@ -159,9 +165,8 @@ export const authApi = {
       console.log('[AuthAPI] Parsed initData length:', parsedBack.initData?.length || 0)
       console.log('[AuthAPI] Parsed phoneNumber:', parsedBack.phoneNumber)
       
-      // Make the API call
-      const apiUrl = `${API_BASE_URL}/api/v1/auth/call-check/init`
-      console.log('[AuthAPI] Making POST request to:', apiUrl)
+      // Make the API call - use proxy in dev mode to avoid CORS, direct URL in production
+      console.log('[AuthAPI] Making POST request to:', API_URL)
       console.log('[AuthAPI] Request body will be:', requestBodyString)
       console.log('[AuthAPI] Request body type:', typeof requestBodyString)
       console.log('[AuthAPI] Request body is empty?', requestBodyString.length === 0)
@@ -184,7 +189,7 @@ export const authApi = {
         bodyPreview: fetchOptions.body ? String(fetchOptions.body).substring(0, 100) : '(empty)'
       })
       
-      const response = await fetch(apiUrl, fetchOptions)
+      const response = await fetch(API_URL, fetchOptions)
       
       console.log('[AuthAPI] Fetch response received:', {
         status: response.status,
