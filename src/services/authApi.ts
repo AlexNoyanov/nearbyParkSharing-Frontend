@@ -21,8 +21,9 @@ export interface LoginResponse {
 }
 
 export interface CallCheckInitResponse {
-  prettyPhone: string
-  rawPhone: string
+  prettyPhone?: string
+  rawPhone?: string
+  callToNumber?: string  // API response format from api.md
 }
 
 export interface CallCheckStatusResponse {
@@ -111,32 +112,54 @@ export const authApi = {
    */
   async initCallCheck(initData: string, phoneNumber: string, name?: string): Promise<CallCheckInitResponse> {
     // ALWAYS USE REAL API FOR REGISTRATION - Test mode is ignored for this endpoint
-    // In dev mode, use proxy to avoid CORS issues (vite.config.ts forwards /parkshare to production)
-    // In production, use full URL
-    const API_URL = import.meta.env.DEV 
-      ? '/parkshare/api/v1/auth/call-check/init'  // Use proxy in dev to avoid CORS
-      : 'https://test-app-iuwehfvnlw23275vb.koalanearby.com/parkshare/api/v1/auth/call-check/init'  // Direct URL in production
+    // ALWAYS call the real backend API server - no conditions, no proxy, no dev mode changes
+    // This is the REAL API server address - MUST be used in ALL environments
+    const API_URL = 'https://test-app-iuwehfvnlw23275vb.koalanearby.com/parkshare/api/v1/auth/call-check/init'
     
     console.log('[AuthAPI] ===== INIT CALL CHECK START =====')
     console.log('[AuthAPI] Using REAL API for call check initialization')
-    console.log('[AuthAPI] API Endpoint:', API_URL)
+    console.log('[AuthAPI] API Endpoint (ALWAYS REAL SERVER):', API_URL)
+    console.log('[AuthAPI] Environment:', import.meta.env.MODE)
+    console.log('[AuthAPI] Current page URL:', window.location.href)
+    console.log('[AuthAPI] Current origin:', window.location.origin)
     
     // Use real Telegram initData (must be passed in from Telegram Mini App runtime).
-    // In local dev only, fall back to a known-good initData for debugging.
-    const finalInitData =
-      (initData && initData.trim()) ? initData.trim() : (import.meta.env.DEV ? DEV_FALLBACK_INIT_DATA : '')
+    // NEVER use fallback in production - only in dev mode for local testing
+    let finalInitData = initData && initData.trim() ? initData.trim() : ''
+    
+    // In dev mode only, if initData is empty, use fallback for local testing
+    if (!finalInitData && import.meta.env.DEV) {
+      console.warn('[AuthAPI] DEV MODE: Using fallback initData for local testing')
+      finalInitData = DEV_FALLBACK_INIT_DATA
+    }
 
     // Use user-provided phone number (but never send empty)
-    const finalPhoneNumber = (phoneNumber && phoneNumber.trim()) ? phoneNumber.trim() : ''
+    // Remove + prefix and all non-digits - API expects format like "79991234567" (from api.md)
+    let finalPhoneNumber = (phoneNumber && phoneNumber.trim()) ? phoneNumber.trim() : ''
+    // Remove + if present, keep only digits
+    if (finalPhoneNumber.startsWith('+')) {
+      finalPhoneNumber = finalPhoneNumber.substring(1)
+    }
+    // Remove all non-digit characters to ensure clean format
+    finalPhoneNumber = finalPhoneNumber.replace(/\D/g, '')
+    
     // Use user-provided name (required by server)
     const finalName = (name && name.trim()) ? name.trim() : ''
 
+    console.log('[AuthAPI] Phone number processing:')
+    console.log('[AuthAPI] - Original phoneNumber:', phoneNumber)
+    console.log('[AuthAPI] - Final phoneNumber (digits only):', finalPhoneNumber)
+    
     // Validate required values
-    if (!finalInitData) {
-      throw new Error('initData is empty. Open the app inside Telegram Mini App so Telegram.WebApp.initData is available.')
+    if (!finalInitData || finalInitData.trim().length === 0) {
+      const errorMsg = 'initData is empty. The app must be opened through Telegram Mini App to get authentication data. Please close and reopen the app from Telegram.'
+      console.error('[AuthAPI]', errorMsg)
+      console.error('[AuthAPI] Telegram.WebApp available:', !!window.Telegram?.WebApp)
+      console.error('[AuthAPI] Telegram.WebApp.initData:', window.Telegram?.WebApp?.initData || '(empty)')
+      throw new Error(errorMsg)
     }
-    if (!finalPhoneNumber) {
-      throw new Error('phoneNumber is empty. It must come from the user registration phone field.')
+    if (!finalPhoneNumber || finalPhoneNumber.length < 10) {
+      throw new Error('phoneNumber is empty or invalid. It must come from the user registration phone field.')
     }
     if (!finalName) {
       throw new Error('name is empty. It must come from the user registration name field.')
@@ -211,30 +234,139 @@ export const authApi = {
       console.log('[AuthAPI] Parsed phoneNumber:', parsedBack.phoneNumber)
       
       // Make the API call - use proxy in dev mode to avoid CORS, direct URL in production
+      console.log('[AuthAPI] ===== ABOUT TO MAKE FETCH REQUEST =====')
       console.log('[AuthAPI] Making POST request to:', API_URL)
       console.log('[AuthAPI] Request body will be:', requestBodyString)
       console.log('[AuthAPI] Request body type:', typeof requestBodyString)
       console.log('[AuthAPI] Request body is empty?', requestBodyString.length === 0)
+      console.log('[AuthAPI] Current timestamp:', new Date().toISOString())
+      console.log('[AuthAPI] Navigator.onLine:', navigator.onLine)
+      console.log('[AuthAPI] Window location:', window.location.href)
       
-      // Create fetch options with explicit body
+      // Create fetch options with explicit body and CORS settings
       const fetchOptions: RequestInit = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        body: requestBodyString
+        body: requestBodyString,
+        mode: 'cors', // Explicitly set CORS mode
+        credentials: 'omit', // Don't send cookies to avoid CORS preflight issues
       }
       
       // Log fetch options to verify body is set
-      console.log('[AuthAPI] Fetch options:', {
+      console.log('[AuthAPI] Fetch options configured:', {
         method: fetchOptions.method,
         headers: fetchOptions.headers,
+        mode: fetchOptions.mode,
+        credentials: fetchOptions.credentials,
         bodyLength: fetchOptions.body ? String(fetchOptions.body).length : 0,
         bodyPreview: fetchOptions.body ? String(fetchOptions.body).substring(0, 100) : '(empty)'
       })
       
-      const response = await fetch(API_URL, fetchOptions)
+      // Pre-flight checks before fetch
+      console.log('[AuthAPI] ===== PRE-FLIGHT CHECKS =====')
+      console.log('[AuthAPI] Checking navigator.onLine:', navigator.onLine)
+      console.log('[AuthAPI] Checking window.fetch exists:', typeof window.fetch)
+      console.log('[AuthAPI] Checking Telegram.WebApp:', {
+        exists: !!window.Telegram?.WebApp,
+        hasInitData: !!window.Telegram?.WebApp?.initData,
+        initDataLength: window.Telegram?.WebApp?.initData?.length || 0
+      })
+      console.log('[AuthAPI] Current location:', {
+        href: window.location.href,
+        origin: window.location.origin,
+        protocol: window.location.protocol,
+        host: window.location.host,
+        hostname: window.location.hostname
+      })
+      console.log('[AuthAPI] ⚠️ IMPORTANT: API server must allow CORS from origin:', window.location.origin)
+      console.log('[AuthAPI] ⚠️ Backend must set: Access-Control-Allow-Origin:', window.location.origin)
+      
+      console.log('[AuthAPI] Calling fetch() NOW...')
+      console.log('[AuthAPI] URL:', API_URL)
+      console.log('[AuthAPI] Request timestamp:', new Date().toISOString())
+      console.log('[AuthAPI] Fetch options (without body):', {
+        method: fetchOptions.method,
+        headers: fetchOptions.headers,
+        mode: fetchOptions.mode,
+        credentials: fetchOptions.credentials,
+        bodyLength: fetchOptions.body ? String(fetchOptions.body).length : 0
+      })
+      
+      let response: Response
+      const fetchStartTime = Date.now()
+      try {
+        console.log('[AuthAPI] About to execute: await fetch(API_URL, fetchOptions)')
+        console.log('[AuthAPI] Fetch function type:', typeof fetch)
+        console.log('[AuthAPI] Fetch function:', fetch.toString().substring(0, 200))
+        
+        response = await fetch(API_URL, fetchOptions)
+        const fetchDuration = Date.now() - fetchStartTime
+        console.log('[AuthAPI] ✓ Fetch completed after', fetchDuration, 'ms')
+        console.log('[AuthAPI] ✓ Response received:', {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok,
+          type: response.type,
+          url: response.url
+        })
+      } catch (fetchError: any) {
+        const fetchDuration = Date.now() - fetchStartTime
+        console.error('[AuthAPI] ✗ Fetch threw an exception after', fetchDuration, 'ms')
+        console.error('[AuthAPI] ===== FETCH ERROR DETAILS =====')
+        console.error('[AuthAPI] Fetch error type:', typeof fetchError)
+        console.error('[AuthAPI] Fetch error constructor:', fetchError?.constructor?.name)
+        console.error('[AuthAPI] Fetch error name:', fetchError?.name)
+        console.error('[AuthAPI] Fetch error message:', fetchError?.message)
+        console.error('[AuthAPI] Fetch error stack:', fetchError?.stack)
+        console.error('[AuthAPI] Fetch error cause:', fetchError?.cause)
+        console.error('[AuthAPI] Is Error instance?', fetchError instanceof Error)
+        console.error('[AuthAPI] Error keys:', Object.keys(fetchError || {}))
+        
+        // Try to stringify the error
+        let errorDetailsString = ''
+        try {
+          errorDetailsString = JSON.stringify(fetchError, Object.getOwnPropertyNames(fetchError))
+          console.error('[AuthAPI] Stringified fetch error:', errorDetailsString)
+        } catch (stringifyError) {
+          console.error('[AuthAPI] Could not stringify error:', stringifyError)
+          errorDetailsString = String(fetchError)
+          console.error('[AuthAPI] Error as string:', errorDetailsString)
+        }
+        
+        // Check for specific error patterns
+        const errorString = String(fetchError?.message || fetchError || '')
+        const errorAnalysis = {
+          containsFailedToFetch: errorString.includes('Failed to fetch'),
+          containsNetworkError: errorString.includes('NetworkError'),
+          containsCORS: errorString.includes('CORS'),
+          containsNetworkRequestFailed: errorString.includes('Network request failed'),
+          containsTypeError: errorString.includes('TypeError')
+        }
+        
+        console.error('[AuthAPI] Error string analysis:', errorAnalysis)
+        
+        // Enhance error with diagnostic info for user
+        const enhancedError = new Error(
+          `Network error: Unable to connect to API server at ${API_URL}. ` +
+          `Error: ${fetchError?.name || 'Unknown'} - ${fetchError?.message || errorString}. ` +
+          `Duration: ${fetchDuration}ms. ` +
+          `Analysis: ${JSON.stringify(errorAnalysis)}. ` +
+          `Details: ${errorDetailsString.substring(0, 200)}`
+        )
+        
+        // Copy original error properties
+        if (fetchError?.stack) {
+          enhancedError.stack = fetchError.stack
+        }
+        if ((fetchError as any)?.cause) {
+          (enhancedError as any).cause = (fetchError as any).cause
+        }
+        
+        throw enhancedError // Throw enhanced error to be caught by outer catch
+      }
       
       console.log('[AuthAPI] Fetch response received:', {
         status: response.status,
@@ -294,10 +426,71 @@ export const authApi = {
         }
       }
 
-      const result = await response.json()
-      console.log('[AuthAPI] Init call check success:', result)
-      console.log('[AuthAPI] Response data:', JSON.stringify(result, null, 2))
-      return result
+      // Get response as text first to handle potential parsing issues
+      const responseText = await response.text()
+      console.log('[AuthAPI] Response text (raw):', responseText)
+      console.log('[AuthAPI] Response text length:', responseText.length)
+      
+      let result: any = {}
+      try {
+        result = JSON.parse(responseText)
+        console.log('[AuthAPI] Response parsed successfully:', result)
+      } catch (parseError) {
+        console.error('[AuthAPI] Failed to parse response as JSON:', parseError)
+        console.error('[AuthAPI] Response text was:', responseText)
+        throw new Error(`Invalid JSON response from server: ${responseText.substring(0, 100)}`)
+      }
+      
+      console.log('[AuthAPI] Init call check success - parsed result:', result)
+      console.log('[AuthAPI] Result keys:', Object.keys(result))
+      console.log('[AuthAPI] Result has callToNumber?', !!result.callToNumber)
+      console.log('[AuthAPI] Result has rawPhone?', !!result.rawPhone)
+      console.log('[AuthAPI] Result has prettyPhone?', !!result.prettyPhone)
+      console.log('[AuthAPI] Full result object:', JSON.stringify(result, null, 2))
+      
+      // Handle API response format: {"callToNumber": "79001112233"} (from api.md)
+      // Transform to our expected format if needed
+      if (result.callToNumber) {
+        const callNumber = String(result.callToNumber).trim()
+        console.log('[AuthAPI] Found callToNumber in response:', callNumber)
+        
+        if (!callNumber || callNumber.length === 0) {
+          throw new Error('callToNumber in response is empty')
+        }
+        
+        // Format for display (assuming Russian format)
+        let prettyPhone = callNumber
+        if (callNumber.startsWith('7') && callNumber.length === 11) {
+          // Format: 7 (XXX) XXX-XX-XX
+          prettyPhone = `+7 (${callNumber.substring(1, 4)}) ${callNumber.substring(4, 7)}-${callNumber.substring(7, 9)}-${callNumber.substring(9)}`
+        } else if (callNumber.startsWith('+7') && callNumber.length === 12) {
+          // Format: +7 (XXX) XXX-XX-XX
+          prettyPhone = `+7 (${callNumber.substring(2, 5)}) ${callNumber.substring(5, 8)}-${callNumber.substring(8, 10)}-${callNumber.substring(10)}`
+        } else if (!callNumber.startsWith('+')) {
+          // If no + prefix, add it
+          prettyPhone = `+${callNumber}`
+        }
+        
+        const transformedResult = {
+          prettyPhone,
+          rawPhone: callNumber,
+          callToNumber: callNumber
+        }
+        
+        console.log('[AuthAPI] Transformed result:', transformedResult)
+        return transformedResult
+      }
+      
+      // If result already has prettyPhone and rawPhone, use it
+      if (result.prettyPhone && result.rawPhone) {
+        console.log('[AuthAPI] Result already has prettyPhone and rawPhone, using as is')
+        return result
+      }
+      
+      // If we get here, response format is unexpected
+      console.error('[AuthAPI] Unexpected response format. Expected callToNumber, prettyPhone, or rawPhone')
+      console.error('[AuthAPI] Received result:', result)
+      throw new Error(`Invalid response format: missing callToNumber, prettyPhone, or rawPhone. Response: ${JSON.stringify(result)}`)
     } catch (error: any) {
       console.error('[AuthAPI] Init call check error:', error)
       console.error('[AuthAPI] Error details:', {
@@ -307,22 +500,38 @@ export const authApi = {
         cause: error?.cause
       })
       
-      // Handle "Failed to fetch" errors specifically
-      if (error?.message?.includes('Failed to fetch') || error?.name === 'TypeError') {
-        console.error('[AuthAPI] Network error detected. Possible causes:')
-        console.error('  - CORS issue with the API server')
-        console.error('  - Network connectivity problem')
-        console.error('  - API server is down or unreachable')
-        console.error('  - Request was blocked by browser security')
-        console.error('[AuthAPI] Current URL:', window.location.href)
+      // Handle network/fetch errors specifically
+      const isNetworkError = error?.message?.includes('Failed to fetch') || 
+                           error?.message?.includes('NetworkError') ||
+                           error?.name === 'TypeError' ||
+                           error?.message?.includes('Network request failed') ||
+                           error?.message?.includes('fetch')
+      
+      if (isNetworkError) {
+        console.error('[AuthAPI] ===== NETWORK ERROR DETECTED =====')
+        console.error('[AuthAPI] Error name:', error?.name)
+        console.error('[AuthAPI] Error message:', error?.message)
+        console.error('[AuthAPI] Error stack:', error?.stack)
+        console.error('[AuthAPI] Possible causes:')
+        console.error('  1. CORS issue with the API server')
+        console.error('  2. Network connectivity problem')
+        console.error('  3. API server is down or unreachable')
+        console.error('  4. Request was blocked by browser security')
+        console.error('  5. DNS resolution failure')
+        console.error('[AuthAPI] Current page URL:', window.location.href)
+        console.error('[AuthAPI] Current origin:', window.location.origin)
         console.error('[AuthAPI] API URL attempted:', API_URL)
-        console.error('[AuthAPI] Full error:', error)
+        console.error('[AuthAPI] Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error)))
         
-        // In production, if we're getting CORS errors, it means the backend needs to allow the origin
-        const isCorsError = error?.message?.includes('CORS') || error?.message?.includes('Access-Control')
+        // Check if it's a CORS error specifically
+        const isCorsError = error?.message?.includes('CORS') || 
+                           error?.message?.includes('Access-Control') ||
+                           error?.message?.includes('cross-origin')
+        
         const errorMsg = isCorsError
-          ? `CORS error: The API server needs to allow requests from ${window.location.origin}`
-          : `Network error: Unable to connect to API server. Please check your internet connection and try again.`
+          ? `CORS error: The API server needs to allow requests from ${window.location.origin}. Request was blocked by browser security.`
+          : `Network error: Unable to connect to API server at ${API_URL}. Please check your internet connection and try again.`
+        
         throw new Error(errorMsg)
       }
       

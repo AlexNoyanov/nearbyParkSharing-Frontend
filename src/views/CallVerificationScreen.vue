@@ -31,18 +31,183 @@ watch(() => props.phone, (newPhone, oldPhone) => {
   }
 }, { flush: 'post' }) // Use 'post' flush to ensure this runs after onMounted
 
-// Get Telegram initData
-const getInitData = (): string => {
-  if (window.Telegram?.WebApp?.initData) {
-    return window.Telegram.WebApp.initData
+// Wait for Telegram WebApp to be ready and return initData
+// Returns initData or throws error if not available
+// According to: https://docs.telegram-mini-apps.com/platform/init-data
+const waitForTelegramInitData = async (maxWaitMs: number = 5000): Promise<string> => {
+  console.log('[CallVerification] waitForTelegramInitData: Starting...')
+  console.log('[CallVerification] window.Telegram exists?', !!window.Telegram)
+  console.log('[CallVerification] window.Telegram.WebApp exists?', !!window.Telegram?.WebApp)
+  
+  // First, ensure Telegram WebApp is initialized and ready
+  if (window.Telegram?.WebApp) {
+    console.log('[CallVerification] Calling Telegram.WebApp.ready()...')
+    try {
+      window.Telegram.WebApp.ready()
+      console.log('[CallVerification] Telegram.WebApp.ready() called successfully')
+    } catch (e) {
+      console.warn('[CallVerification] Error calling ready():', e)
+    }
+    
+    // Log all available properties
+    console.log('[CallVerification] Telegram.WebApp properties:', Object.keys(window.Telegram.WebApp))
+    console.log('[CallVerification] Telegram.WebApp.initData exists?', 'initData' in window.Telegram.WebApp)
+    console.log('[CallVerification] Telegram.WebApp.initData value:', window.Telegram.WebApp.initData || '(empty)')
+    console.log('[CallVerification] Telegram.WebApp.initData type:', typeof window.Telegram.WebApp.initData)
+    console.log('[CallVerification] Telegram.WebApp.initDataUnsafe:', window.Telegram.WebApp.initDataUnsafe)
+  } else {
+    console.warn('[CallVerification] window.Telegram.WebApp is NOT available!')
+    console.warn('[CallVerification] This means the app is NOT running inside Telegram Mini App')
   }
+  
+  // Try to get initData immediately
+  if (window.Telegram?.WebApp?.initData) {
+    const initData = window.Telegram.WebApp.initData
+    console.log('[CallVerification] Found initData immediately:', initData ? `length=${initData.length}` : '(empty)')
+    if (initData && typeof initData === 'string' && initData.trim().length > 0) {
+      console.log('[CallVerification] ✓ Returning initData immediately')
+      return initData
+    }
+  }
+  
+  // If not available, wait a bit (Telegram might still be initializing)
+  console.log('[CallVerification] initData not available immediately, waiting up to', maxWaitMs, 'ms...')
+  const startTime = Date.now()
+  let checkCount = 0
+  while (Date.now() - startTime < maxWaitMs) {
+    checkCount++
+    await new Promise(resolve => setTimeout(resolve, 200))
+    
+    if (window.Telegram?.WebApp?.initData) {
+      const initData = window.Telegram.WebApp.initData
+      if (initData && typeof initData === 'string' && initData.trim().length > 0) {
+        console.log('[CallVerification] ✓ Got initData after', checkCount * 200, 'ms')
+        return initData
+      }
+    }
+    
+    // Log progress every second
+    if (checkCount % 5 === 0) {
+      console.log('[CallVerification] Still waiting for initData...', checkCount * 200, 'ms elapsed')
+      console.log('[CallVerification] window.Telegram.WebApp.initData:', window.Telegram?.WebApp?.initData || '(still empty)')
+    }
+  }
+  
+  console.error('[CallVerification] ✗ initData not available after', maxWaitMs, 'ms')
+  console.error('[CallVerification] Final check - window.Telegram.WebApp.initData:', window.Telegram?.WebApp?.initData || '(empty)')
+  throw new Error('Telegram initData is not available. Make sure the app is opened through Telegram Mini App (not via direct URL).')
+}
+
+// Get Telegram initData from Telegram Mini App
+// Format: "auth_date=1768317980&query_id=...&user=...&hash=..."
+// According to Telegram Mini Apps documentation: https://docs.telegram-mini-apps.com/platform/init-data
+const getInitData = (): string => {
+  console.log('[CallVerification] getInitData() called')
+  console.log('[CallVerification] Checking window.Telegram.WebApp.initData...')
+  
+  // Primary method: Get from window.Telegram.WebApp.initData
+  // This is the official way according to Telegram Mini Apps docs
+  if (window.Telegram?.WebApp) {
+    // Ensure WebApp is ready
+    try {
+      window.Telegram.WebApp.ready()
+    } catch (e) {
+      console.warn('[CallVerification] Error calling ready() in getInitData:', e)
+    }
+    
+    if (window.Telegram.WebApp.initData) {
+      const initData = window.Telegram.WebApp.initData
+      console.log('[CallVerification] ✓ Got initData from window.Telegram.WebApp.initData')
+      console.log('[CallVerification] initData type:', typeof initData)
+      console.log('[CallVerification] initData length:', initData ? initData.length : 0)
+      console.log('[CallVerification] initData is string?', typeof initData === 'string')
+      console.log('[CallVerification] initData is empty?', !initData || (typeof initData === 'string' && initData.trim().length === 0))
+      
+      if (initData && typeof initData === 'string' && initData.trim().length > 0) {
+        console.log('[CallVerification] initData full value:', initData)
+        // Verify it's in the expected format (query string with auth_date, hash, etc.)
+        if (initData.includes('auth_date=') && initData.includes('hash=')) {
+          console.log('[CallVerification] ✓ initData format is valid (contains auth_date and hash)')
+          // Try to parse and log the auth_date
+          try {
+            const params = new URLSearchParams(initData)
+            const authDate = params.get('auth_date')
+            const hash = params.get('hash')
+            const user = params.get('user')
+            if (authDate) {
+              console.log('[CallVerification] ✓ Found auth_date in initData:', authDate)
+            }
+            if (hash) {
+              console.log('[CallVerification] ✓ Found hash in initData:', hash.substring(0, 20) + '...')
+            }
+            if (user) {
+              console.log('[CallVerification] ✓ Found user in initData:', user)
+            }
+          } catch (e) {
+            console.warn('[CallVerification] Could not parse initData as URLSearchParams:', e)
+          }
+        } else {
+          console.warn('[CallVerification] ⚠ initData format may be invalid (missing expected parameters)')
+          console.warn('[CallVerification] initData contains auth_date?', initData.includes('auth_date='))
+          console.warn('[CallVerification] initData contains hash?', initData.includes('hash='))
+        }
+        return initData
+      } else {
+        console.warn('[CallVerification] initData exists but is empty or not a string')
+      }
+    } else {
+      console.warn('[CallVerification] window.Telegram.WebApp.initData is falsy')
+    }
+  } else {
+    console.warn('[CallVerification] window.Telegram.WebApp is not available')
+  }
+  
+  // Fallback: Try to get from URL parameter tgWebAppData
+  try {
+    const urlParams = new URLSearchParams(window.location.search)
+    const tgWebAppData = urlParams.get('tgWebAppData')
+    if (tgWebAppData) {
+      console.log('[CallVerification] Got initData from URL parameter tgWebAppData')
+      console.log('[CallVerification] initData length:', tgWebAppData.length)
+      return tgWebAppData
+    }
+  } catch (error) {
+    console.error('[CallVerification] Error extracting initData from URL:', error)
+  }
+  
+  // Also check hash fragment
+  try {
+    const hashParams = new URLSearchParams(window.location.hash.substring(1))
+    const tgWebAppData = hashParams.get('tgWebAppData')
+    if (tgWebAppData) {
+      console.log('[CallVerification] Got initData from hash parameter tgWebAppData')
+      return tgWebAppData
+    }
+  } catch (error) {
+    console.error('[CallVerification] Error extracting initData from hash:', error)
+  }
+  
+  // Debug: Log what's available in Telegram WebApp
+  if (window.Telegram?.WebApp) {
+    console.warn('[CallVerification] Telegram.WebApp is available but initData is missing')
+    console.log('[CallVerification] Available WebApp properties:', Object.keys(window.Telegram.WebApp))
+    console.log('[CallVerification] initDataUnsafe:', window.Telegram.WebApp.initDataUnsafe)
+    if (window.Telegram.WebApp.initDataUnsafe) {
+      console.log('[CallVerification] initDataUnsafe.user:', window.Telegram.WebApp.initDataUnsafe.user)
+    }
+  } else {
+    console.warn('[CallVerification] window.Telegram.WebApp is not available')
+    console.log('[CallVerification] window.Telegram:', window.Telegram)
+  }
+  
   // Dev-only fallback (allows local debugging without Telegram Mini App)
   if (import.meta.env.DEV) {
     const testInitData =
       'auth_date=1768317980&query_id=AAHdF6IQAAAAAN0XohDhrOrc&user=%7B%22id%22%3A111222333%2C%22first_name%22%3A%22Test%22%2C%22last_name%22%3A%22User%22%2C%22username%22%3A%22Alexander%22%2C%22language_code%22%3A%22en%22%7D&hash=77794dcb2dd54b35f40010f1dcede46444340c01530bfd17849802cd6295c527'
-    console.log('[CallVerification] DEV: Using test initData (Telegram WebApp not available)')
+    console.warn('[CallVerification] DEV: Using test initData (Telegram WebApp not available)')
     return testInitData
   }
+  
   return ''
 }
 
@@ -58,6 +223,9 @@ const initializeCallCheck = async () => {
   isInitializingInProgress.value = true
   isInitializing.value = true
   error.value = ''
+  
+  // Request info for error diagnostics (declared here to be accessible in catch)
+  let requestInfo: any = null
   
   try {
     // Log props to debug
@@ -76,7 +244,50 @@ const initializeCallCheck = async () => {
       testMode.disable()
     }
     
-    const initData = getInitData()
+    // Wait for Telegram WebApp to be ready and get initData
+    console.log('[CallVerification] ===== STEP 1: Getting initData =====')
+    console.log('[CallVerification] window.Telegram exists?', !!window.Telegram)
+    console.log('[CallVerification] window.Telegram.WebApp exists?', !!window.Telegram?.WebApp)
+    console.log('[CallVerification] window.Telegram.WebApp.initData exists?', !!window.Telegram?.WebApp?.initData)
+    console.log('[CallVerification] window.Telegram.WebApp.initData value:', window.Telegram?.WebApp?.initData || '(empty)')
+    console.log('[CallVerification] window.location.href:', window.location.href)
+    console.log('[CallVerification] window.location.origin:', window.location.origin)
+    console.log('[CallVerification] window.location.search:', window.location.search)
+    console.log('[CallVerification] window.location.hash:', window.location.hash)
+    
+    let initData: string
+    try {
+      console.log('[CallVerification] Calling waitForTelegramInitData with 3s timeout...')
+      initData = await waitForTelegramInitData(3000) // Wait up to 3 seconds
+      console.log('[CallVerification] ✓ Successfully got initData after wait')
+      console.log('[CallVerification] initData type:', typeof initData)
+      console.log('[CallVerification] initData length:', initData ? initData.length : 0)
+      console.log('[CallVerification] initData is empty?', !initData || initData.trim().length === 0)
+      if (initData) {
+        console.log('[CallVerification] initData full value:', initData)
+        console.log('[CallVerification] initData preview (first 200 chars):', initData.substring(0, 200))
+      }
+    } catch (err: any) {
+      console.error('[CallVerification] waitForTelegramInitData threw error:', err)
+      console.error('[CallVerification] Error details:', {
+        name: err?.name,
+        message: err?.message,
+        stack: err?.stack
+      })
+      // If wait fails, try immediate get as fallback
+      console.warn('[CallVerification] waitForTelegramInitData failed, trying immediate getInitData() as fallback')
+      initData = getInitData()
+      console.log('[CallVerification] getInitData() returned:', initData ? `length=${initData.length}` : '(empty)')
+      if (!initData || initData.trim().length === 0) {
+        const errorMsg = 'initData is not available. Please open the app through Telegram Mini App.'
+        console.error('[CallVerification] initData is still empty after fallback!')
+        throw new Error(errorMsg)
+      }
+    }
+    
+    console.log('[CallVerification] ===== STEP 1 COMPLETE =====')
+    console.log('[CallVerification] Final initData:', initData ? `length=${initData.length}, preview=${initData.substring(0, 100)}...` : '(EMPTY!)')
+    
     // Use phone from props - ensure it's a string and not empty
     let phoneNumber = props.phone || ''
     
@@ -88,9 +299,39 @@ const initializeCallCheck = async () => {
       console.log('[CallVerification] Phone number after wait:', phoneNumber)
     }
     
+    console.log('[CallVerification] ===== STEP 2: Preparing data for API call =====')
+    console.log('[CallVerification] Props received:', {
+      phone: props.phone,
+      name: props.name,
+      isRegistration: props.isRegistration,
+      phoneType: typeof props.phone,
+      phoneLength: props.phone?.length || 0,
+      nameType: typeof props.name,
+      nameLength: props.name?.length || 0
+    })
+    console.log('[CallVerification] Phone processing:', {
+      originalPhone: phoneNumber,
+      phoneType: typeof phoneNumber,
+      phoneLength: phoneNumber?.length || 0,
+      phoneIsEmpty: !phoneNumber || phoneNumber.trim().length === 0,
+      phoneTrimmed: phoneNumber?.trim() || '(empty)'
+    })
+    console.log('[CallVerification] InitData status:', {
+      hasInitData: !!initData,
+      initDataType: typeof initData,
+      initDataLength: initData ? initData.length : 0,
+      initDataIsEmpty: !initData || initData.trim().length === 0,
+      initDataPreview: initData ? initData.substring(0, 100) + '...' : '(empty)'
+    })
+    console.log('[CallVerification] Name status:', {
+      name: props.name,
+      nameType: typeof props.name,
+      nameLength: props.name?.length || 0,
+      nameIsEmpty: !props.name || props.name.trim().length === 0,
+      nameTrimmed: props.name?.trim() || '(empty)'
+    })
     console.log('[CallVerification] Final values before API call:', {
       hasInitData: !!initData,
-      initData: initData || '(empty)',
       initDataLength: initData ? initData.length : 0,
       phoneNumber: phoneNumber || '(empty)',
       phoneNumberTrimmed: phoneNumber.trim(),
@@ -137,20 +378,57 @@ const initializeCallCheck = async () => {
       throw new Error('Phone number is required')
     }
     
-    console.log('[CallVerification] Calling authApi.initCallCheck with:', {
-      initData: initData ? initData.substring(0, 50) + '...' : '(empty)',
+    console.log('[CallVerification] ===== STEP 3: Calling API =====')
+    console.log('[CallVerification] About to call authApi.initCallCheck')
+    console.log('[CallVerification] Parameters:', {
+      initDataLength: initData ? initData.length : 0,
+      initDataPreview: initData ? initData.substring(0, 100) + '...' : '(empty)',
+      initDataFull: initData || '(empty)',
       phoneNumber: phoneToSend,
-      name: props.name
+      phoneNumberLength: phoneToSend?.length || 0,
+      phoneNumberType: typeof phoneToSend,
+      name: props.name,
+      nameLength: props.name?.length || 0,
+      nameType: typeof props.name
     })
+    const API_URL = 'https://test-app-iuwehfvnlw23275vb.koalanearby.com/parkshare/api/v1/auth/call-check/init'
+    console.log('[CallVerification] API will be called at:', API_URL)
+    console.log('[CallVerification] Current environment:', import.meta.env.MODE)
+    console.log('[CallVerification] Is DEV mode?', import.meta.env.DEV)
+    console.log('[CallVerification] Making API call now...')
+    
+    // Save request info for error diagnostics
+    requestInfo = {
+      url: API_URL,
+      method: 'POST',
+      initDataLength: initData ? initData.length : 0,
+      initDataPreview: initData ? initData.substring(0, 50) + '...' : '(empty)',
+      phoneNumber: phoneToSend,
+      phoneNumberLength: phoneToSend?.length || 0,
+      name: props.name || '(not provided)',
+      nameLength: props.name?.length || 0
+    }
     
     const response = await authApi.initCallCheck(initData, phoneToSend, props.name)
     
-    if (!response.prettyPhone || !response.rawPhone) {
-      throw new Error('Invalid response: missing phone number')
+    console.log('[CallVerification] ===== STEP 4: API call completed =====')
+    console.log('[CallVerification] Response received:', response)
+    console.log('[CallVerification] Response type:', typeof response)
+    console.log('[CallVerification] Response keys:', response ? Object.keys(response) : 'null/undefined')
+    console.log('[CallVerification] Response.prettyPhone:', response?.prettyPhone)
+    console.log('[CallVerification] Response.rawPhone:', response?.rawPhone)
+    console.log('[CallVerification] Response.callToNumber:', response?.callToNumber)
+    
+    // Handle both response formats: {prettyPhone, rawPhone} and {callToNumber}
+    const phoneToDisplay = response.prettyPhone || response.callToNumber
+    const phoneToCall = response.rawPhone || response.callToNumber
+    
+    if (!phoneToDisplay || !phoneToCall) {
+      throw new Error('Invalid response: missing phone number in API response')
     }
     
-    verificationPhone.value = response.prettyPhone
-    rawPhone.value = response.rawPhone
+    verificationPhone.value = phoneToDisplay
+    rawPhone.value = phoneToCall
     hasInitialized.value = true // Mark as successfully initialized
     console.log('[CallVerification] Call check initialized successfully:', {
       prettyPhone: response.prettyPhone,
@@ -159,32 +437,169 @@ const initializeCallCheck = async () => {
   } catch (err: any) {
     hasInitialized.value = false // Allow retry on error
     isInitializingInProgress.value = false // Reset guard on error
-    console.error('[CallVerification] Error initializing call check:', err)
-    console.error('[CallVerification] Error details:', {
-      name: err?.name,
-      message: err?.message,
-      stack: err?.stack
-    })
+      
+      // Enhanced error logging for debugging
+      console.error('[CallVerification] ===== ERROR DURING CALL CHECK INIT =====')
+      console.error('[CallVerification] Error object:', err)
+      console.error('[CallVerification] Error constructor:', err?.constructor?.name)
+      console.error('[CallVerification] Error name:', err?.name)
+      console.error('[CallVerification] Error message:', err?.message)
+      console.error('[CallVerification] Error stack:', err?.stack)
+      console.error('[CallVerification] Error cause:', err?.cause)
+      console.error('[CallVerification] Error type:', typeof err)
+      console.error('[CallVerification] Error string:', String(err))
+      console.error('[CallVerification] Is Error instance?', err instanceof Error)
+      console.error('[CallVerification] Error keys:', Object.keys(err || {}))
+      
+      // Log all available error properties
+      try {
+        console.error('[CallVerification] Full error JSON:', JSON.stringify(err, Object.getOwnPropertyNames(err), 2))
+      } catch (jsonError) {
+        console.error('[CallVerification] Could not stringify error:', jsonError)
+      }
+      
+      // Collect diagnostic information
+      const networkStatus = {
+        onLine: navigator.onLine,
+        connectionType: (navigator as any).connection?.effectiveType || 'unknown',
+        fetchAvailable: typeof window.fetch === 'function',
+        telegramWebApp: {
+          exists: !!window.Telegram?.WebApp,
+          hasInitData: !!window.Telegram?.WebApp?.initData,
+          initDataLength: window.Telegram?.WebApp?.initData?.length || 0
+        },
+        location: {
+          href: window.location.href,
+          origin: window.location.origin,
+          protocol: window.location.protocol
+        }
+      }
+      
+      // Get request info if available (may not be set if error occurred before API call)
+      const reqInfo = requestInfo || {}
+      
+      // Log network-related information
+      console.error('[CallVerification] Network status:', networkStatus)
+      console.error('[CallVerification] Request info:', reqInfo)
     
-    let errorMessage = err?.message || 'Неизвестная ошибка'
+    // Check error type more specifically
+    const errorMessage = err?.message || String(err) || 'Неизвестная ошибка'
+    const errorName = err?.name || ''
     
-    // Provide user-friendly error messages
-    if (errorMessage.includes('500') || errorMessage.includes('Internal Server Error')) {
-      errorMessage = 'Сервер временно недоступен. Пожалуйста, попробуйте позже или обратитесь в поддержку.'
-    } else if (errorMessage.includes('401') || errorMessage.includes('Invalid Telegram data')) {
-      errorMessage = 'Ошибка авторизации. Убедитесь, что вы открыли приложение через Telegram.'
-    } else if (errorMessage.includes('Phone number is required')) {
-      errorMessage = 'Номер телефона не указан. Пожалуйста, вернитесь назад и введите номер.'
-    } else if (errorMessage.includes('Network error') || errorMessage.includes('Failed to fetch') || errorMessage.includes('fetch') || errorMessage.includes('CORS')) {
-      // Check if it's a CORS error specifically
-      if (errorMessage.includes('CORS')) {
-        errorMessage = 'Ошибка подключения к серверу. Обратитесь в поддержку.'
-      } else {
-        errorMessage = 'Проблема с подключением к интернету. Проверьте соединение и попробуйте снова.'
+    console.error('[CallVerification] Processing error message:', errorMessage)
+    console.error('[CallVerification] Error name:', errorName)
+    
+    // Extract more details from error message (may contain enhanced info from authApi)
+    const hasNetworkError = errorMessage.includes('Network error:') || errorMessage.includes('Unable to connect')
+    
+    // Build detailed error message with diagnostic info
+    const isCorsError = errorMessage.includes('CORS') || errorMessage.includes('Access-Control')
+    
+    const diagnosticInfo = [
+      `Тип ошибки: ${errorName || 'Unknown'}`,
+      `Сообщение: ${errorMessage.substring(0, 200)}${errorMessage.length > 200 ? '...' : ''}`,
+      `---`,
+      `Сеть: ${networkStatus.onLine ? 'онлайн ✓' : 'оффлайн ✗'}`,
+      `Fetch API: ${networkStatus.fetchAvailable ? 'доступен ✓' : 'недоступен ✗'}`,
+      `Telegram WebApp: ${networkStatus.telegramWebApp.exists ? 'есть ✓' : 'нет ✗'}`,
+      `initData: ${networkStatus.telegramWebApp.hasInitData ? `есть ✓ (${networkStatus.telegramWebApp.initDataLength} символов)` : 'нет ✗'}`,
+      `---`,
+      `API URL: ${reqInfo.url || 'не определен'}`,
+      `Метод: ${reqInfo.method || 'POST'}`,
+      `Телефон: ${reqInfo.phoneNumber || 'не указан'} (${reqInfo.phoneNumberLength || 0} символов)`,
+      `Имя: ${reqInfo.name || 'не указано'} (${reqInfo.nameLength || 0} символов)`,
+      `initData длина: ${reqInfo.initDataLength || 0} символов`,
+      `---`,
+      `Страница: ${networkStatus.location.href.substring(0, 100)}${networkStatus.location.href.length > 100 ? '...' : ''}`,
+      `Origin: ${networkStatus.location.origin}`,
+      `Протокол: ${networkStatus.location.protocol}`,
+      ...(isCorsError ? [
+        `---`,
+        `🚫 CORS ERROR - Требуется настройка бэкенда`,
+        ``,
+        `Проблема: Бэкенд не разрешает запросы с этого домена.`,
+        `Origin запроса: ${networkStatus.location.origin}`,
+        ``,
+        `Решение:`,
+        `На бэкенде нужно добавить заголовок:`,
+        `Access-Control-Allow-Origin: ${networkStatus.location.origin}`,
+        ``,
+        `Или для всех доменов (менее безопасно):`,
+        `Access-Control-Allow-Origin: *`,
+        ``,
+        `Также могут понадобиться:`,
+        `Access-Control-Allow-Methods: POST, OPTIONS`,
+        `Access-Control-Allow-Headers: Content-Type, Accept`,
+        `Access-Control-Allow-Credentials: true`
+      ] : hasNetworkError ? [
+        `---`,
+        `⚠️ Network Error detected`,
+        `Возможные причины:`,
+        `1. CORS блокировка сервера`,
+        `2. DNS не разрешается`,
+        `3. Сервер недоступен`,
+        `4. Telegram WebView блокирует запрос`
+      ] : [])
+    ].join('\n')
+    
+    // Try to show alert in Telegram if available (using showAlert if it exists)
+    if (window.Telegram?.WebApp) {
+      try {
+        const webApp = window.Telegram.WebApp as any
+        if (typeof webApp.showAlert === 'function') {
+          webApp.showAlert(diagnosticInfo)
+        } else if (typeof webApp.alert === 'function') {
+          webApp.alert(diagnosticInfo)
+        }
+      } catch (alertError) {
+        console.error('[CallVerification] Could not show Telegram alert:', alertError)
       }
     }
     
-    error.value = `Ошибка при получении номера для звонка: ${errorMessage}`
+    // Build base message first
+    let baseMessage = errorMessage
+    
+    // Handle specific HTTP status codes first
+    if (errorMessage.includes('400') || errorMessage.includes('Bad Request')) {
+      if (errorMessage.includes('Validation failed') || errorMessage.includes('validation')) {
+        baseMessage = errorMessage // Keep the detailed validation message
+      } else {
+        baseMessage = 'Неверный запрос. Проверьте введенные данные.'
+      }
+    } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized') || errorMessage.includes('Invalid Telegram data')) {
+      baseMessage = 'Ошибка авторизации. Убедитесь, что вы открыли приложение через Telegram.'
+    } else if (errorMessage.includes('409') || errorMessage.includes('Conflict')) {
+      baseMessage = errorMessage // Keep the detailed conflict message
+    } else if (errorMessage.includes('500') || errorMessage.includes('Internal Server Error')) {
+      baseMessage = 'Сервер временно недоступен. Пожалуйста, попробуйте позже или обратитесь в поддержку.'
+    } else if (errorMessage.includes('Phone number is required') || errorMessage.includes('name is empty')) {
+      baseMessage = errorMessage // Keep validation messages
+    } else if (errorMessage.includes('initData is empty')) {
+      baseMessage = 'Ошибка авторизации. Убедитесь, что вы открыли приложение через Telegram.'
+    } else if (errorName === 'TypeError' && (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError'))) {
+      // This is a real network/fetch error
+      console.error('[CallVerification] Real network error detected (TypeError + Failed to fetch)')
+      if (errorMessage.includes('CORS') || errorMessage.includes('Access-Control') || errorMessage.includes('cross-origin')) {
+        baseMessage = 'Ошибка подключения к серверу (CORS).'
+      } else {
+        baseMessage = 'Проблема с подключением к интернету.'
+      }
+    } else if (errorMessage.includes('CORS error:')) {
+      baseMessage = 'Ошибка подключения к серверу (CORS).'
+    } else if (errorMessage.includes('Network error:') && errorMessage.includes('Unable to connect')) {
+      // This is the specific network error message from authApi
+      baseMessage = 'Проблема с подключением к интернету.'
+    } else {
+      // For any other error, show the original message (it might contain useful info)
+      baseMessage = errorMessage
+      console.warn('[CallVerification] Unknown error type, showing original message')
+    }
+    
+    // Always append diagnostic information
+    const userFriendlyMessage = `${baseMessage}\n\n--- Детали для отладки ---\n${diagnosticInfo}`
+    
+    console.error('[CallVerification] Final user-friendly message:', userFriendlyMessage)
+    error.value = `Ошибка при получении номера для звонка:\n${userFriendlyMessage}`
     // Keep default phone number on error - but don't show it if there's an error
   } finally {
     isInitializing.value = false
@@ -198,8 +613,8 @@ onMounted(async () => {
   // Wait a bit for props to be set, then initialize
   // Only initialize if not already initialized (prevent duplicate calls)
   if (!hasInitialized.value && !isInitializingInProgress.value) {
-    await new Promise(resolve => setTimeout(resolve, 50))
-    await initializeCallCheck()
+  await new Promise(resolve => setTimeout(resolve, 50))
+  await initializeCallCheck()
   } else {
     console.log('[CallVerification] Already initialized or initialization in progress, skipping onMounted init')
   }
