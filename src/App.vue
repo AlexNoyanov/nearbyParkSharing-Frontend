@@ -56,6 +56,7 @@ import BookingExtendedScreen from './views/BookingExtendedScreen.vue'
 import ProfileScreen from './views/ProfileScreen.vue'
 import ChangePhoneScreen from './views/ChangePhoneScreen.vue'
 import HelpSupportScreen from './views/HelpSupportScreen.vue'
+import MyPlacesScreen from './views/MyPlacesScreen.vue'
 
 type Stage =
   | 'onboarding1'
