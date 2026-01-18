@@ -326,9 +326,10 @@ const goToImage = (placeId: string, index: number) => {
 }
 
 .my-places__list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 12px;
+  width: 100%;
 }
 
 /* Parking card */
