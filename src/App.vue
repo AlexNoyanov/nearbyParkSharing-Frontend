@@ -103,6 +103,7 @@ type Stage =
   | 'rental-completion'
   | 'booking-extended'
   | 'help-support'
+  | 'my-places'
 
 const stage = ref<Stage>('onboarding1')
 const selectedParking = ref<ParkingSpot | null>(null)
