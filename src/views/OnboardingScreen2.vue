@@ -372,8 +372,10 @@ const props = defineProps<{
     max-width: 100%;
     border-radius: 0;
     min-height: 100vh;
+    max-height: 100vh;
+    overflow-y: auto;
   }
-  
+
   .onboarding-2 {
     padding: 0;
   }
