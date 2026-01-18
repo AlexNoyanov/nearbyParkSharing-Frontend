@@ -1549,6 +1549,7 @@ onMounted(async () => {
           @open-chat="handleOpenChat"
           @open-owner-request="handleOpenOwnerRequestFromHome"
           @open-booking-details="handleOpenBookingDetails"
+          @open-my-places="handleOpenMyPlaces"
         />
 
         <SearchScreen
