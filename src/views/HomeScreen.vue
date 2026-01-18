@@ -366,8 +366,19 @@ const handleActivityClick = (entry: any) => {
         :key="stat.id"
         class="home__stat-card"
         :class="`home__stat-card--${stat.tone}`"
-        @click="stat.id === 'bookings' && props.currentUser && props.bookingsCount && props.bookingsCount > 0 ? emit('open-history') : null"
-        :style="stat.id === 'bookings' && props.currentUser && props.bookingsCount && props.bookingsCount > 0 ? { cursor: 'pointer' } : {}"
+        @click="
+          stat.id === 'bookings' && props.currentUser && props.bookingsCount && props.bookingsCount > 0
+            ? emit('open-history')
+            : stat.id === 'spaces' && props.currentUser
+            ? emit('open-my-places')
+            : null
+        "
+        :style="
+          (stat.id === 'bookings' && props.currentUser && props.bookingsCount && props.bookingsCount > 0) ||
+          (stat.id === 'spaces' && props.currentUser)
+            ? { cursor: 'pointer' }
+            : {}
+        "
       >
         <div class="home__stat-header">
           <div class="home__stat-icon">
