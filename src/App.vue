@@ -570,6 +570,10 @@ const openHistoryFromHome = async () => {
   }
 }
 
+const handleOpenMyPlaces = () => {
+  stage.value = 'my-places'
+}
+
 const handleOpenChat = async () => {
   await checkFeatureAndNavigate('chat-list', 'chat')
   if (stage.value === 'chat-list') {
