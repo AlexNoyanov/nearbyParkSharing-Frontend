@@ -573,7 +573,9 @@ const initializeCallCheck = async () => {
     
     // Handle specific HTTP status codes first
     if (errorMessage.includes('400') || errorMessage.includes('Bad Request')) {
-      if (errorMessage.includes('Validation failed') || errorMessage.includes('validation')) {
+      if (errorMessage.includes('SMS Provider Error') || errorMessage.includes('SMS Provider')) {
+        baseMessage = errorMessage // Keep the SMS Provider Error message as is
+      } else if (errorMessage.includes('Validation failed') || errorMessage.includes('validation')) {
         baseMessage = errorMessage // Keep the detailed validation message
       } else {
         baseMessage = 'Неверный запрос. Проверьте введенные данные.'

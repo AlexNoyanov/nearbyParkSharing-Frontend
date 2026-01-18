@@ -134,14 +134,23 @@ export const authApi = {
     }
 
     // Use user-provided phone number (but never send empty)
-    // Remove + prefix and all non-digits - API expects format like "79991234567" (from api.md)
+    // Process phone number - ensure it's in the correct format for API
     let finalPhoneNumber = (phoneNumber && phoneNumber.trim()) ? phoneNumber.trim() : ''
-    // Remove + if present, keep only digits
+    
+    // Remove all non-digit characters first
+    finalPhoneNumber = finalPhoneNumber.replace(/\D/g, '')
+    
+    // Ensure Russian phone number format: must start with 7 and be 11 digits
+    // If number doesn't start with 7, add it (for Russian numbers)
+    if (finalPhoneNumber.length === 10 && !finalPhoneNumber.startsWith('7')) {
+      // If 10 digits without 7 prefix, add 7 for Russian format
+      finalPhoneNumber = '7' + finalPhoneNumber
+    }
+    
+    // Remove + if present (shouldn't be after replace, but just in case)
     if (finalPhoneNumber.startsWith('+')) {
       finalPhoneNumber = finalPhoneNumber.substring(1)
     }
-    // Remove all non-digit characters to ensure clean format
-    finalPhoneNumber = finalPhoneNumber.replace(/\D/g, '')
     
     // Use user-provided name (required by server)
     const finalName = (name && name.trim()) ? name.trim() : ''
@@ -177,16 +186,13 @@ export const authApi = {
     console.log('[AuthAPI] - auth_date:', authDate)
 
     try {
-      // Prepare request body with auth_date extracted from initData and name
-      const requestBody: { initData: string; phoneNumber: string; name: string; auth_date?: number } = {
+      // Prepare request body according to Swagger API documentation
+      // PhoneRequest schema: initData, phoneNumber, name (all required)
+      // Do NOT send auth_date separately - it's already in initData
+      const requestBody: { initData: string; phoneNumber: string; name: string } = {
         initData: finalInitData,
         phoneNumber: finalPhoneNumber,
         name: finalName
-      }
-      
-      // Add auth_date if successfully parsed
-      if (authDate !== null) {
-        requestBody.auth_date = authDate
       }
       
       // Double-check the body is not empty
@@ -414,14 +420,36 @@ export const authApi = {
           const errorMessage = errorJson.detail || errorJson.message || errorText
           const validationErrors = errorJson.errors || errorJson.validation_errors || errorJson.error_details
           
-          // Include validation errors if present
-          let fullErrorMessage = `Server error (${response.status}): ${errorMessage}`
-          if (validationErrors) {
-            fullErrorMessage += `\nValidation errors: ${JSON.stringify(validationErrors, null, 2)}`
+          // Log full error JSON for debugging
+          console.error('[AuthAPI] Full error JSON:', JSON.stringify(errorJson, null, 2))
+          
+          // Check for specific error types
+          const isSmsProviderError = errorMessage.includes('SMS Provider Error') || 
+                                     errorMessage.includes('SMS Provider') ||
+                                     errorMessage.includes('sms provider')
+          
+          let fullErrorMessage = errorMessage
+          
+          if (isSmsProviderError) {
+            // SMS Provider Error - backend issue with SMS service
+            fullErrorMessage = `SMS Provider Error: Не удалось создать номер для звонка. Это проблема на стороне сервера. Попробуйте позже или обратитесь в поддержку.`
+            if (errorJson.error_details || errorJson.details) {
+              console.error('[AuthAPI] SMS Provider Error details:', errorJson.error_details || errorJson.details)
+            }
+          } else if (validationErrors) {
+            // Validation errors
+            fullErrorMessage = `Server error (${response.status}): ${errorMessage}\nValidation errors: ${JSON.stringify(validationErrors, null, 2)}`
+          } else {
+            // Generic server error
+            fullErrorMessage = `Server error (${response.status}): ${errorMessage}`
           }
           
           throw new Error(fullErrorMessage)
         } else {
+          // Not JSON, check if text contains SMS Provider Error
+          if (errorText && (errorText.includes('SMS Provider Error') || errorText.includes('SMS Provider'))) {
+            throw new Error(`SMS Provider Error: Не удалось создать номер для звонка. Это проблема на стороне сервера. Попробуйте позже или обратитесь в поддержку.`)
+          }
           throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
         }
       }
