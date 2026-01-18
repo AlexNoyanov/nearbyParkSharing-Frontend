@@ -369,13 +369,13 @@ const handleActivityClick = (entry: any) => {
         @click="
           stat.id === 'bookings' && props.currentUser && props.bookingsCount && props.bookingsCount > 0
             ? emit('open-history')
-            : stat.id === 'spaces' && props.currentUser
+            : stat.id === 'spaces'
             ? emit('open-my-places')
             : null
         "
         :style="
           (stat.id === 'bookings' && props.currentUser && props.bookingsCount && props.bookingsCount > 0) ||
-          (stat.id === 'spaces' && props.currentUser)
+          stat.id === 'spaces'
             ? { cursor: 'pointer' }
             : {}
         "
