@@ -545,76 +545,572 @@ const goToImage = (placeId: string, index: number) => {
   flex-shrink: 0;
 }
 
-/* Responsive adjustments */
+/* Extra small devices (320px - 480px) */
 @media (max-width: 480px) {
+  .my-places {
+    max-width: 100%;
+  }
+
   .my-places__header {
-    padding: calc(env(safe-area-inset-top) + 18px) 18px 16px;
+    padding: calc(env(safe-area-inset-top) + 16px) 16px 14px;
+    gap: 40px;
+  }
+
+  .my-places__title {
+    font-size: 14px;
+    line-height: 24px;
   }
 
   .my-places__tabs-container {
-    padding: 12px 20px 13px;
+    padding: 10px 16px 11px;
+  }
+
+  .my-places__tabs {
+    max-width: 180px;
+    padding: 3px 4px;
+  }
+
+  .my-places__tab {
+    font-size: 9px;
+    padding: 3px 12px;
+    line-height: 18px;
+  }
+
+  .my-places__content {
+    padding: 10px 16px;
+    gap: 10px;
+  }
+
+  .my-places__list {
+    gap: 10px;
+  }
+
+  .parking-card {
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .parking-card__image-container {
+    height: 120px;
+    border-radius: 3px;
+  }
+
+  .parking-card__image-counter {
+    bottom: 8px;
+    right: 8px;
+    padding: 1px 5px;
+    font-size: 8px;
+  }
+
+  .parking-card__dots {
+    bottom: 8px;
+    left: 8px;
+    gap: 3px;
+  }
+
+  .parking-card__dot {
+    width: 4px;
+    height: 4px;
+  }
+
+  .parking-card__address {
+    font-size: 11px;
+    line-height: 22px;
+  }
+
+  .parking-card__status {
+    padding: 1px 5px 4px;
+    border-radius: 6px;
+    gap: 6px;
+  }
+
+  .parking-card__status-dot {
+    width: 5px;
+    height: 5px;
+  }
+
+  .parking-card__status-text {
+    font-size: 7px;
+    line-height: 14px;
+  }
+
+  .parking-card__actions {
+    gap: 6px;
+  }
+
+  .parking-card__button {
+    padding: 10px 12px;
+    font-size: 9px;
+    line-height: 18px;
+    gap: 6px;
+  }
+
+  .parking-card__button svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .my-places__footer {
+    padding: 10px 16px;
+  }
+
+  .my-places__add-button {
+    font-size: 10px;
+    padding: 6px 5px;
+    gap: 6px;
+  }
+
+  .my-places__add-button svg {
+    width: 8px;
+    height: 14px;
+  }
+
+  .my-places__empty {
+    padding: 40px 16px;
+  }
+
+  .my-places__empty-text {
+    font-size: 13px;
+  }
+}
+
+/* Small devices (480px - 600px) */
+@media (min-width: 480px) and (max-width: 599px) {
+  .my-places {
+    max-width: 100%;
+  }
+
+  .my-places__header {
+    padding: calc(env(safe-area-inset-top) + 18px) 18px 15px;
+  }
+
+  .my-places__tabs-container {
+    padding: 12px 22px 13px;
   }
 
   .my-places__content {
     padding: 12px 18px;
   }
 
+  .parking-card {
+    padding: 12px;
+  }
+
+  .parking-card__image-container {
+    height: 140px;
+  }
+
+  .parking-card__address {
+    font-size: 12px;
+    line-height: 24px;
+  }
+
+  .parking-card__button {
+    padding: 11px 14px;
+    font-size: 9px;
+  }
+
   .my-places__footer {
-    padding: 13px 18px 12px;
+    padding: 12px 18px;
   }
 }
 
-@media (min-width: 768px) {
+/* Medium tablets (600px - 768px) */
+@media (min-width: 600px) and (max-width: 767px) {
+  .my-places {
+    max-width: 100%;
+    margin: 0 auto;
+  }
+
   .my-places__header {
-    padding: calc(env(safe-area-inset-top) + 24px) 32px 20px;
+    padding: calc(env(safe-area-inset-top) + 20px) 28px 18px;
+  }
+
+  .my-places__title {
+    font-size: 16px;
   }
 
   .my-places__tabs-container {
-    padding: 16px 40px;
+    padding: 14px 32px 14px;
   }
 
   .my-places__tabs {
-    max-width: 250px;
-    padding: 4px 6px;
+    max-width: 220px;
+    padding: 4px 5px;
+  }
+
+  .my-places__tab {
+    font-size: 11px;
+    padding: 4px 16px;
+  }
+
+  .my-places__content {
+    padding: 16px 28px;
+  }
+
+  .my-places__list {
+    gap: 14px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
+
+  .parking-card {
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .parking-card__image-container {
+    height: 180px;
+  }
+
+  .parking-card__address {
+    font-size: 13px;
+    line-height: 24px;
+  }
+
+  .parking-card__status-text {
+    font-size: 9px;
+  }
+
+  .parking-card__button {
+    padding: 12px 16px;
+    font-size: 11px;
+  }
+
+  .my-places__footer {
+    padding: 16px 28px;
+  }
+
+  .my-places__add-button {
+    font-size: 12px;
+    padding: 9px 8px;
+  }
+
+  .my-places__empty {
+    padding: 80px 28px;
+  }
+}
+
+/* Tablets and larger (768px - 1023px) */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .my-places {
+    max-width: 100%;
+    margin: 0 auto;
+  }
+
+  .my-places__header {
+    padding: calc(env(safe-area-inset-top) + 24px) 36px 20px;
+    gap: 64px;
+  }
+
+  .my-places__title {
+    font-size: 18px;
+    line-height: 28px;
+  }
+
+  .my-places__tabs-container {
+    padding: 16px 40px 16px;
+  }
+
+  .my-places__tabs {
+    max-width: 280px;
+    padding: 5px 6px;
   }
 
   .my-places__tab {
     font-size: 12px;
-    padding: 6px 20px;
+    padding: 6px 22px;
+    line-height: 20px;
   }
 
   .my-places__content {
-    padding: 20px 32px;
+    padding: 20px 36px;
+  }
+
+  .my-places__list {
+    gap: 16px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   }
 
   .parking-card {
-    padding: 20px;
+    padding: 18px;
+    gap: 14px;
   }
 
   .parking-card__image-container {
     height: 200px;
+    border-radius: 8px;
   }
 
   .parking-card__address {
-    font-size: 15px;
+    font-size: 14px;
+    line-height: 26px;
+  }
+
+  .parking-card__status {
+    padding: 3px 8px 7px;
   }
 
   .parking-card__status-text {
     font-size: 10px;
+    line-height: 16px;
   }
 
   .parking-card__button {
+    padding: 14px 18px;
     font-size: 12px;
-    padding: 14px 20px;
+    line-height: 20px;
   }
 
   .my-places__footer {
-    padding: 20px 32px;
+    padding: 20px 36px;
   }
 
   .my-places__add-button {
     font-size: 13px;
     padding: 10px 8px;
+  }
+
+  .my-places__empty {
+    padding: 100px 36px;
+  }
+
+  .my-places__empty-text {
+    font-size: 15px;
+  }
+}
+
+/* Small desktop (1024px - 1440px) */
+@media (min-width: 1024px) and (max-width: 1439px) {
+  .my-places {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .my-places__header {
+    padding: calc(env(safe-area-inset-top) + 28px) 48px 24px;
+    gap: 80px;
+  }
+
+  .my-places__title {
+    font-size: 20px;
+    line-height: 28px;
+  }
+
+  .my-places__back-button {
+    width: 36px;
+    height: 36px;
+  }
+
+  .my-places__back-button svg {
+    width: 12px;
+    height: 18px;
+  }
+
+  .my-places__tabs-container {
+    padding: 18px 48px 18px;
+  }
+
+  .my-places__tabs {
+    max-width: 320px;
+    padding: 6px 8px;
+  }
+
+  .my-places__tab {
+    font-size: 13px;
+    padding: 8px 28px;
+  }
+
+  .my-places__content {
+    padding: 24px 48px;
+  }
+
+  .my-places__list {
+    gap: 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  }
+
+  .parking-card {
+    padding: 20px;
+    gap: 16px;
+    border-radius: 14px;
+  }
+
+  .parking-card__image-container {
+    height: 240px;
+    border-radius: 10px;
+  }
+
+  .parking-card__address {
+    font-size: 15px;
+    line-height: 28px;
+  }
+
+  .parking-card__status {
+    padding: 4px 10px 8px;
+    border-radius: 10px;
+  }
+
+  .parking-card__status-dot {
+    width: 7px;
+    height: 7px;
+  }
+
+  .parking-card__status-text {
+    font-size: 11px;
+    line-height: 18px;
+  }
+
+  .parking-card__button {
+    padding: 16px 20px;
+    font-size: 13px;
+    border-radius: 10px;
+  }
+
+  .parking-card__button svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .my-places__footer {
+    padding: 24px 48px;
+  }
+
+  .my-places__add-button {
+    font-size: 14px;
+    padding: 12px 10px;
+    border-radius: 14px;
+  }
+
+  .my-places__add-button svg {
+    width: 12px;
+    height: 18px;
+  }
+
+  .my-places__empty {
+    padding: 120px 48px;
+  }
+
+  .my-places__empty-text {
+    font-size: 16px;
+  }
+}
+
+/* Large desktop (1440px+) */
+@media (min-width: 1440px) {
+  .my-places {
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .my-places__header {
+    padding: calc(env(safe-area-inset-top) + 32px) 64px 28px;
+    gap: 100px;
+  }
+
+  .my-places__title {
+    font-size: 22px;
+    line-height: 32px;
+  }
+
+  .my-places__back-button {
+    width: 40px;
+    height: 40px;
+  }
+
+  .my-places__back-button svg {
+    width: 14px;
+    height: 20px;
+  }
+
+  .my-places__tabs-container {
+    padding: 20px 64px 20px;
+  }
+
+  .my-places__tabs {
+    max-width: 360px;
+    padding: 7px 10px;
+  }
+
+  .my-places__tab {
+    font-size: 14px;
+    padding: 10px 32px;
+    line-height: 22px;
+  }
+
+  .my-places__content {
+    padding: 28px 64px;
+  }
+
+  .my-places__list {
+    gap: 24px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  }
+
+  .parking-card {
+    padding: 24px;
+    gap: 18px;
+    border-radius: 16px;
+  }
+
+  .parking-card__image-container {
+    height: 280px;
+    border-radius: 12px;
+  }
+
+  .parking-card__address {
+    font-size: 16px;
+    line-height: 30px;
+  }
+
+  .parking-card__status {
+    padding: 5px 12px 10px;
+    border-radius: 12px;
+    gap: 10px;
+  }
+
+  .parking-card__status-text {
+    font-size: 12px;
+    line-height: 20px;
+  }
+
+  .parking-card__button {
+    padding: 18px 24px;
+    font-size: 14px;
+    border-radius: 12px;
+    line-height: 22px;
+  }
+
+  .parking-card__button svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .my-places__footer {
+    padding: 28px 64px;
+  }
+
+  .my-places__add-button {
+    font-size: 15px;
+    padding: 14px 12px;
+    border-radius: 16px;
+    gap: 9px;
+  }
+
+  .my-places__add-button svg {
+    width: 14px;
+    height: 20px;
+  }
+
+  .my-places__empty {
+    padding: 140px 64px;
+  }
+
+  .my-places__empty-text {
+    font-size: 17px;
   }
 }
 </style>
