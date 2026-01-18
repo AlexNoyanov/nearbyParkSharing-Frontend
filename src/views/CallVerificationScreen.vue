@@ -423,17 +423,29 @@ const initializeCallCheck = async () => {
     const phoneToDisplay = response.prettyPhone || response.callToNumber
     const phoneToCall = response.rawPhone || response.callToNumber
     
+    console.log('[CallVerification] Processing response:')
+    console.log('[CallVerification] - phoneToDisplay:', phoneToDisplay)
+    console.log('[CallVerification] - phoneToCall:', phoneToCall)
+    console.log('[CallVerification] - response.prettyPhone:', response.prettyPhone)
+    console.log('[CallVerification] - response.rawPhone:', response.rawPhone)
+    console.log('[CallVerification] - response.callToNumber:', response.callToNumber)
+    
     if (!phoneToDisplay || !phoneToCall) {
+      console.error('[CallVerification] ERROR: Phone number is missing in response!')
+      console.error('[CallVerification] Response object:', response)
       throw new Error('Invalid response: missing phone number in API response')
     }
     
+    // Set phone numbers
     verificationPhone.value = phoneToDisplay
     rawPhone.value = phoneToCall
     hasInitialized.value = true // Mark as successfully initialized
-    console.log('[CallVerification] Call check initialized successfully:', {
-      prettyPhone: response.prettyPhone,
-      rawPhone: response.rawPhone
-    })
+    isInitializing.value = false // Mark initialization as complete
+    
+    console.log('[CallVerification] ✓ Call check initialized successfully')
+    console.log('[CallVerification] ✓ verificationPhone.value:', verificationPhone.value)
+    console.log('[CallVerification] ✓ rawPhone.value:', rawPhone.value)
+    console.log('[CallVerification] ✓ Button should now be enabled')
   } catch (err: any) {
     hasInitialized.value = false // Allow retry on error
     isInitializingInProgress.value = false // Reset guard on error
@@ -628,15 +640,43 @@ onBeforeUnmount(() => {
   }
 })
 
-const handleCall = () => {
-  // Открыть приложение для звонка
-  window.location.href = `tel:${rawPhone.value}`
+const handleCall = async () => {
+  // Проверяем, что номер доступен
+  if (!rawPhone.value || !verificationPhone.value) {
+    error.value = 'Номер для звонка еще не получен. Пожалуйста, подождите.'
+    return
+  }
   
-  // Отмечаем, что звонок был сделан
-  hasCalled.value = true
+  console.log('[CallVerification] ===== INITIATING PHONE CALL =====')
+  console.log('[CallVerification] Raw phone for call:', rawPhone.value)
+  console.log('[CallVerification] Display phone:', verificationPhone.value)
   
-  // Start polling for call status
-  startStatusPolling()
+  // Открыть приложение для звонка через tel: протокол
+  try {
+    const telUrl = `tel:${rawPhone.value}`
+    console.log('[CallVerification] Opening tel: URL:', telUrl)
+    
+    // Отмечаем, что звонок был сделан ПЕРЕД открытием, чтобы UI обновился
+    hasCalled.value = true
+    
+    // Небольшая задержка для обновления UI
+    await new Promise(resolve => setTimeout(resolve, 100))
+    
+    // Открыть приложение для звонка
+    window.location.href = telUrl
+    
+    console.log('[CallVerification] ✓ Tel: URL opened, starting status polling...')
+    
+    // Start polling for call status immediately after initiating call
+    // Polling will continue every 4 seconds until call is verified
+    startStatusPolling()
+    
+    console.log('[CallVerification] ✓ Status polling started')
+  } catch (err: any) {
+    console.error('[CallVerification] ✗ Error initiating call:', err)
+    error.value = 'Не удалось инициировать звонок. Попробуйте еще раз.'
+    hasCalled.value = false // Reset if error occurred
+  }
 }
 
 const startStatusPolling = () => {
@@ -645,24 +685,50 @@ const startStatusPolling = () => {
     clearInterval(statusPollInterval.value)
   }
 
-  const initData = getInitData()
-  if (!initData) {
-    // Require Telegram initData for real API
-    console.error('[CallVerification] No initData available - cannot verify call status')
-    error.value = 'Ошибка авторизации. Убедитесь, что вы открыли приложение через Telegram.'
+  // Use phone number from props or rawPhone (from API response)
+  // According to API: POST /auth/call-check/status requires phoneNumber
+  let phoneNumberForStatus = props.phone || ''
+  
+  // If rawPhone is available (from init response), use it instead
+  if (rawPhone.value) {
+    phoneNumberForStatus = rawPhone.value
+  }
+  
+  // Clean phone number (remove + and non-digits)
+  if (phoneNumberForStatus.startsWith('+')) {
+    phoneNumberForStatus = phoneNumberForStatus.substring(1)
+  }
+  phoneNumberForStatus = phoneNumberForStatus.replace(/\D/g, '')
+  
+  if (!phoneNumberForStatus || phoneNumberForStatus.length < 10) {
+    console.error('[CallVerification] No valid phone number available for status check')
+    error.value = 'Не удалось получить номер телефона для проверки статуса.'
     return
   }
+  
+  console.log('[CallVerification] Starting status polling with phone:', phoneNumberForStatus)
+  console.log('[CallVerification] Polling every 4 seconds (3-5 seconds as per API requirements)')
 
-  // Poll every 4 seconds (between 3-5 seconds as recommended)
+  // Poll every 4 seconds (between 3-5 seconds as recommended by API)
   statusPollInterval.value = window.setInterval(async () => {
     try {
-      const response = await authApi.checkCallStatus(initData)
+      console.log('[CallVerification] Polling call status...')
+      const response = await authApi.checkCallStatus(phoneNumberForStatus)
+      
+      console.log('[CallVerification] Status check response:', response)
+      console.log('[CallVerification] Response status:', response.status)
       
       if (response.status === 'OK' && response.token && response.user) {
-        // Call verified successfully
+        // Call verified successfully - user completed the call
+        console.log('[CallVerification] ✓ Call verified successfully!')
+        console.log('[CallVerification] User:', response.user)
+        console.log('[CallVerification] Token received:', response.token ? 'yes' : 'no')
+        
+        // Stop polling immediately
         if (statusPollInterval.value) {
           clearInterval(statusPollInterval.value)
           statusPollInterval.value = null
+          console.log('[CallVerification] Status polling stopped')
         }
 
         // Convert API user to app User format
@@ -672,37 +738,37 @@ const startStatusPolling = () => {
           phone: response.user.phone,
         }
 
-        // Store token if needed
+        // Store token
         if (response.token) {
           localStorage.setItem('auth_token', response.token)
+          console.log('[CallVerification] Token saved to localStorage')
+          console.log('[CallVerification] Token:', response.token.substring(0, 50) + '...')
         }
 
+        console.log('[CallVerification] Calling onSuccess callback to navigate to home screen')
+        // Call success callback - this should navigate to home screen
         props.onSuccess(user)
-      } else if (response.status === 'FAILED') {
-        // Call verification failed
-        if (statusPollInterval.value) {
-          clearInterval(statusPollInterval.value)
-          statusPollInterval.value = null
-        }
-        error.value = 'Звонок не подтвержден. Попробуйте еще раз.'
-        hasCalled.value = false
+      } else if (response.status === 'NEED_PHONE') {
+        // User hasn't called yet or call not verified - continue polling
+        console.log('[CallVerification] Status: NEED_PHONE - continuing to poll...')
+        // Keep polling, don't do anything
+      } else if (response.status === 'FAILED' || response.status === 'PENDING') {
+        // Call verification failed or still pending
+        // For FAILED, we might want to stop after some time, but for now continue polling
+        console.log('[CallVerification] Status:', response.status, '- continuing to poll...')
+        // Continue polling - API might return FAILED temporarily
       }
-      // If status is 'PENDING', continue polling
+      // Continue polling for any other status
     } catch (err) {
       console.error('[CallVerification] Error checking call status:', err)
-      // Continue polling on error, don't show error to user yet
+      // Continue polling on error - don't stop the polling unless user explicitly cancels
+      // Network errors might be temporary
     }
-  }, 4000) // Poll every 4 seconds
+  }, 4000) // Poll every 4 seconds (within 3-5 second range as per API requirements)
+  
+  console.log('[CallVerification] Status polling started')
 }
 
-const handleVerify = async () => {
-  // This is now handled by status polling
-  // But keep for manual verification if needed
-  if (!hasCalled.value) {
-    error.value = 'Сначала позвоните на указанный номер'
-    return
-  }
-}
 </script>
 
 <template>
@@ -763,7 +829,7 @@ const handleVerify = async () => {
         <!-- Phone Number Block -->
         <div class="call-verification-screen__phone-block">
           <p class="call-verification-screen__phone-label">Позвоните на номер:</p>
-          <p class="call-verification-screen__phone-number">{{ verificationPhone }}</p>
+          <p class="call-verification-screen__phone-number">{{ verificationPhone || (isInitializing ? 'Получение номера...' : 'Номер не получен') }}</p>
           <div class="call-verification-screen__phone-info">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" class="call-verification-screen__phone-info-icon">
               <path d="M8 0C3.58 0 0 3.58 0 8C0 12.42 3.58 16 8 16C12.42 16 16 12.42 16 8C16 3.58 12.42 0 8 0ZM8 14C4.69 14 2 11.31 2 8C2 4.69 4.69 2 8 2C11.31 2 14 4.69 14 8C14 11.31 11.31 14 8 14ZM8.5 4H7.5V5.5H8.5V4ZM8.5 6.5H7.5V11.5H8.5V6.5Z" fill="#2563EB"/>
@@ -800,22 +866,27 @@ const handleVerify = async () => {
           type="button"
           class="call-verification-screen__button call-verification-screen__button--primary"
           @click="handleCall"
-          :disabled="isLoading"
+          :disabled="isLoading || !verificationPhone || !rawPhone || isInitializing"
         >
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" class="call-verification-screen__button-icon">
             <path d="M15.4688 0.84375C15.8125 0.9375 16.0625 1.21875 16.0625 1.5625C16.0625 9.59375 9.5625 16.0625 1.5625 16.0625C1.1875 16.0625 0.90625 15.8438 0.8125 15.5L0.0625 12.25C0 11.9062 0.15625 11.5312 0.5 11.375L4 9.875C4.3125 9.75 4.65625 9.84375 4.875 10.0938L6.4375 12C8.875 10.8438 10.8438 8.84375 11.9688 6.46875L10.0625 4.90625C9.8125 4.6875 9.71875 4.34375 9.84375 4.03125L11.3438 0.53125C11.5 0.1875 11.875 0 12.2188 0.09375L15.4688 0.84375Z" fill="white"/>
           </svg>
-          <span>Позвонить {{ verificationPhone }}</span>
+          <span v-if="verificationPhone && rawPhone">Позвонить {{ verificationPhone }}</span>
+          <span v-else-if="isInitializing">Получение номера...</span>
+          <span v-else>Номер не получен</span>
         </button>
-        <button
+        <div
           v-else
-          type="button"
-          class="call-verification-screen__button call-verification-screen__button--primary"
-          @click="handleVerify"
-          :disabled="isLoading"
+          class="call-verification-screen__status"
         >
-          {{ isLoading ? 'Подтверждение...' : 'Подтвердить' }}
-        </button>
+          <div class="call-verification-screen__status-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20ZM11 16L17 10L15.59 8.59L11 13.17L8.41 10.59L7 12L11 16Z" fill="#22C55E"/>
+            </svg>
+          </div>
+          <p class="call-verification-screen__status-text">Ожидание подтверждения звонка...</p>
+          <p class="call-verification-screen__status-hint">Проверка статуса автоматически</p>
+        </div>
         <button
           type="button"
           class="call-verification-screen__button call-verification-screen__button--secondary"
@@ -1262,6 +1333,56 @@ const handleVerify = async () => {
     left: calc(50% - 5px);
     width: 20px;
   }
+}
+
+.call-verification-screen__status {
+  width: 100%;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: #F9FAFB;
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+
+.call-verification-screen__status-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #DBEAFE;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.call-verification-screen__status-icon svg {
+  width: 24px;
+  height: 24px;
+  display: block;
+}
+
+.call-verification-screen__status-text {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.5;
+  text-align: center;
+  color: #1f2937;
+}
+
+.call-verification-screen__status-hint {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+  color: #6B7280;
 }
 </style>
 

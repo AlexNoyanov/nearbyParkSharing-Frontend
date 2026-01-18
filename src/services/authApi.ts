@@ -27,7 +27,7 @@ export interface CallCheckInitResponse {
 }
 
 export interface CallCheckStatusResponse {
-  status: 'PENDING' | 'OK' | 'FAILED'
+  status: 'OK' | 'NEED_PHONE' | 'PENDING' | 'FAILED'
   token?: string
   user?: {
     id: string
@@ -547,9 +547,20 @@ export const authApi = {
   /**
    * Check call verification status
    * Should be polled every 3-5 seconds while user is making a call
+   * According to API: POST /auth/call-check/status
+   * Request: {"phoneNumber": "79991234567"}
+   * Response: Same as login (status: "OK" | "NEED_PHONE", token, user)
    */
-  async checkCallStatus(initData: string): Promise<CallCheckStatusResponse> {
-    // Use test mode if enabled
+  async checkCallStatus(phoneNumber: string): Promise<CallCheckStatusResponse> {
+    // ALWAYS USE REAL API FOR STATUS CHECK - Test mode is ignored for this endpoint
+    const API_URL = 'https://test-app-iuwehfvnlw23275vb.koalanearby.com/parkshare/api/v1/auth/call-check/status'
+    
+    console.log('[AuthAPI] ===== CHECK CALL STATUS =====')
+    console.log('[AuthAPI] Using REAL API for call status check')
+    console.log('[AuthAPI] API Endpoint:', API_URL)
+    console.log('[AuthAPI] Phone number:', phoneNumber)
+    
+    // Use test mode if enabled (for local testing only)
     if (testMode.isEnabled()) {
       console.log('[AuthAPI] Test mode: Using mock call status check')
       // Simulate API delay
@@ -569,20 +580,72 @@ export const authApi = {
       }
     }
 
+    // Clean phone number (remove + prefix and non-digits)
+    let cleanPhoneNumber = (phoneNumber && phoneNumber.trim()) ? phoneNumber.trim() : ''
+    if (cleanPhoneNumber.startsWith('+')) {
+      cleanPhoneNumber = cleanPhoneNumber.substring(1)
+    }
+    cleanPhoneNumber = cleanPhoneNumber.replace(/\D/g, '')
+    
+    if (!cleanPhoneNumber || cleanPhoneNumber.length < 10) {
+      throw new Error('phoneNumber is required and must be valid')
+    }
+    
+    console.log('[AuthAPI] Cleaned phone number:', cleanPhoneNumber)
+    console.log('[AuthAPI] Making POST request to:', API_URL)
+    console.log('[AuthAPI] Request body:', { phoneNumber: cleanPhoneNumber })
+
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/auth/call-check/status`, {
+      const response = await fetch(API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
-        body: JSON.stringify({ initData }),
+        body: JSON.stringify({ phoneNumber: cleanPhoneNumber }),
+        mode: 'cors',
+        credentials: 'omit',
+      })
+
+      console.log('[AuthAPI] Status check response:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: Object.fromEntries(response.headers.entries())
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        let errorText = ''
+        let errorJson: any = null
+        
+        try {
+          errorText = await response.text()
+          try {
+            errorJson = JSON.parse(errorText)
+          } catch {
+            // Not JSON
+          }
+        } catch (e) {
+          errorText = `Failed to read error response: ${e}`
+        }
+
+        console.error('[AuthAPI] Status check error response:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorText,
+          errorJson
+        })
+        
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
       }
 
-      return await response.json()
+      const result = await response.json()
+      console.log('[AuthAPI] Status check success:', result)
+      console.log('[AuthAPI] Response status:', result.status)
+      console.log('[AuthAPI] Response has token?', !!result.token)
+      console.log('[AuthAPI] Response has user?', !!result.user)
+      
+      return result
     } catch (error) {
       console.error('[AuthAPI] Check call status error:', error)
       throw error
