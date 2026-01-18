@@ -4,12 +4,14 @@ declare global {
     expand: () => void
     setBackgroundColor: (color: string) => void
     setHeaderColor: (color: string) => void
+    openLink?: (url: string, options?: { try_instant_view?: boolean }) => void
+    openTelegramLink?: (url: string) => void
   BackButton: {
-    show: () => void
-    hide: () => void
-    onClick: (handler: () => void) => void
-    offClick: (handler: () => void) => void
-  }
+      show: () => void
+      hide: () => void
+      onClick: (handler: () => void) => void
+      offClick: (handler: () => void) => void
+    }
     themeParams?: Record<string, string>
     initData?: string
     initDataUnsafe?: {

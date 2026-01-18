@@ -640,7 +640,7 @@ onBeforeUnmount(() => {
   }
 })
 
-const handleCall = async () => {
+const handleCall = () => {
   // Проверяем, что номер доступен
   if (!rawPhone.value || !verificationPhone.value) {
     error.value = 'Номер для звонка еще не получен. Пожалуйста, подождите.'
@@ -650,22 +650,102 @@ const handleCall = async () => {
   console.log('[CallVerification] ===== INITIATING PHONE CALL =====')
   console.log('[CallVerification] Raw phone for call:', rawPhone.value)
   console.log('[CallVerification] Display phone:', verificationPhone.value)
+  console.log('[CallVerification] Telegram WebApp available:', !!window.Telegram?.WebApp)
   
   // Открыть приложение для звонка через tel: протокол
   try {
     const telUrl = `tel:${rawPhone.value}`
     console.log('[CallVerification] Opening tel: URL:', telUrl)
     
-    // Отмечаем, что звонок был сделан ПЕРЕД открытием, чтобы UI обновился
+    let callInitiated = false
+    
+    // Метод 1: Использовать Telegram WebApp.openLink (если доступен)
+    if (window.Telegram?.WebApp?.openLink) {
+      try {
+        console.log('[CallVerification] Trying Telegram WebApp.openLink...')
+        window.Telegram.WebApp.openLink(telUrl)
+        callInitiated = true
+        console.log('[CallVerification] ✓ Call initiated via Telegram WebApp.openLink')
+      } catch (openLinkError) {
+        console.warn('[CallVerification] Telegram WebApp.openLink failed:', openLinkError)
+      }
+    }
+    
+    // Метод 2: Использовать window.open (работает в некоторых WebView)
+    if (!callInitiated) {
+      try {
+        console.log('[CallVerification] Trying window.open...')
+        const opened = window.open(telUrl, '_blank')
+        if (opened) {
+          callInitiated = true
+          console.log('[CallVerification] ✓ Call initiated via window.open')
+        } else {
+          console.warn('[CallVerification] window.open returned null (blocked)')
+        }
+      } catch (openError) {
+        console.warn('[CallVerification] window.open failed:', openError)
+      }
+    }
+    
+    // Метод 3: Создать видимую ссылку и кликнуть программно
+    if (!callInitiated) {
+      try {
+        console.log('[CallVerification] Trying programmatic click on <a> element...')
+        const link = document.createElement('a')
+        link.href = telUrl
+        link.style.position = 'fixed'
+        link.style.top = '50%'
+        link.style.left = '50%'
+        link.style.transform = 'translate(-50%, -50%)'
+        link.style.zIndex = '9999'
+        link.style.padding = '20px'
+        link.style.background = '#2563EB'
+        link.style.color = 'white'
+        link.style.textDecoration = 'none'
+        link.style.borderRadius = '8px'
+        link.textContent = 'Позвонить ' + verificationPhone.value
+        link.target = '_blank'
+        link.setAttribute('rel', 'noopener noreferrer')
+        
+        document.body.appendChild(link)
+        
+        // Кликнуть программно
+        link.click()
+        
+        // Удалить элемент через небольшую задержку
+        setTimeout(() => {
+          if (link.parentNode) {
+            document.body.removeChild(link)
+          }
+        }, 500)
+        
+        callInitiated = true
+        console.log('[CallVerification] ✓ Call initiated via programmatic click on <a>')
+      } catch (linkError) {
+        console.warn('[CallVerification] Programmatic click failed:', linkError)
+      }
+    }
+    
+    // Метод 4: Использовать window.location.href (последний fallback)
+    if (!callInitiated) {
+      try {
+        console.log('[CallVerification] Trying window.location.href (fallback)...')
+        window.location.href = telUrl
+        callInitiated = true
+        console.log('[CallVerification] ✓ Call initiated via window.location.href')
+      } catch (locationError) {
+        console.warn('[CallVerification] window.location.href failed:', locationError)
+      }
+    }
+    
+    if (!callInitiated) {
+      throw new Error('All methods to initiate call failed')
+    }
+    
+    // Отмечаем, что звонок был сделан только после успешной инициации
     hasCalled.value = true
     
-    // Небольшая задержка для обновления UI
-    await new Promise(resolve => setTimeout(resolve, 100))
-    
-    // Открыть приложение для звонка
-    window.location.href = telUrl
-    
-    console.log('[CallVerification] ✓ Tel: URL opened, starting status polling...')
+    console.log('[CallVerification] ✓ Phone call initiated successfully')
     
     // Start polling for call status immediately after initiating call
     // Polling will continue every 4 seconds until call is verified
@@ -674,7 +754,7 @@ const handleCall = async () => {
     console.log('[CallVerification] ✓ Status polling started')
   } catch (err: any) {
     console.error('[CallVerification] ✗ Error initiating call:', err)
-    error.value = 'Не удалось инициировать звонок. Попробуйте еще раз.'
+    error.value = 'Не удалось инициировать звонок. Попробуйте еще раз или позвоните вручную на номер ' + verificationPhone.value
     hasCalled.value = false // Reset if error occurred
   }
 }
