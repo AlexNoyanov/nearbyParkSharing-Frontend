@@ -110,9 +110,9 @@ const props = defineProps<{
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
   border-radius: 40px;
-  overflow: hidden;
   box-shadow: 0px 10px 10px -5px rgba(0, 0, 0, 0.04), 0px 20px 25px -5px rgba(0, 0, 0, 0.1);
   background: linear-gradient(135deg, #2563eb 0%, #9333ea 100%);
 }
