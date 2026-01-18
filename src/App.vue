@@ -263,7 +263,8 @@ const isNavVisible = computed(() =>
       stage.value !== 'client-cancelled-booking' &&
       stage.value !== 'early-booking' &&
       stage.value !== 'rental-completion' &&
-      stage.value !== 'booking-extended'
+      stage.value !== 'booking-extended' &&
+      stage.value !== 'my-places'
     )
 
 const ensureParkingSelected = () => {
