@@ -1714,6 +1714,11 @@ onMounted(async () => {
           @settings="() => {}"
         />
 
+        <MyPlacesScreen
+          v-else-if="stage === 'my-places'"
+          @back="goHome"
+        />
+
         <ChangePhoneScreen
           v-else-if="stage === 'change-phone'"
           :current-phone="currentUser?.phone"
