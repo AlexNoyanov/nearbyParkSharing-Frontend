@@ -47,6 +47,7 @@ const emit = defineEmits<{
   (e: 'open-chat'): void
   (e: 'open-owner-request', request: OwnerRequest): void
   (e: 'open-booking-details', booking: Booking): void
+  (e: 'open-my-places'): void
 }>()
 
 type QuickAction = {
@@ -1576,4 +1577,3 @@ const handleActivityClick = (entry: any) => {
   }
 }
 </style>
-
