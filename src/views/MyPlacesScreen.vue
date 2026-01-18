@@ -224,10 +224,11 @@ const goToImage = (placeId: string, index: number) => {
   flex-direction: column;
   min-height: 100vh;
   background-color: #ffffff;
-  max-width: 428px;
+  max-width: 600px;
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 /* Header */
