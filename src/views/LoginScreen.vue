@@ -178,7 +178,7 @@ const handleSubmit = async () => {
         user = {
           id: userId,
           name: userName,
-          phone: userPhone || loginResponse.user?.phone || '',
+          phone: userPhone || '',
         }
         
         console.log('[LoginScreen] Created user object from available data:', user)
