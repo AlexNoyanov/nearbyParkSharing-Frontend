@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import type { User } from '../services/mockAuth'
 import { authApi } from '../services/authApi'
 
@@ -20,6 +20,32 @@ const statusPollInterval = ref<number | null>(null)
 const isInitializing = ref(true)
 const hasInitialized = ref(false)
 const isInitializingInProgress = ref(false) // Guard to prevent concurrent calls
+
+// Computed property for tel: URL - works better in Telegram WebView than programmatic calls
+const telUrl = computed(() => {
+  if (!rawPhone.value || !rawPhone.value.trim()) {
+    return ''
+  }
+  
+  let phoneForCall = String(rawPhone.value).trim()
+  
+  // Format phone number for tel: protocol - must start with +
+  if (!phoneForCall.startsWith('+')) {
+    if (phoneForCall.startsWith('7') && phoneForCall.length === 11) {
+      phoneForCall = '+' + phoneForCall
+    } else {
+      phoneForCall = '+' + phoneForCall
+    }
+  }
+  
+  // Clean phone number (only digits and + at start)
+  const cleanPhone = phoneForCall.replace(/[^\d+]/g, '')
+  if (cleanPhone !== phoneForCall) {
+    phoneForCall = cleanPhone
+  }
+  
+  return `tel:${phoneForCall}`
+})
 
 // Watch for props changes in case they're set after mount (but not immediate to avoid duplicate calls)
 watch(() => props.phone, (newPhone, oldPhone) => {
@@ -419,26 +445,58 @@ const initializeCallCheck = async () => {
     console.log('[CallVerification] Response.rawPhone:', response?.rawPhone)
     console.log('[CallVerification] Response.callToNumber:', response?.callToNumber)
     
-    // Handle both response formats: {prettyPhone, rawPhone} and {callToNumber}
-    const phoneToDisplay = response.prettyPhone || response.callToNumber
-    const phoneToCall = response.rawPhone || response.callToNumber
+    // КРИТИЧЕСКИ ВАЖНО: Номер для звонка ДОЛЖЕН браться ТОЛЬКО из ответа бэкенда
+    // Приоритет: rawPhone > callToNumber (оба из ответа API)
+    let phoneToCall: string | null = null
+    let phoneToDisplay: string | null = null
     
-    console.log('[CallVerification] Processing response:')
-    console.log('[CallVerification] - phoneToDisplay:', phoneToDisplay)
-    console.log('[CallVerification] - phoneToCall:', phoneToCall)
+    // Сначала пытаемся получить rawPhone (основной номер для звонка)
+    if (response.rawPhone && String(response.rawPhone).trim()) {
+      phoneToCall = String(response.rawPhone).trim()
+      console.log('[CallVerification] ✓ Using rawPhone from API response:', phoneToCall)
+    } else if (response.callToNumber && String(response.callToNumber).trim()) {
+      // Если rawPhone нет, используем callToNumber из ответа
+      phoneToCall = String(response.callToNumber).trim()
+      console.log('[CallVerification] ✓ Using callToNumber from API response:', phoneToCall)
+    }
+    
+    // Получаем номер для отображения
+    if (response.prettyPhone && String(response.prettyPhone).trim()) {
+      phoneToDisplay = String(response.prettyPhone).trim()
+    } else if (phoneToCall) {
+      // Если prettyPhone нет, используем phoneToCall для отображения
+      phoneToDisplay = phoneToCall
+    }
+    
+    console.log('[CallVerification] ===== PROCESSING API RESPONSE =====')
+    console.log('[CallVerification] Response object:', response)
     console.log('[CallVerification] - response.prettyPhone:', response.prettyPhone)
     console.log('[CallVerification] - response.rawPhone:', response.rawPhone)
     console.log('[CallVerification] - response.callToNumber:', response.callToNumber)
+    console.log('[CallVerification] - Extracted phoneToCall (for tel:):', phoneToCall)
+    console.log('[CallVerification] - Extracted phoneToDisplay (for UI):', phoneToDisplay)
     
-    if (!phoneToDisplay || !phoneToCall) {
-      console.error('[CallVerification] ERROR: Phone number is missing in response!')
-      console.error('[CallVerification] Response object:', response)
-      throw new Error('Invalid response: missing phone number in API response')
+    // КРИТИЧЕСКАЯ ПРОВЕРКА: номер для звонка ОБЯЗАТЕЛЬНО должен быть из ответа бэкенда
+    if (!phoneToCall || phoneToCall.length === 0) {
+      console.error('[CallVerification] ✗ ERROR: Phone number for call is missing in API response!')
+      console.error('[CallVerification] Response object:', JSON.stringify(response, null, 2))
+      throw new Error('Invalid response: missing phone number (rawPhone or callToNumber) in API response')
     }
     
-    // Set phone numbers
-    verificationPhone.value = phoneToDisplay
+    if (!phoneToDisplay || phoneToDisplay.length === 0) {
+      console.error('[CallVerification] ✗ ERROR: Phone number for display is missing in API response!')
+      console.error('[CallVerification] Response object:', JSON.stringify(response, null, 2))
+      throw new Error('Invalid response: missing phone number for display in API response')
+    }
+    
+    // Сохраняем номера из ответа бэкенда
+    // ВАЖНО: rawPhone.value будет использоваться для window.location.href = 'tel:...'
     rawPhone.value = phoneToCall
+    verificationPhone.value = phoneToDisplay
+    
+    console.log('[CallVerification] ✓ Phone numbers saved from API response:')
+    console.log('[CallVerification] ✓ rawPhone.value (for tel:):', rawPhone.value)
+    console.log('[CallVerification] ✓ verificationPhone.value (for display):', verificationPhone.value)
     hasInitialized.value = true // Mark as successfully initialized
     isInitializing.value = false // Mark initialization as complete
     
@@ -642,123 +700,90 @@ onBeforeUnmount(() => {
   }
 })
 
-const handleCall = () => {
-  // Проверяем, что номер доступен
-  if (!rawPhone.value || !verificationPhone.value) {
+// Handle call link click - based on Telegram Web App example
+// Function to make a phone call - similar to the provided example
+const handleCallLinkClick = (e?: Event) => {
+  console.log('[CallVerification] ===== CALL LINK CLICKED =====')
+  console.log('[CallVerification] Tel URL:', telUrl.value)
+  console.log('[CallVerification] Checking if running in Telegram WebView:', !!window.Telegram?.WebApp)
+  
+  if (!telUrl.value || !rawPhone.value) {
+    console.error('[CallVerification] ✗ ERROR: Tel URL or phone number is missing!')
     error.value = 'Номер для звонка еще не получен. Пожалуйста, подождите.'
+    if (e) {
+      e.preventDefault()
+    }
     return
   }
   
-  console.log('[CallVerification] ===== INITIATING PHONE CALL =====')
-  console.log('[CallVerification] Raw phone for call:', rawPhone.value)
-  console.log('[CallVerification] Display phone:', verificationPhone.value)
-  console.log('[CallVerification] Telegram WebApp available:', !!window.Telegram?.WebApp)
+  const phoneToCall = telUrl.value
   
-  // Открыть приложение для звонка через tel: протокол
-  try {
-    const telUrl = `tel:${rawPhone.value}`
-    console.log('[CallVerification] Opening tel: URL:', telUrl)
-    
-    let callInitiated = false
-    
-    // Метод 1: Использовать Telegram WebApp.openLink (если доступен)
-    if (window.Telegram?.WebApp?.openLink) {
-      try {
-        console.log('[CallVerification] Trying Telegram WebApp.openLink...')
-        window.Telegram.WebApp.openLink(telUrl)
-        callInitiated = true
-        console.log('[CallVerification] ✓ Call initiated via Telegram WebApp.openLink')
-      } catch (openLinkError) {
-        console.warn('[CallVerification] Telegram WebApp.openLink failed:', openLinkError)
+  // PRIORITY 1: Use Telegram.WebApp.openLink() as in the example (official API)
+  // This is the method from the provided example
+  if (window.Telegram?.WebApp?.openLink) {
+    console.log('[CallVerification] Attempting method 1: Telegram.WebApp.openLink() (official API)')
+    try {
+      // Prevent default only if we're using Telegram API
+      if (e) {
+        e.preventDefault()
+        e.stopPropagation()
       }
+      window.Telegram.WebApp.openLink(phoneToCall)
+      console.log('[CallVerification] ✓ Telegram.WebApp.openLink() called successfully')
+      hasCalled.value = true
+      setTimeout(() => {
+        startStatusPolling()
+      }, 500)
+      return
+    } catch (err) {
+      console.warn('[CallVerification] Telegram.WebApp.openLink() failed:', err)
     }
-    
-    // Метод 2: Использовать window.open (работает в некоторых WebView)
-    if (!callInitiated) {
-      try {
-        console.log('[CallVerification] Trying window.open...')
-        const opened = window.open(telUrl, '_blank')
-        if (opened) {
-          callInitiated = true
-          console.log('[CallVerification] ✓ Call initiated via window.open')
-        } else {
-          console.warn('[CallVerification] window.open returned null (blocked)')
-        }
-      } catch (openError) {
-        console.warn('[CallVerification] window.open failed:', openError)
-      }
-    }
-    
-    // Метод 3: Создать видимую ссылку и кликнуть программно
-    if (!callInitiated) {
-      try {
-        console.log('[CallVerification] Trying programmatic click on <a> element...')
-        const link = document.createElement('a')
-        link.href = telUrl
-        link.style.position = 'fixed'
-        link.style.top = '50%'
-        link.style.left = '50%'
-        link.style.transform = 'translate(-50%, -50%)'
-        link.style.zIndex = '9999'
-        link.style.padding = '20px'
-        link.style.background = '#2563EB'
-        link.style.color = 'white'
-        link.style.textDecoration = 'none'
-        link.style.borderRadius = '8px'
-        link.textContent = 'Позвонить ' + verificationPhone.value
-        link.target = '_blank'
-        link.setAttribute('rel', 'noopener noreferrer')
-        
-        document.body.appendChild(link)
-        
-        // Кликнуть программно
-        link.click()
-        
-        // Удалить элемент через небольшую задержку
-        setTimeout(() => {
-          if (link.parentNode) {
-            document.body.removeChild(link)
-          }
-        }, 500)
-        
-        callInitiated = true
-        console.log('[CallVerification] ✓ Call initiated via programmatic click on <a>')
-      } catch (linkError) {
-        console.warn('[CallVerification] Programmatic click failed:', linkError)
-      }
-    }
-    
-    // Метод 4: Использовать window.location.href (последний fallback)
-    if (!callInitiated) {
-      try {
-        console.log('[CallVerification] Trying window.location.href (fallback)...')
-        window.location.href = telUrl
-        callInitiated = true
-        console.log('[CallVerification] ✓ Call initiated via window.location.href')
-      } catch (locationError) {
-        console.warn('[CallVerification] window.location.href failed:', locationError)
-      }
-    }
-    
-    if (!callInitiated) {
-      throw new Error('All methods to initiate call failed')
-    }
-    
-    // Отмечаем, что звонок был сделан только после успешной инициации
-    hasCalled.value = true
-    
-    console.log('[CallVerification] ✓ Phone call initiated successfully')
-    
-    // Start polling for call status immediately after initiating call
-    // Polling will continue every 4 seconds until call is verified
-    startStatusPolling()
-    
-    console.log('[CallVerification] ✓ Status polling started')
-  } catch (err: any) {
-    console.error('[CallVerification] ✗ Error initiating call:', err)
-    error.value = 'Не удалось инициировать звонок. Попробуйте еще раз или позвоните вручную на номер ' + verificationPhone.value
-    hasCalled.value = false // Reset if error occurred
   }
+  
+  // PRIORITY 2: Try window.open with _blank (as suggested in user's request)
+  console.log('[CallVerification] Attempting method 2: window.open(tel:, _blank)')
+  try {
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    window.open(phoneToCall, '_blank')
+    console.log('[CallVerification] ✓ window.open(_blank) called')
+    hasCalled.value = true
+    setTimeout(() => {
+      startStatusPolling()
+    }, 500)
+    return
+  } catch (err) {
+    console.warn('[CallVerification] window.open(_blank) failed:', err)
+  }
+  
+  // PRIORITY 3: Fallback for regular browser - window.location.href
+  console.log('[CallVerification] Attempting method 3: window.location.href (fallback)')
+  try {
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    window.location.href = phoneToCall
+    console.log('[CallVerification] ✓ window.location.href set')
+    hasCalled.value = true
+    setTimeout(() => {
+      startStatusPolling()
+    }, 500)
+    return
+  } catch (err) {
+    console.warn('[CallVerification] window.location.href failed:', err)
+  }
+  
+  // PRIORITY 4: If all programmatic methods fail, allow default link behavior
+  // Don't preventDefault - let the browser handle tel: link naturally
+  console.log('[CallVerification] All programmatic methods failed, allowing default link behavior')
+  hasCalled.value = true
+  setTimeout(() => {
+    startStatusPolling()
+  }, 500)
+  // Don't preventDefault here - let the link work naturally
 }
 
 const startStatusPolling = () => {
@@ -906,7 +931,25 @@ const startStatusPolling = () => {
           <p class="call-verification-screen__description">
             Для подтверждения номера телефона позвоните на указанный ниже номер
           </p>
+          <a
+            v-if="rawPhone && verificationPhone && telUrl"
+            :href="telUrl"
+            class="call-verification-screen__call-button"
+            @click="handleCallLinkClick"
+          >
+            📞 Позвонить {{ verificationPhone }}
+          </a>
+          <button
+            v-else
+            type="button"
+            class="call-verification-screen__call-button call-verification-screen__call-button--disabled"
+            disabled
+          >
+            <span v-if="isInitializing">Получение номера...</span>
+            <span v-else>📞 Позвонить (номер не получен)</span>
+          </button>
         </div>
+
 
         <!-- Phone Number Block -->
         <div class="call-verification-screen__phone-block">
@@ -943,18 +986,27 @@ const startStatusPolling = () => {
 
       <!-- Footer -->
       <div class="call-verification-screen__footer">
-        <button
-          v-if="!hasCalled"
-          type="button"
+        <a
+          v-if="!hasCalled && rawPhone && verificationPhone && telUrl"
+          :href="telUrl"
           class="call-verification-screen__button call-verification-screen__button--primary"
-          @click="handleCall"
-          :disabled="isLoading || !verificationPhone || !rawPhone || isInitializing"
+          @click="handleCallLinkClick"
         >
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" class="call-verification-screen__button-icon">
             <path d="M15.4688 0.84375C15.8125 0.9375 16.0625 1.21875 16.0625 1.5625C16.0625 9.59375 9.5625 16.0625 1.5625 16.0625C1.1875 16.0625 0.90625 15.8438 0.8125 15.5L0.0625 12.25C0 11.9062 0.15625 11.5312 0.5 11.375L4 9.875C4.3125 9.75 4.65625 9.84375 4.875 10.0938L6.4375 12C8.875 10.8438 10.8438 8.84375 11.9688 6.46875L10.0625 4.90625C9.8125 4.6875 9.71875 4.34375 9.84375 4.03125L11.3438 0.53125C11.5 0.1875 11.875 0 12.2188 0.09375L15.4688 0.84375Z" fill="white"/>
           </svg>
-          <span v-if="verificationPhone && rawPhone">Позвонить {{ verificationPhone }}</span>
-          <span v-else-if="isInitializing">Получение номера...</span>
+          <span>Позвонить {{ verificationPhone }}</span>
+        </a>
+        <button
+          v-else-if="!hasCalled"
+          type="button"
+          class="call-verification-screen__button call-verification-screen__button--primary"
+          disabled
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" class="call-verification-screen__button-icon">
+            <path d="M15.4688 0.84375C15.8125 0.9375 16.0625 1.21875 16.0625 1.5625C16.0625 9.59375 9.5625 16.0625 1.5625 16.0625C1.1875 16.0625 0.90625 15.8438 0.8125 15.5L0.0625 12.25C0 11.9062 0.15625 11.5312 0.5 11.375L4 9.875C4.3125 9.75 4.65625 9.84375 4.875 10.0938L6.4375 12C8.875 10.8438 10.8438 8.84375 11.9688 6.46875L10.0625 4.90625C9.8125 4.6875 9.71875 4.34375 9.84375 4.03125L11.3438 0.53125C11.5 0.1875 11.875 0 12.2188 0.09375L15.4688 0.84375Z" fill="white"/>
+          </svg>
+          <span v-if="isInitializing">Получение номера...</span>
           <span v-else>Номер не получен</span>
         </button>
         <div
@@ -1188,6 +1240,47 @@ const startStatusPolling = () => {
   color: #4b5563;
 }
 
+.call-verification-screen__call-button {
+  width: 100%;
+  padding: 30px 60px;
+  font-size: 24px;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 15px;
+  cursor: pointer;
+  font-family: Inter, sans-serif;
+  font-weight: 600;
+  margin-top: 24px;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+  display: inline-block;
+  text-align: center;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.call-verification-screen__call-button:hover {
+  background: #45a049;
+}
+
+.call-verification-screen__call-button:active:not(:disabled),
+a.call-verification-screen__call-button:active {
+  transform: translateY(1px);
+  background: #3d8b40;
+}
+
+.call-verification-screen__call-button:disabled,
+.call-verification-screen__call-button--disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: #9ca3af;
+}
+
+.call-verification-screen__call-button:disabled:hover,
+.call-verification-screen__call-button--disabled:hover {
+  background: #9ca3af;
+}
+
 .call-verification-screen__phone-block {
   width: 100%;
   padding: 20px;
@@ -1323,6 +1416,8 @@ const startStatusPolling = () => {
   align-items: center;
   justify-content: center;
   gap: 8px;
+  text-decoration: none;
+  box-sizing: border-box;
 }
 
 .call-verification-screen__button--primary {
@@ -1352,7 +1447,8 @@ const startStatusPolling = () => {
   flex-shrink: 0;
 }
 
-.call-verification-screen__button:active:not(:disabled) {
+.call-verification-screen__button:active:not(:disabled),
+a.call-verification-screen__button:active {
   transform: translateY(1px);
 }
 
