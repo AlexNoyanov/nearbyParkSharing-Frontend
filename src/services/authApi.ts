@@ -105,7 +105,26 @@ export const authApi = {
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        // Try to read error message from response
+        let errorMessage = `HTTP error! status: ${response.status}`
+        try {
+          const errorText = await response.text()
+          if (errorText) {
+            try {
+              const errorJson = JSON.parse(errorText)
+              errorMessage = errorJson.message || errorJson.error || errorMessage
+            } catch {
+              // If not JSON, use text as is
+              errorMessage = errorText || errorMessage
+            }
+          }
+        } catch (e) {
+          // If we can't read error, use default message
+          console.warn('[AuthAPI] Could not read error response:', e)
+        }
+        const error = new Error(errorMessage)
+        ;(error as any).status = response.status
+        throw error
       }
 
       return await response.json()

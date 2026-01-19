@@ -787,74 +787,140 @@ const handleCallLinkClick = (e?: Event) => {
 }
 
 const startStatusPolling = () => {
-  // Clear any existing interval
+  // Prevent multiple polling instances
   if (statusPollInterval.value) {
-    clearInterval(statusPollInterval.value)
+    console.log('[CallVerification] Polling already running, skipping...')
+    return
   }
 
-  // Use phone number from props or rawPhone (from API response)
-  // According to API: POST /auth/call-check/status requires phoneNumber
+  // IMPORTANT: Use user's phone number from props (the phone number user entered)
+  // NOT the call-to number (rawPhone) - API requires user's phone number
+  // According to API: POST /auth/call-check/status requires phoneNumber (user's phone)
   let phoneNumberForStatus = props.phone || ''
   
-  // If rawPhone is available (from init response), use it instead
-  if (rawPhone.value) {
-    phoneNumberForStatus = rawPhone.value
+  if (!phoneNumberForStatus || phoneNumberForStatus.trim().length === 0) {
+    console.error('[CallVerification] ✗ ERROR: No user phone number available for status check')
+    console.error('[CallVerification] props.phone:', props.phone)
+    error.value = 'Не удалось получить номер телефона пользователя для проверки статуса.'
+    return
   }
   
-  // Clean phone number (remove + and non-digits)
+  // Clean phone number (remove + prefix and non-digits)
+  // API expects phone number without + and only digits
   if (phoneNumberForStatus.startsWith('+')) {
     phoneNumberForStatus = phoneNumberForStatus.substring(1)
   }
   phoneNumberForStatus = phoneNumberForStatus.replace(/\D/g, '')
   
   if (!phoneNumberForStatus || phoneNumberForStatus.length < 10) {
-    console.error('[CallVerification] No valid phone number available for status check')
-    error.value = 'Не удалось получить номер телефона для проверки статуса.'
+    console.error('[CallVerification] ✗ ERROR: Invalid user phone number for status check')
+    console.error('[CallVerification] Original phone:', props.phone)
+    console.error('[CallVerification] Cleaned phone:', phoneNumberForStatus)
+    error.value = 'Неверный номер телефона пользователя для проверки статуса.'
     return
   }
   
-  console.log('[CallVerification] Starting status polling with phone:', phoneNumberForStatus)
+  console.log('[CallVerification] ===== STARTING STATUS POLLING =====')
+  console.log('[CallVerification] Using user phone number (from props):', phoneNumberForStatus)
+  console.log('[CallVerification] Original phone from props:', props.phone)
+  console.log('[CallVerification] API endpoint: POST /api/v1/auth/call-check/status')
+  console.log('[CallVerification] Request body: { phoneNumber: "' + phoneNumberForStatus + '" }')
   console.log('[CallVerification] Polling every 4 seconds (3-5 seconds as per API requirements)')
 
   // Poll every 4 seconds (between 3-5 seconds as recommended by API)
   statusPollInterval.value = window.setInterval(async () => {
     try {
-      console.log('[CallVerification] Polling call status...')
+      console.log('[CallVerification] ===== POLLING CALL STATUS =====')
+      console.log('[CallVerification] Phone number:', phoneNumberForStatus)
       const response = await authApi.checkCallStatus(phoneNumberForStatus)
       
-      console.log('[CallVerification] Status check response:', response)
+      console.log('[CallVerification] ===== STATUS CHECK RESPONSE =====')
+      console.log('[CallVerification] Full response:', JSON.stringify(response, null, 2))
       console.log('[CallVerification] Response status:', response.status)
+      console.log('[CallVerification] Has token:', !!response.token)
+      console.log('[CallVerification] Has user:', !!response.user)
       
-      if (response.status === 'OK' && response.token && response.user) {
+      // According to Swagger: status: "OK" means call verification successful
+      if (response.status === 'OK') {
         // Call verified successfully - user completed the call
-        console.log('[CallVerification] ✓ Call verified successfully!')
-        console.log('[CallVerification] User:', response.user)
-        console.log('[CallVerification] Token received:', response.token ? 'yes' : 'no')
+        console.log('[CallVerification] ===== CALL VERIFICATION SUCCESSFUL =====')
+        console.log('[CallVerification] Response status: OK')
+        console.log('[CallVerification] Has token:', !!response.token)
+        console.log('[CallVerification] Has user:', !!response.user)
+        console.log('[CallVerification] Full response:', JSON.stringify(response, null, 2))
         
         // Stop polling immediately
         if (statusPollInterval.value) {
           clearInterval(statusPollInterval.value)
           statusPollInterval.value = null
-          console.log('[CallVerification] Status polling stopped')
+          console.log('[CallVerification] ✓ Status polling stopped')
         }
 
-        // Convert API user to app User format
-        const user: User = {
-          id: response.user.id,
-          name: response.user.name,
-          phone: response.user.phone,
-        }
-
-        // Store token
+        // Store token if available
         if (response.token) {
           localStorage.setItem('auth_token', response.token)
-          console.log('[CallVerification] Token saved to localStorage')
-          console.log('[CallVerification] Token:', response.token.substring(0, 50) + '...')
+          console.log('[CallVerification] ✓ Token saved to localStorage')
+          console.log('[CallVerification] Token preview:', response.token.substring(0, 50) + '...')
+        } else {
+          console.warn('[CallVerification] ⚠ Warning: Status is OK but no token in response')
+          // Check if token already exists in localStorage
+          const existingToken = localStorage.getItem('auth_token')
+          if (existingToken) {
+            console.log('[CallVerification] ✓ Using existing token from localStorage')
+          }
         }
 
-        console.log('[CallVerification] Calling onSuccess callback to navigate to home screen')
-        // Call success callback - this should navigate to home screen
-        props.onSuccess(user)
+        // Create user object if available
+        let user: User | null = null
+        if (response.user) {
+          user = {
+            id: response.user.id,
+            name: response.user.name,
+            phone: response.user.phone,
+          }
+          console.log('[CallVerification] ✓ User object created:', user)
+        } else {
+          console.warn('[CallVerification] ⚠ Warning: Status is OK but no user data in response')
+          // Try to get user from API if we have token
+          if (response.token || localStorage.getItem('auth_token')) {
+            try {
+              const { authApi } = await import('../services/authApi')
+              const userData = await authApi.getCurrentUser()
+              user = {
+                id: userData.id,
+                name: userData.firstName || userData.username || 'User',
+                phone: userData.phoneNumber,
+              }
+              console.log('[CallVerification] ✓ User data fetched from /api/v1/users/me')
+            } catch (e) {
+              console.warn('[CallVerification] Could not fetch user data:', e)
+              // Create minimal user object from props
+              user = {
+                id: 'unknown',
+                name: props.name || 'User',
+                phone: props.phone || '',
+              }
+            }
+          } else {
+            // Create minimal user object from props
+            user = {
+              id: 'unknown',
+              name: props.name || 'User',
+              phone: props.phone || '',
+            }
+          }
+        }
+
+        if (user) {
+          console.log('[CallVerification] → Calling onSuccess callback to navigate to home screen')
+          console.log('[CallVerification] User for onSuccess:', user)
+          // Call success callback - this should navigate to home screen
+          props.onSuccess(user)
+        } else {
+          console.error('[CallVerification] ✗ ERROR: Cannot create user object, cannot proceed')
+          error.value = 'Ошибка при получении данных пользователя. Попробуйте еще раз.'
+        }
+        return // Exit polling loop
       } else if (response.status === 'NEED_PHONE') {
         // User hasn't called yet or call not verified - continue polling
         console.log('[CallVerification] Status: NEED_PHONE - continuing to poll...')

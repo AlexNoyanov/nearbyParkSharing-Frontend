@@ -291,11 +291,129 @@ const goToOnboarding2 = async () => {
   await checkFeatureAndNavigate('onboarding2', 'onboarding2')
 }
 
-const goToLoading = () => {
-  stage.value = 'loading'
-  window.setTimeout(async () => {
-    await checkFeatureAndNavigate('onboarding-final', 'onboarding-final')
-  }, 1600)
+const handleOnboarding2Start = async () => {
+  // Get Telegram initData - with fallback for dev mode
+  const getInitData = (): string => {
+    // Primary: Get from Telegram WebApp
+    if (window.Telegram?.WebApp?.initData) {
+      const initData = window.Telegram.WebApp.initData
+      if (initData && initData.trim().length > 0) {
+        return initData
+      }
+    }
+    
+    // Fallback: Use dev fallback only in dev mode
+    if (import.meta.env.DEV) {
+      console.warn('[App] DEV MODE: Using fallback initData for local testing')
+      return 'auth_date=1768317980&query_id=AAHdF6IQAAAAAN0XohDhrOrc&user=%7B%22id%22%3A111222333%2C%22first_name%22%3A%22Test%22%2C%22last_name%22%3A%22User%22%2C%22username%22%3A%22Alexander%22%2C%22language_code%22%3A%22en%22%7D&hash=77794dcb2dd54b35f40010f1dcede46444340c01530bfd17849802cd6295c527'
+    }
+    
+    return ''
+  }
+
+  try {
+    const initData = getInitData()
+    
+    if (!initData || initData.trim().length === 0) {
+      console.error('[App] No initData available')
+      // If no initData, go to registration
+      await goToRegistration()
+      return
+    }
+
+    console.log('[App] ===== ONBOARDING2 START - LOGIN ATTEMPT =====')
+    console.log('[App] Calling authApi.login() with initData from OnboardingScreen2')
+    console.log('[App] InitData length:', initData.length)
+    console.log('[App] InitData preview:', initData.substring(0, 100) + '...')
+    
+    const loginResponse = await authApi.login(initData)
+    
+    console.log('[App] ===== LOGIN RESPONSE RECEIVED =====')
+    console.log('[App] Full login response:', JSON.stringify(loginResponse, null, 2))
+    console.log('[App] Response status:', loginResponse.status)
+    console.log('[App] Has token:', !!loginResponse.token)
+    console.log('[App] Has user:', !!loginResponse.user)
+    
+    // If login successful (status === 'OK' with token)
+    // According to Swagger: status: "OK" means user is authenticated
+    if (loginResponse.status === 'OK') {
+      console.log('[App] ✓ Login successful - status is OK')
+      
+      // Save token if available
+      if (loginResponse.token) {
+        localStorage.setItem('auth_token', loginResponse.token)
+        console.log('[App] ✓ Token saved to localStorage')
+      } else {
+        console.warn('[App] ⚠ Warning: Login status is OK but no token received')
+      }
+      
+      // Create user object if available
+      if (loginResponse.user) {
+        currentUser.value = {
+          id: loginResponse.user.id,
+          name: loginResponse.user.name,
+          phone: loginResponse.user.phone,
+        }
+        userName.value = loginResponse.user.name
+        console.log('[App] ✓ User object created:', currentUser.value)
+      } else {
+        console.warn('[App] ⚠ Warning: Login status is OK but no user data received')
+        // Try to get user from API if we have token
+        if (loginResponse.token) {
+          try {
+            const userData = await authApi.getCurrentUser()
+            currentUser.value = {
+              id: userData.id,
+              name: userData.firstName || userData.username || 'User',
+              phone: userData.phoneNumber,
+            }
+            userName.value = userData.firstName || userData.username || 'User'
+            console.log('[App] ✓ User data fetched from /api/v1/users/me')
+          } catch (e) {
+            console.warn('[App] Could not fetch user data:', e)
+          }
+        }
+      }
+      
+      // Always go to home if status is OK (user is authenticated)
+      console.log('[App] → Navigating to home screen')
+      await goHome()
+      return
+    }
+    
+    // If status is NEED_PHONE, user needs to register/verify phone
+    if (loginResponse.status === 'NEED_PHONE') {
+      console.log('[App] → User needs phone verification, going to registration')
+      await goToRegistration()
+      return
+    }
+    
+    // Default: go to registration for any other status
+    console.warn('[App] ⚠ Unknown login status:', loginResponse.status, '- going to registration')
+    await goToRegistration()
+    
+  } catch (error: any) {
+    console.error('[App] ===== LOGIN ERROR =====')
+    console.error('[App] Error object:', error)
+    console.error('[App] Error message:', error?.message)
+    console.error('[App] Error status:', error?.status)
+    
+    // Check if it's a 401 error (invalid initData signature)
+    // The error message from authApi.login will contain status code
+    const errorMessage = error?.message || ''
+    const errorString = String(errorMessage).toLowerCase()
+    const errorStatus = error?.status || 0
+    
+    if (errorStatus === 401 || errorString.includes('401') || errorString.includes('невалидная initdata') || errorString.includes('invalid initdata')) {
+      console.log('[App] → 401 error - invalid initData signature, going to registration')
+      await goToRegistration()
+      return
+    }
+    
+    // For other errors, also go to registration
+    console.log('[App] → Error during login, going to registration')
+    await goToRegistration()
+  }
 }
 
 const goToLogin = async () => {
@@ -473,16 +591,18 @@ const handleAuthSuccess = (user: User) => {
     bookingsCount.value = 0
   }
 
-  // If it's a registration flow, show geo confirmation screen first
-  if (isRegistrationFlow.value) {
-    stage.value = 'geo-confirmation'
-  } else {
-    // For login, go directly to home
-    stage.value = 'loading'
-    window.setTimeout(() => {
-      goHome()
-    }, 1600)
-  }
+  // After successful call verification, always go to home
+  // (both for registration and login flows)
+  // Geo confirmation will be shown later if needed
+  console.log('[App] ===== AUTH SUCCESS - NAVIGATING TO HOME =====')
+  console.log('[App] User authenticated:', user)
+  console.log('[App] isRegistrationFlow:', isRegistrationFlow.value)
+  console.log('[App] → Going to home screen')
+  
+  stage.value = 'loading'
+  window.setTimeout(async () => {
+    await goHome()
+  }, 1600)
 }
 
 const goToGeoConfirmationContinue = async () => {
@@ -1464,7 +1584,7 @@ onMounted(async () => {
 
     <OnboardingScreen2
       v-else-if="stage === 'onboarding2'"
-      :on-next="goToLoading"
+      :on-next="handleOnboarding2Start"
       :on-login="goToLogin"
     />
 
