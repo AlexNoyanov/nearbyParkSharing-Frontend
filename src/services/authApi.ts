@@ -36,6 +36,15 @@ export interface CallCheckStatusResponse {
   }
 }
 
+export interface UserMeResponse {
+  id: string
+  telegramId: number
+  phoneNumber: string
+  firstName: string
+  lastName: string | null
+  username: string
+}
+
 /**
  * Parse Telegram initData query string to extract auth_date
  * @param initData - Telegram initData query string (e.g., "auth_date=1768317980&query_id=...")
@@ -676,6 +685,92 @@ export const authApi = {
       return result
     } catch (error) {
       console.error('[AuthAPI] Check call status error:', error)
+      throw error
+    }
+  },
+
+  /**
+   * Get current user data
+   * GET /api/v1/users/me
+   * Requires authentication token in Authorization header
+   */
+  async getCurrentUser(): Promise<UserMeResponse> {
+    const API_URL = `${API_BASE_URL}/api/v1/users/me`
+    
+    console.log('[AuthAPI] ===== GET CURRENT USER =====')
+    console.log('[AuthAPI] API Endpoint:', API_URL)
+    
+    // Get token from localStorage
+    const token = localStorage.getItem('auth_token')
+    if (!token) {
+      throw new Error('Authentication token not found. Please login first.')
+    }
+    
+    console.log('[AuthAPI] Token found:', token ? 'yes' : 'no')
+    
+    try {
+      const response = await fetch(API_URL, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        mode: 'cors',
+        credentials: 'omit',
+      })
+
+      console.log('[AuthAPI] Get current user response:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+      })
+
+      if (!response.ok) {
+        let errorText = ''
+        let errorJson: any = null
+        
+        try {
+          errorText = await response.text()
+          try {
+            errorJson = JSON.parse(errorText)
+          } catch {
+            // Not JSON
+          }
+        } catch (e) {
+          errorText = `Failed to read error response: ${e}`
+        }
+
+        console.error('[AuthAPI] Get current user error response:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorText,
+          errorJson
+        })
+        
+        if (response.status === 401) {
+          // Unauthorized - token is invalid or expired
+          localStorage.removeItem('auth_token')
+          throw new Error('Authentication failed. Please login again.')
+        }
+        
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
+      }
+
+      const result = await response.json()
+      console.log('[AuthAPI] Get current user success:', result)
+      console.log('[AuthAPI] User data:', {
+        id: result.id,
+        telegramId: result.telegramId,
+        phoneNumber: result.phoneNumber,
+        firstName: result.firstName,
+        lastName: result.lastName,
+        username: result.username
+      })
+      
+      return result
+    } catch (error) {
+      console.error('[AuthAPI] Get current user error:', error)
       throw error
     }
   },

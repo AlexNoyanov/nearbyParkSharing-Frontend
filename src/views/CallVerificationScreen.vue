@@ -931,23 +931,6 @@ const startStatusPolling = () => {
           <p class="call-verification-screen__description">
             Для подтверждения номера телефона позвоните на указанный ниже номер
           </p>
-          <a
-            v-if="rawPhone && verificationPhone && telUrl"
-            :href="telUrl"
-            class="call-verification-screen__call-button"
-            @click="handleCallLinkClick"
-          >
-            📞 Позвонить {{ verificationPhone }}
-          </a>
-          <button
-            v-else
-            type="button"
-            class="call-verification-screen__call-button call-verification-screen__call-button--disabled"
-            disabled
-          >
-            <span v-if="isInitializing">Получение номера...</span>
-            <span v-else>📞 Позвонить (номер не получен)</span>
-          </button>
         </div>
 
 
@@ -1195,6 +1178,12 @@ const startStatusPolling = () => {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+}
+
+/* Hide any call buttons inside content block - button should only be in footer */
+.call-verification-screen__content .call-verification-screen__call-button,
+.call-verification-screen__content .call-button {
+  display: none !important;
 }
 
 .call-verification-screen__icon-wrapper {

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import type { ParkingSpot } from '../data/parkings'
 import { featuredParkings } from '../data/parkings'
 import type { User } from '../services/mockAuth'
+import { authApi } from '../services/authApi'
 import searchIconUrl from '../assets/icons/icon-search.svg?url'
 
 type Booking = {
@@ -48,6 +49,66 @@ const emit = defineEmits<{
   (e: 'open-owner-request', request: OwnerRequest): void
   (e: 'open-booking-details', booking: Booking): void
 }>()
+
+// User data from API
+const userFromApi = ref<{ username: string } | null>(null)
+const isLoadingUser = ref(false)
+
+// Load current user data from API using JWT token from login
+const loadCurrentUser = async () => {
+  // Check if we have a token (JWT token from login method)
+  const token = localStorage.getItem('auth_token')
+  if (!token) {
+    console.log('[HomeScreen] No auth token found, skipping user data load')
+    return
+  }
+
+  console.log('[HomeScreen] Token found, loading user data from API /api/v1/users/me...')
+  isLoadingUser.value = true
+  
+  try {
+    // Always try to load from API - it has the most up-to-date data
+    const userData = await authApi.getCurrentUser()
+    userFromApi.value = { username: userData.username }
+    console.log('[HomeScreen] ✓ User data loaded from API')
+    console.log('[HomeScreen] User username:', userData.username)
+    console.log('[HomeScreen] User firstName:', userData.firstName)
+    console.log('[HomeScreen] User ID:', userData.id)
+    console.log('[HomeScreen] User phoneNumber:', userData.phoneNumber)
+    console.log('[HomeScreen] User telegramId:', userData.telegramId)
+  } catch (error: any) {
+    console.error('[HomeScreen] Failed to load user data from API:', error)
+    
+    // Handle 401 - user is not authorized
+    if (error?.message?.includes('401') || error?.message?.includes('Authentication failed')) {
+      console.warn('[HomeScreen] User is not authorized (401), token may be invalid or expired')
+      // Token will be removed by authApi.getCurrentUser() on 401
+      // Use fallback data from props
+    }
+    // Don't show error to user, just use fallback from props
+  } finally {
+    isLoadingUser.value = false
+  }
+}
+
+// Load user data on mount
+onMounted(() => {
+  loadCurrentUser()
+})
+
+// Computed property for user name - priority: API username > props > userName prop
+const displayUserName = computed(() => {
+  if (userFromApi.value?.username) {
+    return userFromApi.value.username
+  }
+  if (props.currentUser?.name) {
+    return props.currentUser.name
+  }
+  if (props.userName) {
+    return props.userName
+  }
+  return 'Пользователь'
+})
 
 type QuickAction = {
   id: 'search' | 'share'
@@ -327,7 +388,7 @@ const handleActivityClick = (entry: any) => {
   <section class="home">
     <div class="home__greeting">
       <div class="home__greeting-content">
-        <h1 class="home__greeting-title">{{ props.currentUser ? 'Привет, ' + (props.currentUser.name || props.userName || 'Пользователь') : 'Привет!' }}</h1>
+        <h1 class="home__greeting-title">{{ props.currentUser || userFromApi ? 'Привет, ' + displayUserName : 'Привет!' }}</h1>
         <p class="home__greeting-subtitle">Что планируете сегодня?</p>
       </div>
       <div class="home__greeting-icon">
