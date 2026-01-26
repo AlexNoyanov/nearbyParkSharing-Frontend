@@ -135,7 +135,7 @@ const goToImage = (placeId: string, index: number) => {
             <!-- Carousel dots -->
             <div class="parking-card__dots">
               <button
-                v-for="(image, index) in place.images"
+                v-for="(_, index) in place.images"
                 :key="index"
                 type="button"
                 class="parking-card__dot"

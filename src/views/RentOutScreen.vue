@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { mediaApi, type MediaUploadResponse } from '../services/mediaApi'
 import { spotsApi, type CreateSpotRequest } from '../services/spotsApi'
 
@@ -8,6 +8,7 @@ const props = defineProps<{
   selectedLatitude?: number
   selectedLongitude?: number
   currentUser?: { phone?: string } | null
+  spotId?: string // ID места для редактирования
 }>()
 
 const emit = defineEmits<{
@@ -17,8 +18,11 @@ const emit = defineEmits<{
   (e: 'update-address', address: string): void
 }>()
 
-// Address
+// Address and coordinates
 const address = ref(props.selectedAddress || '')
+const spotLatitude = ref<number | null>(props.selectedLatitude || null)
+const spotLongitude = ref<number | null>(props.selectedLongitude || null)
+
 const showMapSelector = () => {
   emit('open-map')
 }
@@ -75,6 +79,11 @@ const handlePhotoUpload = async (event: Event) => {
   // Add files to photos array with upload status
   for (let i = 0; i < files.length; i++) {
     const file = files[i]
+    if (!file) {
+      console.warn(`[RentOut] File at index ${i} is undefined, skipping`)
+      continue
+    }
+    
     console.log(`[RentOut] Processing file ${i + 1}/${files.length}:`, file.name)
     
     // Check if file is an image
@@ -167,6 +176,10 @@ const handlePhotoUpload = async (event: Event) => {
 
 const removePhoto = (index: number) => {
   const photo = photos.value[index]
+  if (!photo) {
+    console.warn(`[RentOut] Photo at index ${index} not found`)
+    return
+  }
   
   // Clean up preview URL if exists
   if (photo.url && photo.url.startsWith('blob:')) {
@@ -289,6 +302,143 @@ const toggleFeature = (id: string) => {
 
 // Description
 const description = ref('')
+const accessGuide = ref('')
+
+// Loading state for edit mode
+const isLoadingSpot = ref(false)
+
+// Load spot data if editing
+onMounted(async () => {
+  if (props.spotId) {
+    await loadSpotData()
+  }
+})
+
+const loadSpotData = async () => {
+  if (!props.spotId) return
+  
+  isLoadingSpot.value = true
+  try {
+    console.log('[RentOut] Loading spot data for editing, ID:', props.spotId)
+    const spot = await spotsApi.getSpotById(props.spotId)
+    console.log('[RentOut] Spot data loaded:', spot)
+    
+    // Fill address and coordinates
+    if (spot.address) {
+      address.value = spot.address
+    }
+    if (spot.latitude) {
+      spotLatitude.value = spot.latitude
+    }
+    if (spot.longitude) {
+      spotLongitude.value = spot.longitude
+    }
+    
+    // Fill vehicle types
+    vehicleTypes.value.forEach(type => {
+      type.selected = false
+    })
+    if (spot.vehicleType === 'VAN') {
+      const vanType = vehicleTypes.value.find(t => t.id === 'van')
+      if (vanType) vanType.selected = true
+    } else if (spot.vehicleType === 'TRUCK') {
+      const truckType = vehicleTypes.value.find(t => t.id === 'truck')
+      if (truckType) truckType.selected = true
+    } else {
+      const carType = vehicleTypes.value.find(t => t.id === 'car')
+      if (carType) carType.selected = true
+    }
+    
+    // Fill prices
+    if (spot.pricePerHour !== undefined) {
+      pricePerHour.value = spot.pricePerHour.toString()
+    }
+    if (spot.pricePerDay !== undefined) {
+      pricePerDay.value = spot.pricePerDay.toString()
+    }
+    if (spot.pricePerMonth !== undefined) {
+      pricePerMonth.value = spot.pricePerMonth.toString()
+    }
+    
+    // Fill rent type toggles
+    hourlyRent.value = spot.hourlyEnabled ?? true
+    dailyRent.value = spot.dailyEnabled ?? true
+    monthlyRent.value = spot.monthlyEnabled ?? false
+    
+    // Fill schedule
+    permanentAvailability.value = spot.scheduleType === 'ALWAYS'
+    if (spot.availableFrom) {
+      fromTime.value = spot.availableFrom
+    }
+    if (spot.availableTo) {
+      toTime.value = spot.availableTo
+    }
+    if (spot.availableDays && spot.availableDays.length > 0) {
+      const dayMap: Record<number, string> = {
+        1: 'Пн', 2: 'Вт', 3: 'Ср', 4: 'Чт', 5: 'Пт', 6: 'Сб', 7: 'Вс'
+      }
+      selectedDays.value = spot.availableDays.map(d => dayMap[d] || '').filter(Boolean)
+    }
+    if (spot.availableDateFrom) {
+      fromDate.value = spot.availableDateFrom
+    }
+    if (spot.availableDateTo) {
+      toDate.value = spot.availableDateTo
+    }
+    
+    // Fill features
+    if (spot.covered) {
+      const coveredFeature = features.value.find(f => f.id === 'covered')
+      if (coveredFeature) coveredFeature.selected = true
+    }
+    if (spot.hasSecurity) {
+      const securityFeature = features.value.find(f => f.id === 'security')
+      if (securityFeature) securityFeature.selected = true
+    }
+    if (spot.hasEvCharging) {
+      const evFeature = features.value.find(f => f.id === 'ev')
+      if (evFeature) evFeature.selected = true
+    }
+    if (spot.inYard) {
+      const courtyardFeature = features.value.find(f => f.id === 'courtyard')
+      if (courtyardFeature) courtyardFeature.selected = true
+    }
+    if (spot.privateTerritory) {
+      const privateFeature = features.value.find(f => f.id === 'private')
+      if (privateFeature) privateFeature.selected = true
+    }
+    
+    // Fill description and access guide
+    if (spot.description) {
+      description.value = spot.description
+    }
+    if (spot.accessGuide) {
+      accessGuide.value = spot.accessGuide
+    }
+    
+    // Load photos
+    if (spot.photos && spot.photos.length > 0) {
+      photos.value = spot.photos.map(url => ({
+        url,
+        uploadResponse: {
+          id: '',
+          url,
+          fileName: url.split('/').pop() || 'photo.jpg',
+          contentType: 'image/jpeg',
+          size: 0,
+        },
+        isUploading: false,
+      }))
+      uploadedPhotoUrls.value = [...spot.photos]
+    }
+    
+    console.log('[RentOut] ✓ Spot data loaded and form filled')
+  } catch (error) {
+    console.error('[RentOut] ✗ Failed to load spot data:', error)
+  } finally {
+    isLoadingSpot.value = false
+  }
+}
 
 // Submit
 const isSubmitting = ref(false)
@@ -356,10 +506,11 @@ const handleSubmit = async () => {
     const scheduleType: 'ALWAYS' | 'SCHEDULED' = permanentAvailability.value ? 'ALWAYS' : 'SCHEDULED'
     
     // Build request data
+    // Coordinates will be set below from spotLatitude/spotLongitude or props
     const requestData: CreateSpotRequest = {
       address: address.value.trim(),
-      latitude: props.selectedLatitude || 0, // TODO: Get from map selection
-      longitude: props.selectedLongitude || 0, // TODO: Get from map selection
+      latitude: 0, // Will be set below
+      longitude: 0, // Will be set below
       vehicleType,
       scheduleType,
       hourlyEnabled: hourlyRent.value,
@@ -427,10 +578,10 @@ const handleSubmit = async () => {
     
     // Add description and access guide
     if (description.value.trim()) {
-      // Split description into description and accessGuide if needed
-      // For now, put everything in description
       requestData.description = description.value.trim()
-      requestData.accessGuide = description.value.trim() // Or extract access guide separately
+    }
+    if (accessGuide.value.trim()) {
+      requestData.accessGuide = accessGuide.value.trim()
     }
     
     console.log('[RentOut] Request data:', JSON.stringify(requestData, null, 2))
@@ -440,9 +591,14 @@ const handleSubmit = async () => {
       throw new Error('Адрес обязателен для заполнения')
     }
     
-    // Validate coordinates - if not provided, use default Moscow coordinates as fallback
-    // But ideally user should select location on map
-    if (!requestData.latitude || !requestData.longitude || requestData.latitude === 0 || requestData.longitude === 0) {
+    // Use coordinates from loaded spot data, props, or fallback
+    if (spotLatitude.value && spotLongitude.value) {
+      requestData.latitude = spotLatitude.value
+      requestData.longitude = spotLongitude.value
+    } else if (props.selectedLatitude && props.selectedLongitude) {
+      requestData.latitude = props.selectedLatitude
+      requestData.longitude = props.selectedLongitude
+    } else if (!requestData.latitude || !requestData.longitude || requestData.latitude === 0 || requestData.longitude === 0) {
       console.warn('[RentOut] Coordinates not provided, using default Moscow coordinates')
       // Use Moscow center as fallback (user should ideally select on map)
       requestData.latitude = 55.7558
@@ -460,10 +616,18 @@ const handleSubmit = async () => {
       throw new Error('Укажите стоимость помесячной аренды')
     }
     
-    // Submit to API
-    const response = await spotsApi.createSpot(requestData)
-    
-    console.log('[RentOut] ✓ Spot created successfully:', response)
+    // Submit to API (create or update)
+    let response
+    if (props.spotId) {
+      // Update existing spot
+      console.log('[RentOut] Updating spot:', props.spotId)
+      response = await spotsApi.updateSpot(props.spotId, requestData)
+      console.log('[RentOut] ✓ Spot updated successfully:', response)
+    } else {
+      // Create new spot
+      response = await spotsApi.createSpot(requestData)
+      console.log('[RentOut] ✓ Spot created successfully:', response)
+    }
     
     // Success - emit success event
     isSubmitting.value = false

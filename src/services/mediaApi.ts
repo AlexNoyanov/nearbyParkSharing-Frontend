@@ -164,9 +164,14 @@ export const mediaApi = {
     const results: MediaUploadResponse[] = []
     
     for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      if (!file) {
+        console.warn(`[MediaAPI] File at index ${i} is undefined, skipping`)
+        continue
+      }
       try {
         console.log(`[MediaAPI] Uploading file ${i + 1}/${files.length}`)
-        const result = await this.uploadMedia(files[i])
+        const result = await this.uploadMedia(file)
         results.push(result)
       } catch (error) {
         console.error(`[MediaAPI] Failed to upload file ${i + 1}:`, error)

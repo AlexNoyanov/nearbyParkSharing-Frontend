@@ -34,6 +34,7 @@ import FullScreenMapScreen from './views/FullScreenMapScreen.vue'
 import type { User } from './services/mockAuth'
 import { featureToggles, type FeatureKey } from './services/featureToggles'
 import { authApi } from './services/authApi'
+import { spotsApi } from './services/spotsApi'
 import chatIconSvg from './assets/icons/bottom-nav-chat.svg?raw'
 import homeIconSvg from './assets/icons/bottom-nav-home.svg?raw'
 import plusIconSvg from './assets/icons/bottom-nav-plus.svg?raw'
@@ -57,7 +58,6 @@ import BookingExtendedScreen from './views/BookingExtendedScreen.vue'
 import ProfileScreen from './views/ProfileScreen.vue'
 import ChangePhoneScreen from './views/ChangePhoneScreen.vue'
 import HelpSupportScreen from './views/HelpSupportScreen.vue'
-import MyPlacesScreen from './views/MyPlacesScreen.vue'
 
 type Stage =
   | 'onboarding1'
@@ -675,6 +675,29 @@ const openSearchFromHome = async () => {
 }
 
 const openRentFromHome = async () => {
+  editingSpotId.value = null // Clear editing state
+  selectedAddress.value = ''
+  selectedLatitude.value = null
+  selectedLongitude.value = null
+  await checkFeatureAndNavigate('rent', 'rent')
+  if (stage.value === 'rent') {
+    navSelection.value = 'rent'
+  }
+}
+
+const editingSpotId = ref<string | null>(null)
+
+const handleEditSpot = async (spotId: string) => {
+  editingSpotId.value = spotId
+  // Load spot data to get coordinates
+  try {
+    const spot = await spotsApi.getSpotById(spotId)
+    selectedAddress.value = spot.address || ''
+    selectedLatitude.value = spot.latitude
+    selectedLongitude.value = spot.longitude
+  } catch (error) {
+    console.error('[App] Failed to load spot for editing:', error)
+  }
   await checkFeatureAndNavigate('rent', 'rent')
   if (stage.value === 'rent') {
     navSelection.value = 'rent'
@@ -693,9 +716,6 @@ const openHistoryFromHome = async () => {
   }
 }
 
-const handleOpenMyPlaces = () => {
-  stage.value = 'my-places'
-}
 
 const handleOpenChat = async () => {
   await checkFeatureAndNavigate('chat-list', 'chat')
@@ -1811,8 +1831,9 @@ onMounted(async () => {
           :selected-latitude="selectedLatitude || undefined"
           :selected-longitude="selectedLongitude || undefined"
           :current-user="currentUser"
+          :spot-id="editingSpotId || undefined"
           @back="goHome"
-          @success="() => stage = 'rent-success'"
+          @success="() => { editingSpotId = null; stage = 'rent-success' }"
           @open-map="() => stage = 'map-selection'"
           @update-address="(addr) => { selectedAddress = addr }"
         />
@@ -1844,10 +1865,6 @@ onMounted(async () => {
           @settings="() => {}"
         />
 
-        <MyPlacesScreen
-          v-else-if="stage === 'my-places'"
-          @back="goHome"
-        />
 
         <ChangePhoneScreen
           v-else-if="stage === 'change-phone'"
@@ -1882,6 +1899,8 @@ onMounted(async () => {
           v-else-if="stage === 'my-spots'"
           @back="goHome"
           @open-spot="(spot) => { console.log('Spot clicked:', spot); /* TODO: Navigate to spot details */ }"
+          @edit-spot="handleEditSpot"
+          @add-spot="openRentFromHome"
         />
 
         <BookingDetailsScreen
