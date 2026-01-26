@@ -1656,4 +1656,3 @@ const handleActivityClick = (entry: any) => {
   }
 }
 </style>
-

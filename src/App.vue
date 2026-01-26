@@ -57,6 +57,7 @@ import BookingExtendedScreen from './views/BookingExtendedScreen.vue'
 import ProfileScreen from './views/ProfileScreen.vue'
 import ChangePhoneScreen from './views/ChangePhoneScreen.vue'
 import HelpSupportScreen from './views/HelpSupportScreen.vue'
+import MyPlacesScreen from './views/MyPlacesScreen.vue'
 
 type Stage =
   | 'onboarding1'
@@ -690,6 +691,10 @@ const openHistoryFromHome = async () => {
       navSelection.value = 'profile'
     }
   }
+}
+
+const handleOpenMyPlaces = () => {
+  stage.value = 'my-places'
 }
 
 const handleOpenChat = async () => {
@@ -1837,6 +1842,11 @@ onMounted(async () => {
           @login-another="goToLogin"
           @logout="handleLogout"
           @settings="() => {}"
+        />
+
+        <MyPlacesScreen
+          v-else-if="stage === 'my-places'"
+          @back="goHome"
         />
 
         <ChangePhoneScreen
