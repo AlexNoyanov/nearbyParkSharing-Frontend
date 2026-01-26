@@ -5,11 +5,13 @@ import 'leaflet/dist/leaflet.css'
 
 const emit = defineEmits<{
   (e: 'back'): void
-  (e: 'select-address', address: string): void
+  (e: 'select-address', address: string, latitude?: number, longitude?: number): void
 }>()
 
 const searchQuery = ref('')
 const selectedAddress = ref('')
+const selectedLatitude = ref<number | null>(null)
+const selectedLongitude = ref<number | null>(null)
 const mapContainer = ref<HTMLElement | null>(null)
 let map: L.Map | null = null
 let marker: L.Marker | null = null
@@ -47,6 +49,10 @@ onMounted(() => {
       // Add click handler to map
       map.on('click', async (e: L.LeafletMouseEvent) => {
         const { lat, lng } = e.latlng
+        
+        // Save coordinates
+        selectedLatitude.value = lat
+        selectedLongitude.value = lng
         
         // Remove existing marker
         if (marker) {
@@ -194,7 +200,7 @@ const getCurrentLocation = () => {
 
 const handleSelectAddress = () => {
   if (selectedAddress.value || searchQuery.value) {
-    emit('select-address', selectedAddress.value || searchQuery.value)
+    emit('select-address', selectedAddress.value || searchQuery.value, selectedLatitude.value || undefined, selectedLongitude.value || undefined)
   }
 }
 </script>

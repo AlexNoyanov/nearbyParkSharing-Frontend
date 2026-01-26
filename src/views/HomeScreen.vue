@@ -48,6 +48,7 @@ const emit = defineEmits<{
   (e: 'open-chat'): void
   (e: 'open-owner-request', request: OwnerRequest): void
   (e: 'open-booking-details', booking: Booking): void
+  (e: 'open-my-spots'): void
 }>()
 
 // User data from API
@@ -352,6 +353,24 @@ const formatOwnerRequestPeriod = (request: OwnerRequest): string => {
   }
 }
 
+const handleStatCardClick = (stat: StatCard) => {
+  if (stat.id === 'bookings' && props.currentUser && props.bookingsCount && props.bookingsCount > 0) {
+    emit('open-history')
+  } else if (stat.id === 'spaces' && props.currentUser) {
+    // Open my spots list
+    emit('open-my-spots')
+  }
+}
+
+const getStatCardStyle = (stat: StatCard) => {
+  if (stat.id === 'bookings' && props.currentUser && props.bookingsCount && props.bookingsCount > 0) {
+    return { cursor: 'pointer' }
+  } else if (stat.id === 'spaces' && props.currentUser) {
+    return { cursor: 'pointer' }
+  }
+  return {}
+}
+
 const handleActivityClick = (entry: any) => {
   // Если это заявка на ваше место (есть renterName в booking)
   if (entry.booking && 'renterName' in entry.booking) {
@@ -426,8 +445,8 @@ const handleActivityClick = (entry: any) => {
         :key="stat.id"
         class="home__stat-card"
         :class="`home__stat-card--${stat.tone}`"
-        @click="stat.id === 'bookings' && props.currentUser && props.bookingsCount && props.bookingsCount > 0 ? emit('open-history') : null"
-        :style="stat.id === 'bookings' && props.currentUser && props.bookingsCount && props.bookingsCount > 0 ? { cursor: 'pointer' } : {}"
+        @click="handleStatCardClick(stat)"
+        :style="getStatCardStyle(stat)"
       >
         <div class="home__stat-header">
           <div class="home__stat-icon">

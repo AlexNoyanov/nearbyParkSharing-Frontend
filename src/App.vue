@@ -48,6 +48,7 @@ import BookingListScreen from './views/BookingListScreen.vue'
 import BookingDetailsScreen from './views/BookingDetailsScreen.vue'
 import BookingErrorScreen from './views/BookingErrorScreen.vue'
 import ClientCancelledBookingScreen from './views/ClientCancelledBookingScreen.vue'
+import MySpotsScreen from './views/MySpotsScreen.vue'
 import CancelBookingModal from './components/CancelBookingModal.vue'
 import ExtendBookingModal from './components/ExtendBookingModal.vue'
 import EarlyBookingScreen from './views/EarlyBookingScreen.vue'
@@ -102,6 +103,7 @@ type Stage =
   | 'rental-completion'
   | 'booking-extended'
   | 'help-support'
+  | 'my-spots'
 
 const stage = ref<Stage>('onboarding1')
 const selectedParking = ref<ParkingSpot | null>(null)
@@ -115,6 +117,8 @@ const authPhone = ref<string>('')
 const authName = ref<string>('')
 const isRegistrationFlow = ref<boolean>(false)
 const selectedAddress = ref<string>('')
+const selectedLatitude = ref<number | null>(null)
+const selectedLongitude = ref<number | null>(null)
 const selectedLocation = ref<{ id: string; address: string; lat: number; lng: number; priceHour: string; priceDay: string; priceMonth: string; availability: 'hourly' | 'daily' | 'monthly' } | null>(null)
 const fullScreenMapLocation = ref<{ lat: number; lng: number; address?: string } | null>(null)
 const userCar = ref<{ id: string; brand: string; model: string; number: string; region?: string; color?: string; isForeign: boolean } | null>(null)
@@ -261,7 +265,8 @@ const isNavVisible = computed(() =>
       stage.value !== 'client-cancelled-booking' &&
       stage.value !== 'early-booking' &&
       stage.value !== 'rental-completion' &&
-      stage.value !== 'booking-extended'
+      stage.value !== 'booking-extended' &&
+      stage.value !== 'my-spots'
     )
 
 const ensureParkingSelected = () => {
@@ -1662,6 +1667,7 @@ onMounted(async () => {
           @open-chat="handleOpenChat"
           @open-owner-request="handleOpenOwnerRequestFromHome"
           @open-booking-details="handleOpenBookingDetails"
+          @open-my-spots="() => stage = 'my-spots'"
         />
 
         <SearchScreen
@@ -1797,6 +1803,8 @@ onMounted(async () => {
         <RentOutScreen
           v-else-if="stage === 'rent'"
           :selected-address="selectedAddress"
+          :selected-latitude="selectedLatitude || undefined"
+          :selected-longitude="selectedLongitude || undefined"
           :current-user="currentUser"
           @back="goHome"
           @success="() => stage = 'rent-success'"
@@ -1807,7 +1815,12 @@ onMounted(async () => {
         <MapSelectionScreen
           v-else-if="stage === 'map-selection'"
           @back="() => stage = 'rent'"
-          @select-address="(addr) => { selectedAddress = addr; stage = 'rent'; }"
+          @select-address="(addr, lat, lng) => { 
+            selectedAddress = addr; 
+            selectedLatitude = lat || null; 
+            selectedLongitude = lng || null; 
+            stage = 'rent'; 
+          }"
         />
 
         <ProfileScreen
@@ -1853,6 +1866,12 @@ onMounted(async () => {
           @back="goHome"
           @open-booking="handleOpenBookingFromList"
           @open-chat="handleOpenChatFromList"
+        />
+
+        <MySpotsScreen
+          v-else-if="stage === 'my-spots'"
+          @back="goHome"
+          @open-spot="(spot) => { console.log('Spot clicked:', spot); /* TODO: Navigate to spot details */ }"
         />
 
         <BookingDetailsScreen

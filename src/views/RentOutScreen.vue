@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { mediaApi, type MediaUploadResponse } from '../services/mediaApi'
+import { spotsApi, type CreateSpotRequest } from '../services/spotsApi'
 
 const props = defineProps<{
   selectedAddress?: string
+  selectedLatitude?: number
+  selectedLongitude?: number
   currentUser?: { phone?: string } | null
 }>()
 
@@ -305,19 +308,182 @@ const canSubmit = computed(() => {
 
 const showError = ref(false)
 
-const handleSubmit = () => {
+const handleSubmit = async () => {
   if (!canSubmit.value) return
+  
+  // Check if photos are still uploading
+  const hasUploadingPhotos = photos.value.some(p => p.isUploading)
+  if (hasUploadingPhotos) {
+    console.warn('[RentOut] Cannot submit: photos are still uploading')
+    // Could show a message to user here
+    return
+  }
+  
+  // Check if there are photos with errors
+  const hasPhotoErrors = photos.value.some(p => p.error)
+  if (hasPhotoErrors) {
+    console.warn('[RentOut] Cannot submit: some photos have errors')
+    // Could show a message to user here
+    return
+  }
+  
   isSubmitting.value = true
-  // TODO: Implement submission logic
-  setTimeout(() => {
+  
+  try {
+    console.log('[RentOut] ===== SUBMITTING SPOT =====')
+    
+    // Get uploaded photo URLs (only successfully uploaded ones)
+    const photoUrls = photos.value
+      .filter(p => p.uploadResponse?.url && !p.error)
+      .map(p => p.uploadResponse!.url)
+    
+    console.log('[RentOut] Photo URLs:', photoUrls)
+    
+    // Determine vehicle type (use first selected type, default to CAR)
+    const selectedVehicleType = vehicleTypes.value.find(t => t.selected)
+    const vehicleType: 'CAR' | 'VAN' | 'TRUCK' = 
+      selectedVehicleType?.id === 'van' ? 'VAN' :
+      selectedVehicleType?.id === 'truck' ? 'TRUCK' :
+      'CAR'
+    
+    // Convert selected days to numbers (Пн=1, Вт=2, etc.)
+    const dayMap: Record<string, number> = {
+      'Пн': 1, 'Вт': 2, 'Ср': 3, 'Чт': 4, 'Пт': 5, 'Сб': 6, 'Вс': 7
+    }
+    const availableDays = selectedDays.value.map(day => dayMap[day] || 0).filter(d => d > 0)
+    
+    // Determine schedule type
+    const scheduleType: 'ALWAYS' | 'SCHEDULED' = permanentAvailability.value ? 'ALWAYS' : 'SCHEDULED'
+    
+    // Build request data
+    const requestData: CreateSpotRequest = {
+      address: address.value.trim(),
+      latitude: props.selectedLatitude || 0, // TODO: Get from map selection
+      longitude: props.selectedLongitude || 0, // TODO: Get from map selection
+      vehicleType,
+      scheduleType,
+      hourlyEnabled: hourlyRent.value,
+      dailyEnabled: dailyRent.value,
+      monthlyEnabled: monthlyRent.value,
+      photos: photoUrls,
+    }
+    
+    // Add prices (only if enabled)
+    if (hourlyRent.value && pricePerHour.value) {
+      requestData.pricePerHour = parseFloat(pricePerHour.value) || 0
+    }
+    if (dailyRent.value && pricePerDay.value) {
+      requestData.pricePerDay = parseFloat(pricePerDay.value) || 0
+    }
+    if (monthlyRent.value && pricePerMonth.value) {
+      requestData.pricePerMonth = parseFloat(pricePerMonth.value) || 0
+    }
+    
+    // Add schedule details if not always available
+    if (scheduleType === 'SCHEDULED') {
+      if (fromTime.value) {
+        requestData.availableFrom = fromTime.value
+      }
+      if (toTime.value) {
+        requestData.availableTo = toTime.value
+      }
+      if (availableDays.length > 0) {
+        requestData.availableDays = availableDays
+      }
+      if (fromDate.value) {
+        requestData.availableDateFrom = fromDate.value
+      }
+      if (toDate.value && !(hourlyRent.value && !dailyRent.value && !monthlyRent.value)) {
+        // Only add toDate if not hourly-only (hourly uses single date)
+        requestData.availableDateTo = toDate.value
+      }
+    }
+    
+    // Add features
+    const coveredFeature = features.value.find(f => f.id === 'covered')
+    if (coveredFeature?.selected) {
+      requestData.covered = true
+    }
+    
+    const securityFeature = features.value.find(f => f.id === 'security')
+    if (securityFeature?.selected) {
+      requestData.hasSecurity = true
+    }
+    
+    const evFeature = features.value.find(f => f.id === 'ev')
+    if (evFeature?.selected) {
+      requestData.hasEvCharging = true
+    }
+    
+    const courtyardFeature = features.value.find(f => f.id === 'courtyard')
+    if (courtyardFeature?.selected) {
+      requestData.inYard = true
+    }
+    
+    const privateFeature = features.value.find(f => f.id === 'private')
+    if (privateFeature?.selected) {
+      requestData.privateTerritory = true
+    }
+    
+    // Add description and access guide
+    if (description.value.trim()) {
+      // Split description into description and accessGuide if needed
+      // For now, put everything in description
+      requestData.description = description.value.trim()
+      requestData.accessGuide = description.value.trim() // Or extract access guide separately
+    }
+    
+    console.log('[RentOut] Request data:', JSON.stringify(requestData, null, 2))
+    
+    // Validate required fields
+    if (!requestData.address || requestData.address.trim() === '') {
+      throw new Error('Адрес обязателен для заполнения')
+    }
+    
+    // Validate coordinates - if not provided, use default Moscow coordinates as fallback
+    // But ideally user should select location on map
+    if (!requestData.latitude || !requestData.longitude || requestData.latitude === 0 || requestData.longitude === 0) {
+      console.warn('[RentOut] Coordinates not provided, using default Moscow coordinates')
+      // Use Moscow center as fallback (user should ideally select on map)
+      requestData.latitude = 55.7558
+      requestData.longitude = 37.6173
+    }
+    
+    // Validate that at least one price is set for enabled rent types
+    if (hourlyRent.value && (!pricePerHour.value || parseFloat(pricePerHour.value) <= 0)) {
+      throw new Error('Укажите стоимость почасовой аренды')
+    }
+    if (dailyRent.value && (!pricePerDay.value || parseFloat(pricePerDay.value) <= 0)) {
+      throw new Error('Укажите стоимость посуточной аренды')
+    }
+    if (monthlyRent.value && (!pricePerMonth.value || parseFloat(pricePerMonth.value) <= 0)) {
+      throw new Error('Укажите стоимость помесячной аренды')
+    }
+    
+    // Submit to API
+    const response = await spotsApi.createSpot(requestData)
+    
+    console.log('[RentOut] ✓ Spot created successfully:', response)
+    
+    // Success - emit success event
     isSubmitting.value = false
+    emit('success')
+    
+  } catch (error: any) {
+    console.error('[RentOut] ✗ Submit failed:', error)
+    isSubmitting.value = false
+    
     // Check if test user (79991234567) - show error screen
     if (props.currentUser?.phone === '+79991234567' || props.currentUser?.phone === '79991234567') {
       showError.value = true
+    } else if (error?.message) {
+      // Show error message
+      showError.value = true
+      console.error('[RentOut] Error message:', error.message)
     } else {
-      emit('success')
+      showError.value = true
     }
-  }, 2000)
+  }
 }
 
 const handleRetry = () => {
