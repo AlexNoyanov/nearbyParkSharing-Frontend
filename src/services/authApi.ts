@@ -36,6 +36,15 @@ export interface CallCheckStatusResponse {
   }
 }
 
+export interface UserMeResponse {
+  id: string
+  telegramId: number
+  phoneNumber: string
+  firstName: string
+  lastName: string | null
+  username: string
+}
+
 /**
  * Parse Telegram initData query string to extract auth_date
  * @param initData - Telegram initData query string (e.g., "auth_date=1768317980&query_id=...")
@@ -96,7 +105,26 @@ export const authApi = {
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        // Try to read error message from response
+        let errorMessage = `HTTP error! status: ${response.status}`
+        try {
+          const errorText = await response.text()
+          if (errorText) {
+            try {
+              const errorJson = JSON.parse(errorText)
+              errorMessage = errorJson.message || errorJson.error || errorMessage
+            } catch {
+              // If not JSON, use text as is
+              errorMessage = errorText || errorMessage
+            }
+          }
+        } catch (e) {
+          // If we can't read error, use default message
+          console.warn('[AuthAPI] Could not read error response:', e)
+        }
+        const error = new Error(errorMessage)
+        ;(error as any).status = response.status
+        throw error
       }
 
       return await response.json()
@@ -134,14 +162,23 @@ export const authApi = {
     }
 
     // Use user-provided phone number (but never send empty)
-    // Remove + prefix and all non-digits - API expects format like "79991234567" (from api.md)
+    // Process phone number - ensure it's in the correct format for API
     let finalPhoneNumber = (phoneNumber && phoneNumber.trim()) ? phoneNumber.trim() : ''
-    // Remove + if present, keep only digits
+    
+    // Remove all non-digit characters first
+    finalPhoneNumber = finalPhoneNumber.replace(/\D/g, '')
+    
+    // Ensure Russian phone number format: must start with 7 and be 11 digits
+    // If number doesn't start with 7, add it (for Russian numbers)
+    if (finalPhoneNumber.length === 10 && !finalPhoneNumber.startsWith('7')) {
+      // If 10 digits without 7 prefix, add 7 for Russian format
+      finalPhoneNumber = '7' + finalPhoneNumber
+    }
+    
+    // Remove + if present (shouldn't be after replace, but just in case)
     if (finalPhoneNumber.startsWith('+')) {
       finalPhoneNumber = finalPhoneNumber.substring(1)
     }
-    // Remove all non-digit characters to ensure clean format
-    finalPhoneNumber = finalPhoneNumber.replace(/\D/g, '')
     
     // Use user-provided name (required by server)
     const finalName = (name && name.trim()) ? name.trim() : ''
@@ -177,16 +214,13 @@ export const authApi = {
     console.log('[AuthAPI] - auth_date:', authDate)
 
     try {
-      // Prepare request body with auth_date extracted from initData and name
-      const requestBody: { initData: string; phoneNumber: string; name: string; auth_date?: number } = {
+      // Prepare request body according to Swagger API documentation
+      // PhoneRequest schema: initData, phoneNumber, name (all required)
+      // Do NOT send auth_date separately - it's already in initData
+      const requestBody: { initData: string; phoneNumber: string; name: string } = {
         initData: finalInitData,
         phoneNumber: finalPhoneNumber,
         name: finalName
-      }
-      
-      // Add auth_date if successfully parsed
-      if (authDate !== null) {
-        requestBody.auth_date = authDate
       }
       
       // Double-check the body is not empty
@@ -414,14 +448,36 @@ export const authApi = {
           const errorMessage = errorJson.detail || errorJson.message || errorText
           const validationErrors = errorJson.errors || errorJson.validation_errors || errorJson.error_details
           
-          // Include validation errors if present
-          let fullErrorMessage = `Server error (${response.status}): ${errorMessage}`
-          if (validationErrors) {
-            fullErrorMessage += `\nValidation errors: ${JSON.stringify(validationErrors, null, 2)}`
+          // Log full error JSON for debugging
+          console.error('[AuthAPI] Full error JSON:', JSON.stringify(errorJson, null, 2))
+          
+          // Check for specific error types
+          const isSmsProviderError = errorMessage.includes('SMS Provider Error') || 
+                                     errorMessage.includes('SMS Provider') ||
+                                     errorMessage.includes('sms provider')
+          
+          let fullErrorMessage = errorMessage
+          
+          if (isSmsProviderError) {
+            // SMS Provider Error - backend issue with SMS service
+            fullErrorMessage = `SMS Provider Error: Не удалось создать номер для звонка. Это проблема на стороне сервера. Попробуйте позже или обратитесь в поддержку.`
+            if (errorJson.error_details || errorJson.details) {
+              console.error('[AuthAPI] SMS Provider Error details:', errorJson.error_details || errorJson.details)
+            }
+          } else if (validationErrors) {
+            // Validation errors
+            fullErrorMessage = `Server error (${response.status}): ${errorMessage}\nValidation errors: ${JSON.stringify(validationErrors, null, 2)}`
+          } else {
+            // Generic server error
+            fullErrorMessage = `Server error (${response.status}): ${errorMessage}`
           }
           
           throw new Error(fullErrorMessage)
         } else {
+          // Not JSON, check if text contains SMS Provider Error
+          if (errorText && (errorText.includes('SMS Provider Error') || errorText.includes('SMS Provider'))) {
+            throw new Error(`SMS Provider Error: Не удалось создать номер для звонка. Это проблема на стороне сервера. Попробуйте позже или обратитесь в поддержку.`)
+          }
           throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
         }
       }
@@ -648,6 +704,92 @@ export const authApi = {
       return result
     } catch (error) {
       console.error('[AuthAPI] Check call status error:', error)
+      throw error
+    }
+  },
+
+  /**
+   * Get current user data
+   * GET /api/v1/users/me
+   * Requires authentication token in Authorization header
+   */
+  async getCurrentUser(): Promise<UserMeResponse> {
+    const API_URL = `${API_BASE_URL}/api/v1/users/me`
+    
+    console.log('[AuthAPI] ===== GET CURRENT USER =====')
+    console.log('[AuthAPI] API Endpoint:', API_URL)
+    
+    // Get token from localStorage
+    const token = localStorage.getItem('auth_token')
+    if (!token) {
+      throw new Error('Authentication token not found. Please login first.')
+    }
+    
+    console.log('[AuthAPI] Token found:', token ? 'yes' : 'no')
+    
+    try {
+      const response = await fetch(API_URL, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        mode: 'cors',
+        credentials: 'omit',
+      })
+
+      console.log('[AuthAPI] Get current user response:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+      })
+
+      if (!response.ok) {
+        let errorText = ''
+        let errorJson: any = null
+        
+        try {
+          errorText = await response.text()
+          try {
+            errorJson = JSON.parse(errorText)
+          } catch {
+            // Not JSON
+          }
+        } catch (e) {
+          errorText = `Failed to read error response: ${e}`
+        }
+
+        console.error('[AuthAPI] Get current user error response:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorText,
+          errorJson
+        })
+        
+        if (response.status === 401) {
+          // Unauthorized - token is invalid or expired
+          localStorage.removeItem('auth_token')
+          throw new Error('Authentication failed. Please login again.')
+        }
+        
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
+      }
+
+      const result = await response.json()
+      console.log('[AuthAPI] Get current user success:', result)
+      console.log('[AuthAPI] User data:', {
+        id: result.id,
+        telegramId: result.telegramId,
+        phoneNumber: result.phoneNumber,
+        firstName: result.firstName,
+        lastName: result.lastName,
+        username: result.username
+      })
+      
+      return result
+    } catch (error) {
+      console.error('[AuthAPI] Get current user error:', error)
       throw error
     }
   },

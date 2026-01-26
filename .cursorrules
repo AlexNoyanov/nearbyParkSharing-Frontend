@@ -1,0 +1,89 @@
+# Cursor AI Rules for ParkSharing Frontend
+
+## КРИТИЧЕСКИ ВАЖНО: Метод initCallCheck для получения номера для регистрации
+
+### ⚠️ ЗАПРЕЩЕНО ИЗМЕНЯТЬ БЕЗ ЯВНОГО ЗАПРОСА ПОЛЬЗОВАТЕЛЯ
+
+**Файл:** `src/services/authApi.ts`  
+**Метод:** `async initCallCheck(initData: string, phoneNumber: string, name?: string)`
+
+### Обязательно прочитать перед изменениями:
+- `project/AUTH_INIT_METHOD_RULES.md` - полная документация логики
+- `project/PROTECTED_AREAS.md` - список защищенных зон
+
+### Критические правила для метода initCallCheck:
+
+1. **API URL ЖЕСТКО ЗАКОДИРОВАН:**
+   ```typescript
+   const API_URL = 'https://test-app-iuwehfvnlw23275vb.koalanearby.com/parkshare/api/v1/auth/call-check/init'
+   ```
+   - НЕ использовать переменные окружения
+   - НЕ использовать прокси
+   - НЕ использовать условную логику для выбора URL
+
+2. **Формат Request Body (СОГЛАСНО SWAGGER):**
+   ```typescript
+   {
+     initData: string,    // обязательное
+     phoneNumber: string, // обязательное
+     name: string         // обязательное
+   }
+   ```
+   - ❌ НЕ добавлять поле `auth_date` (оно уже в initData)
+   - ❌ НЕ добавлять любые другие поля
+   - Схема: https://test-app-iuwehfvnlw23275vb.koalanearby.com/parkshare/swagger-ui/index.html#/Авторизация/initCall
+
+3. **Обработка phoneNumber:**
+   - Удалить все нецифровые символы
+   - Если 10 цифр без префикса `7`, добавить `7` для российского формата
+   - Убрать `+` если присутствует
+   - Итоговый формат: только цифры (например: `79991234567`)
+
+4. **Обработка initData:**
+   - Использовать реальный `initData` из Telegram Mini App
+   - Fallback использовать ТОЛЬКО если `import.meta.env.DEV === true` И `initData` пустой
+
+5. **Fetch Options:**
+   ```typescript
+   {
+     method: 'POST',
+     headers: {
+       'Content-Type': 'application/json',
+       'Accept': 'application/json',
+     },
+     body: JSON.stringify(requestBody),
+     mode: 'cors',
+     credentials: 'omit',
+   }
+   ```
+
+### Перед ЛЮБЫМ изменением метода initCallCheck:
+
+1. ✅ ОБЯЗАТЕЛЬНО прочитать `project/AUTH_INIT_METHOD_RULES.md`
+2. ✅ ОБЯЗАТЕЛЬНО спросить разрешение у пользователя
+3. ✅ Объяснить ПОЧЕМУ нужно изменить
+4. ✅ Показать ЧТО ИМЕННО будет изменено
+5. ✅ Убедиться, что изменение не сломает существующую логику
+
+### Разрешено БЕЗ согласования:
+- Добавление console.log для отладки
+- Улучшение сообщений об ошибках (текст)
+- Комментарии в коде
+
+### Запрещено БЕЗ согласования:
+- Изменение URL API endpoint
+- Изменение формата request body
+- Изменение логики обработки initData/phoneNumber/name
+- Использование переменных окружения для URL
+- Использование прокси или условной логики для API
+
+## Другие защищенные зоны
+
+См. `project/PROTECTED_AREAS.md` для полного списка защищенных файлов и зон.
+
+## Общие правила
+
+- Всегда спрашивать разрешение перед изменением защищенных зон
+- Объяснять причины изменений
+- Тестировать изменения на зависимых компонентах
+- Документировать значимые изменения

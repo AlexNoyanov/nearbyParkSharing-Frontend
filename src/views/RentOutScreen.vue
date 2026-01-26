@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { mediaApi, type MediaUploadResponse } from '../services/mediaApi'
+import { spotsApi, type CreateSpotRequest } from '../services/spotsApi'
 
 const props = defineProps<{
   selectedAddress?: string
+  selectedLatitude?: number
+  selectedLongitude?: number
   currentUser?: { phone?: string } | null
 }>()
 
@@ -47,12 +51,137 @@ const toggleVehicleType = (id: string) => {
 }
 
 // Photos
-const photos = ref<File[]>([])
-const handlePhotoUpload = (event: Event) => {
+interface PhotoItem {
+  file?: File
+  url?: string
+  uploadResponse?: MediaUploadResponse
+  isUploading?: boolean
+  error?: string
+}
+
+const photos = ref<PhotoItem[]>([])
+const uploadedPhotoUrls = ref<string[]>([])
+
+const handlePhotoUpload = async (event: Event) => {
   const input = event.target as HTMLInputElement
-  if (input.files) {
-    photos.value = Array.from(input.files)
+  if (!input.files || input.files.length === 0) {
+    return
   }
+  
+  const files = Array.from(input.files)
+  console.log('[RentOut] ===== PHOTO UPLOAD STARTED =====')
+  console.log('[RentOut] Files selected:', files.length)
+  
+  // Add files to photos array with upload status
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]
+    console.log(`[RentOut] Processing file ${i + 1}/${files.length}:`, file.name)
+    
+    // Check if file is an image
+    if (!file.type.startsWith('image/')) {
+      console.warn('[RentOut] Skipping non-image file:', file.name, 'type:', file.type)
+      continue
+    }
+    
+    // Create preview URL for immediate display
+    const previewUrl = URL.createObjectURL(file)
+    console.log('[RentOut] Created preview URL:', previewUrl)
+    
+    // Create photo item with initial state
+    const photoItem: PhotoItem = {
+      file,
+      url: previewUrl,
+      isUploading: true,
+    }
+    
+    // Add to photos array
+    const photoIndex = photos.value.length
+    photos.value.push(photoItem)
+    console.log('[RentOut] Photo added to array at index:', photoIndex)
+    console.log('[RentOut] Current photos count:', photos.value.length)
+    
+    // Upload to server (async, don't await to allow parallel uploads)
+    ;(async () => {
+      try {
+        console.log(`[RentOut] Starting upload for photo ${photoIndex}:`, file.name)
+        const uploadResponse = await mediaApi.uploadMedia(file)
+        
+        console.log(`[RentOut] ✓ Upload successful for photo ${photoIndex}`)
+        console.log('[RentOut] Upload response:', uploadResponse)
+        
+        // Update photo item in array (use index to ensure we update the right item)
+        const currentPhoto = photos.value[photoIndex]
+        if (currentPhoto) {
+          // Clean up preview URL before replacing
+          if (currentPhoto.url && currentPhoto.url.startsWith('blob:')) {
+            URL.revokeObjectURL(currentPhoto.url)
+            console.log('[RentOut] Revoked preview URL')
+          }
+          
+          // Update photo item
+          currentPhoto.uploadResponse = uploadResponse
+          currentPhoto.url = uploadResponse.url // Use server URL instead of preview
+          currentPhoto.isUploading = false
+          currentPhoto.error = undefined
+          
+          // Force reactivity update
+          photos.value = [...photos.value]
+          
+          // Add to uploaded URLs
+          uploadedPhotoUrls.value.push(uploadResponse.url)
+          
+          console.log(`[RentOut] ✓ Photo ${photoIndex} updated successfully`)
+          console.log('[RentOut] Photo URL:', uploadResponse.url)
+        } else {
+          console.warn(`[RentOut] ⚠ Photo at index ${photoIndex} not found in array`)
+        }
+      } catch (error: any) {
+        console.error(`[RentOut] ✗ Upload failed for photo ${photoIndex}:`, error)
+        console.error('[RentOut] Error details:', {
+          message: error?.message,
+          status: error?.status,
+          body: error?.body,
+        })
+        
+        // Update photo item with error
+        const currentPhoto = photos.value[photoIndex]
+        if (currentPhoto) {
+          currentPhoto.isUploading = false
+          currentPhoto.error = error?.message || 'Ошибка загрузки фотографии'
+          
+          // Force reactivity update
+          photos.value = [...photos.value]
+          
+          console.log(`[RentOut] Photo ${photoIndex} marked as error`)
+        }
+        
+        // Keep preview URL so user can see the photo and retry
+      }
+    })()
+  }
+  
+  // Reset input to allow selecting the same file again
+  input.value = ''
+  console.log('[RentOut] ===== PHOTO UPLOAD INITIATED =====')
+}
+
+const removePhoto = (index: number) => {
+  const photo = photos.value[index]
+  
+  // Clean up preview URL if exists
+  if (photo.url && photo.url.startsWith('blob:')) {
+    URL.revokeObjectURL(photo.url)
+  }
+  
+  // Remove from uploaded URLs if it was uploaded
+  if (photo.uploadResponse?.url) {
+    const urlIndex = uploadedPhotoUrls.value.indexOf(photo.uploadResponse.url)
+    if (urlIndex > -1) {
+      uploadedPhotoUrls.value.splice(urlIndex, 1)
+    }
+  }
+  
+  photos.value.splice(index, 1)
 }
 
 // Availability toggles
@@ -179,19 +308,182 @@ const canSubmit = computed(() => {
 
 const showError = ref(false)
 
-const handleSubmit = () => {
+const handleSubmit = async () => {
   if (!canSubmit.value) return
+  
+  // Check if photos are still uploading
+  const hasUploadingPhotos = photos.value.some(p => p.isUploading)
+  if (hasUploadingPhotos) {
+    console.warn('[RentOut] Cannot submit: photos are still uploading')
+    // Could show a message to user here
+    return
+  }
+  
+  // Check if there are photos with errors
+  const hasPhotoErrors = photos.value.some(p => p.error)
+  if (hasPhotoErrors) {
+    console.warn('[RentOut] Cannot submit: some photos have errors')
+    // Could show a message to user here
+    return
+  }
+  
   isSubmitting.value = true
-  // TODO: Implement submission logic
-  setTimeout(() => {
+  
+  try {
+    console.log('[RentOut] ===== SUBMITTING SPOT =====')
+    
+    // Get uploaded photo URLs (only successfully uploaded ones)
+    const photoUrls = photos.value
+      .filter(p => p.uploadResponse?.url && !p.error)
+      .map(p => p.uploadResponse!.url)
+    
+    console.log('[RentOut] Photo URLs:', photoUrls)
+    
+    // Determine vehicle type (use first selected type, default to CAR)
+    const selectedVehicleType = vehicleTypes.value.find(t => t.selected)
+    const vehicleType: 'CAR' | 'VAN' | 'TRUCK' = 
+      selectedVehicleType?.id === 'van' ? 'VAN' :
+      selectedVehicleType?.id === 'truck' ? 'TRUCK' :
+      'CAR'
+    
+    // Convert selected days to numbers (Пн=1, Вт=2, etc.)
+    const dayMap: Record<string, number> = {
+      'Пн': 1, 'Вт': 2, 'Ср': 3, 'Чт': 4, 'Пт': 5, 'Сб': 6, 'Вс': 7
+    }
+    const availableDays = selectedDays.value.map(day => dayMap[day] || 0).filter(d => d > 0)
+    
+    // Determine schedule type
+    const scheduleType: 'ALWAYS' | 'SCHEDULED' = permanentAvailability.value ? 'ALWAYS' : 'SCHEDULED'
+    
+    // Build request data
+    const requestData: CreateSpotRequest = {
+      address: address.value.trim(),
+      latitude: props.selectedLatitude || 0, // TODO: Get from map selection
+      longitude: props.selectedLongitude || 0, // TODO: Get from map selection
+      vehicleType,
+      scheduleType,
+      hourlyEnabled: hourlyRent.value,
+      dailyEnabled: dailyRent.value,
+      monthlyEnabled: monthlyRent.value,
+      photos: photoUrls,
+    }
+    
+    // Add prices (only if enabled)
+    if (hourlyRent.value && pricePerHour.value) {
+      requestData.pricePerHour = parseFloat(pricePerHour.value) || 0
+    }
+    if (dailyRent.value && pricePerDay.value) {
+      requestData.pricePerDay = parseFloat(pricePerDay.value) || 0
+    }
+    if (monthlyRent.value && pricePerMonth.value) {
+      requestData.pricePerMonth = parseFloat(pricePerMonth.value) || 0
+    }
+    
+    // Add schedule details if not always available
+    if (scheduleType === 'SCHEDULED') {
+      if (fromTime.value) {
+        requestData.availableFrom = fromTime.value
+      }
+      if (toTime.value) {
+        requestData.availableTo = toTime.value
+      }
+      if (availableDays.length > 0) {
+        requestData.availableDays = availableDays
+      }
+      if (fromDate.value) {
+        requestData.availableDateFrom = fromDate.value
+      }
+      if (toDate.value && !(hourlyRent.value && !dailyRent.value && !monthlyRent.value)) {
+        // Only add toDate if not hourly-only (hourly uses single date)
+        requestData.availableDateTo = toDate.value
+      }
+    }
+    
+    // Add features
+    const coveredFeature = features.value.find(f => f.id === 'covered')
+    if (coveredFeature?.selected) {
+      requestData.covered = true
+    }
+    
+    const securityFeature = features.value.find(f => f.id === 'security')
+    if (securityFeature?.selected) {
+      requestData.hasSecurity = true
+    }
+    
+    const evFeature = features.value.find(f => f.id === 'ev')
+    if (evFeature?.selected) {
+      requestData.hasEvCharging = true
+    }
+    
+    const courtyardFeature = features.value.find(f => f.id === 'courtyard')
+    if (courtyardFeature?.selected) {
+      requestData.inYard = true
+    }
+    
+    const privateFeature = features.value.find(f => f.id === 'private')
+    if (privateFeature?.selected) {
+      requestData.privateTerritory = true
+    }
+    
+    // Add description and access guide
+    if (description.value.trim()) {
+      // Split description into description and accessGuide if needed
+      // For now, put everything in description
+      requestData.description = description.value.trim()
+      requestData.accessGuide = description.value.trim() // Or extract access guide separately
+    }
+    
+    console.log('[RentOut] Request data:', JSON.stringify(requestData, null, 2))
+    
+    // Validate required fields
+    if (!requestData.address || requestData.address.trim() === '') {
+      throw new Error('Адрес обязателен для заполнения')
+    }
+    
+    // Validate coordinates - if not provided, use default Moscow coordinates as fallback
+    // But ideally user should select location on map
+    if (!requestData.latitude || !requestData.longitude || requestData.latitude === 0 || requestData.longitude === 0) {
+      console.warn('[RentOut] Coordinates not provided, using default Moscow coordinates')
+      // Use Moscow center as fallback (user should ideally select on map)
+      requestData.latitude = 55.7558
+      requestData.longitude = 37.6173
+    }
+    
+    // Validate that at least one price is set for enabled rent types
+    if (hourlyRent.value && (!pricePerHour.value || parseFloat(pricePerHour.value) <= 0)) {
+      throw new Error('Укажите стоимость почасовой аренды')
+    }
+    if (dailyRent.value && (!pricePerDay.value || parseFloat(pricePerDay.value) <= 0)) {
+      throw new Error('Укажите стоимость посуточной аренды')
+    }
+    if (monthlyRent.value && (!pricePerMonth.value || parseFloat(pricePerMonth.value) <= 0)) {
+      throw new Error('Укажите стоимость помесячной аренды')
+    }
+    
+    // Submit to API
+    const response = await spotsApi.createSpot(requestData)
+    
+    console.log('[RentOut] ✓ Spot created successfully:', response)
+    
+    // Success - emit success event
     isSubmitting.value = false
+    emit('success')
+    
+  } catch (error: any) {
+    console.error('[RentOut] ✗ Submit failed:', error)
+    isSubmitting.value = false
+    
     // Check if test user (79991234567) - show error screen
     if (props.currentUser?.phone === '+79991234567' || props.currentUser?.phone === '79991234567') {
       showError.value = true
+    } else if (error?.message) {
+      // Show error message
+      showError.value = true
+      console.error('[RentOut] Error message:', error.message)
     } else {
-      emit('success')
+      showError.value = true
     }
-  }, 2000)
+  }
 }
 
 const handleRetry = () => {
@@ -291,19 +583,59 @@ const handleRetry = () => {
       <section class="rent-out__section">
         <h2 class="rent-out__section-title">Фотографии места</h2>
         <div class="rent-out__photos">
-          <label class="rent-out__photo-upload">
-            <input type="file" accept="image/*" multiple @change="handlePhotoUpload" style="display: none;" />
+          <!-- Upload button (always visible) -->
+          <label class="rent-out__photo-upload" :class="{ 'rent-out__photo-upload--disabled': photos.length >= 9 }">
+            <input 
+              type="file" 
+              accept="image/*" 
+              multiple 
+              @change="handlePhotoUpload" 
+              :disabled="photos.length >= 9"
+              style="display: none;" 
+            />
             <svg width="24" height="21" viewBox="0 0 24 21" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M24 5.25V18.75C24 20.0156 22.9688 21 21.75 21H2.25C0.984375 21 0 20.0156 0 18.75V5.25C0 4.03125 0.984375 3 2.25 3H6.375L6.9375 1.5C7.26562 0.609375 8.10938 0 9.04688 0H14.9062C15.8438 0 16.6875 0.609375 17.0156 1.5L17.625 3H21.75C22.9688 3 24 4.03125 24 5.25ZM17.625 12C17.625 8.90625 15.0938 6.375 12 6.375C8.85938 6.375 6.375 8.90625 6.375 12C6.375 15.1406 8.85938 17.625 12 17.625C15.0938 17.625 17.625 15.1406 17.625 12ZM16.125 12C16.125 14.2969 14.25 16.125 12 16.125C9.70312 16.125 7.875 14.2969 7.875 12C7.875 9.75 9.70312 7.875 12 7.875C14.25 7.875 16.125 9.75 16.125 12Z" fill="#9CA3AF"/>
             </svg>
             <span>Добавить фото</span>
           </label>
-          <div class="rent-out__photo-placeholder">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 5V19M5 12H19" stroke="#6B7280" stroke-width="2" stroke-linecap="round"/>
-            </svg>
+          
+          <!-- Uploaded/uploading photos -->
+          <div 
+            v-for="(photo, index) in photos" 
+            :key="index"
+            class="rent-out__photo-item"
+          >
+            <img 
+              v-if="photo.url" 
+              :src="photo.url" 
+              :alt="`Photo ${index + 1}`"
+              class="rent-out__photo-image"
+            />
+            <div v-if="photo.isUploading" class="rent-out__photo-overlay">
+              <div class="rent-out__photo-spinner"></div>
+              <span class="rent-out__photo-status">Загрузка...</span>
+            </div>
+            <div v-if="photo.error" class="rent-out__photo-overlay rent-out__photo-overlay--error">
+              <span class="rent-out__photo-status">{{ photo.error }}</span>
+            </div>
+            <button 
+              type="button"
+              class="rent-out__photo-remove"
+              @click="removePhoto(index)"
+              aria-label="Удалить фото"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 4L4 12M4 4L12 12" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
           </div>
-          <div class="rent-out__photo-placeholder">
+          
+          <!-- Placeholder slots (up to 3 total photos) -->
+          <div 
+            v-for="n in Math.max(0, 3 - photos.length - 1)" 
+            :key="`placeholder-${n}`"
+            class="rent-out__photo-placeholder"
+          >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M12 5V19M5 12H19" stroke="#6B7280" stroke-width="2" stroke-linecap="round"/>
             </svg>
@@ -870,8 +1202,13 @@ const handleRetry = () => {
   transition: border-color 0.2s ease;
 }
 
-.rent-out__photo-upload:hover {
+.rent-out__photo-upload:hover:not(.rent-out__photo-upload--disabled) {
   border-color: #9333ea;
+}
+
+.rent-out__photo-upload--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .rent-out__photo-upload svg {
@@ -886,6 +1223,91 @@ const handleRetry = () => {
 
 .rent-out__photo-placeholder svg {
   color: #6b7280;
+}
+
+.rent-out__photo-item {
+  aspect-ratio: 1;
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid #e5e7eb;
+  background-color: #F9FAFB;
+}
+
+.rent-out__photo-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.rent-out__photo-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.rent-out__photo-overlay--error {
+  background-color: rgba(220, 38, 38, 0.8);
+}
+
+.rent-out__photo-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.rent-out__photo-status {
+  font-family: Inter, sans-serif;
+  font-size: 12px;
+  color: #ffffff;
+  text-align: center;
+  padding: 0 8px;
+}
+
+.rent-out__photo-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  z-index: 10;
+}
+
+.rent-out__photo-remove:hover {
+  background-color: rgba(220, 38, 38, 0.8);
+}
+
+.rent-out__photo-remove svg {
+  width: 12px;
+  height: 12px;
+  display: block;
 }
 
 .rent-out__availability {

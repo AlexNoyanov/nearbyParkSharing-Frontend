@@ -36,11 +36,22 @@ const handlePhoneInput = (e: Event) => {
   error.value = ''
 }
 
-// Get Telegram initData
+// Get Telegram initData - with fallback for dev mode
 const getInitData = (): string => {
+  // Primary: Get from Telegram WebApp
   if (window.Telegram?.WebApp?.initData) {
-    return window.Telegram.WebApp.initData
+    const initData = window.Telegram.WebApp.initData
+    if (initData && initData.trim().length > 0) {
+      return initData
+    }
   }
+  
+  // Fallback: Use dev fallback only in dev mode
+  if (import.meta.env.DEV) {
+    console.warn('[LoginScreen] DEV MODE: Using fallback initData for local testing')
+    return 'auth_date=1768317980&query_id=AAHdF6IQAAAAAN0XohDhrOrc&user=%7B%22id%22%3A111222333%2C%22first_name%22%3A%22Test%22%2C%22last_name%22%3A%22User%22%2C%22username%22%3A%22Alexander%22%2C%22language_code%22%3A%22en%22%7D&hash=77794dcb2dd54b35f40010f1dcede46444340c01530bfd17849802cd6295c527'
+  }
+  
   return ''
 }
 
@@ -92,96 +103,150 @@ const handleSubmit = async () => {
       // Fallback: should not reach here if onAuthSuccess is provided
       error.value = 'Ошибка авторизации. Проверьте настройки.'
       isLoading.value = false
+      return
     }
 
-    // Production mode: use Telegram API (if available)
+    // Production mode: Always use login API method
+    console.log('[LoginScreen] ===== LOGIN REQUEST =====')
     const initData = getInitData()
     
-    if (!initData) {
-      // Allow login outside Telegram using test numbers (mock auth).
-      // This is useful for demo/testing in a normal browser.
-      console.warn('[LoginScreen] Telegram WebApp initData is not available. Falling back to test login by phone number.')
-
-      const phoneDigits = phone.value.replace(/\D/g, '')
-      const phoneToCheck = phoneDigits ? `+${phoneDigits}` : ''
-
-      if (!phoneToCheck || phoneToCheck.length < 12) {
-        error.value = 'Введите номер телефона (тестовый вход доступен без Telegram)'
-        isLoading.value = false
-        return
-      }
-
-      const mockUser = mockUsers.find(user => user.phone === phoneToCheck)
-
-      const userToLogin: User = mockUser ?? {
-        id: String(mockUsers.length + 1),
-        name: 'Test User',
-        phone: phoneToCheck,
-      }
-
-      if (props.onAuthSuccess) {
-        props.onAuthSuccess(userToLogin)
-        isLoading.value = false
-        return
-      }
-
-      // Fallback: if parent didn't pass onAuthSuccess, go through existing navigation
-      if (props.onCallVerification) {
-        props.onCallVerification(phoneToCheck)
-      } else {
-        props.onLogin(phoneToCheck)
-      }
+    if (!initData || initData.trim().length === 0) {
+      error.value = 'Ошибка: не удалось получить данные авторизации. Убедитесь, что приложение открыто через Telegram.'
       isLoading.value = false
       return
     }
 
-    // Try to login with Telegram initData
+    console.log('[LoginScreen] Calling authApi.login() with initData')
+    console.log('[LoginScreen] InitData length:', initData.length)
+    
+    // Call login API method
     const loginResponse = await authApi.login(initData)
     
-    if (loginResponse.status === 'OK' && loginResponse.token && loginResponse.user) {
-      // Login successful
+    console.log('[LoginScreen] Login response received:', loginResponse)
+    console.log('[LoginScreen] Response status:', loginResponse.status)
+    
+    if (loginResponse.status === 'OK' && loginResponse.token) {
+      // Login successful - user is authenticated
+      console.log('[LoginScreen] ✓ Login successful, status: OK')
+      console.log('[LoginScreen] Token received:', loginResponse.token ? 'yes' : 'no')
+      console.log('[LoginScreen] User data from API:', loginResponse.user)
+      
+      // Save token to localStorage
       if (loginResponse.token) {
         localStorage.setItem('auth_token', loginResponse.token)
+        console.log('[LoginScreen] Token saved to localStorage')
       }
 
-      // Convert API user to app User format
-      const user: User = {
-        id: loginResponse.user.id,
-        name: loginResponse.user.name,
-        phone: loginResponse.user.phone,
+      // Create user object - use API user if available, otherwise create from available data
+      let user: User
+      
+      if (loginResponse.user) {
+        // Use user data from API response
+        user = {
+          id: String(loginResponse.user.id),
+          name: loginResponse.user.name,
+          phone: loginResponse.user.phone,
+        }
+        console.log('[LoginScreen] Using user data from API response:', user)
+      } else {
+        // User data not in response - try to extract from initData or use phone from input
+        console.log('[LoginScreen] User data not in API response, creating from available data')
+        
+        // Try to get user info from Telegram initData
+        let userId = 'unknown'
+        let userName = 'User'
+        let userPhone = ''
+        
+        try {
+          if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
+            const tgUser = window.Telegram.WebApp.initDataUnsafe.user
+            userId = String(tgUser.id || 'unknown')
+            userName = tgUser.first_name || tgUser.username || 'User'
+            console.log('[LoginScreen] Extracted user data from Telegram:', { userId, userName })
+          }
+        } catch (e) {
+          console.warn('[LoginScreen] Could not extract user from Telegram initData:', e)
+        }
+        
+        // Use phone from input field if available
+        const phoneDigits = phone.value.replace(/\D/g, '')
+        if (phoneDigits && phoneDigits.length >= 10) {
+          userPhone = phoneDigits.startsWith('7') ? `+${phoneDigits}` : `+7${phoneDigits}`
+        }
+        
+        // Create user object with available data
+        user = {
+          id: userId,
+          name: userName,
+          phone: userPhone || '',
+        }
+        
+        console.log('[LoginScreen] Created user object from available data:', user)
       }
 
-      // Call success callback if provided
+      // Call success callback
       if (props.onAuthSuccess) {
+        console.log('[LoginScreen] Calling onAuthSuccess with user:', user)
         props.onAuthSuccess(user)
       } else {
-        // Fallback: navigate to call verification with phone from user
-        if (props.onCallVerification) {
-          props.onCallVerification(loginResponse.user.phone)
+        // Fallback: navigate to home or call verification
+        if (props.onCallVerification && user.phone) {
+          props.onCallVerification(user.phone)
+        } else if (user.phone) {
+          props.onLogin(user.phone)
         } else {
-          props.onLogin(loginResponse.user.phone)
+          // No phone available - just proceed with auth success
+          console.log('[LoginScreen] No phone available, proceeding with auth success')
+          // Token is saved, user can continue
         }
       }
     } else if (loginResponse.status === 'NEED_PHONE') {
       // Phone verification needed - navigate to call verification
-      // The phone number will be sent when CallVerificationScreen calls initCallCheck
-      // Use phone from input if provided, otherwise use empty string (API might handle it)
-      const phoneToUse = phone.value && phone.value.length >= 18 
-        ? phone.value.replace(/\D/g, '').replace(/^/, '+')
+      console.log('[LoginScreen] Phone verification needed (NEED_PHONE)')
+      
+      // Get phone number from input field
+      const phoneDigits = phone.value.replace(/\D/g, '')
+      const phoneToUse = phoneDigits && phoneDigits.length >= 10
+        ? (phoneDigits.startsWith('7') ? `+${phoneDigits}` : `+7${phoneDigits}`)
         : ''
       
+      console.log('[LoginScreen] Phone from input:', phoneToUse)
+      
+      if (!phoneToUse || phoneToUse.length < 12) {
+        error.value = 'Введите номер телефона для подтверждения'
+        isLoading.value = false
+        return
+      }
+      
+      // Navigate to call verification
       if (props.onCallVerification) {
+        console.log('[LoginScreen] Navigating to call verification with phone:', phoneToUse)
         props.onCallVerification(phoneToUse)
       } else {
         // Fallback to code verification if call verification not available
-        props.onLogin(phoneToUse || '+79999999999')
+        props.onLogin(phoneToUse)
       }
     } else {
+      console.error('[LoginScreen] Unexpected login response status:', loginResponse.status)
       error.value = 'Ошибка при входе. Попробуйте еще раз.'
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error('[LoginScreen] Login error:', err)
-    error.value = 'Ошибка при входе. Попробуйте еще раз.'
+    console.error('[LoginScreen] Error details:', {
+      name: err?.name,
+      message: err?.message,
+      stack: err?.stack
+    })
+    
+    // Provide user-friendly error message
+    const errorMessage = err?.message || 'Ошибка при входе'
+    if (errorMessage.includes('Failed to fetch') || errorMessage.includes('Network')) {
+      error.value = 'Ошибка подключения к серверу. Проверьте интернет-соединение.'
+    } else if (errorMessage.includes('HTTP error')) {
+      error.value = 'Ошибка сервера. Попробуйте позже.'
+    } else {
+      error.value = errorMessage.length > 100 ? 'Ошибка при входе. Попробуйте еще раз.' : errorMessage
+    }
   } finally {
     isLoading.value = false
   }
