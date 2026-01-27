@@ -713,6 +713,50 @@ const handleGoToMySpots = async () => {
   navSelection.value = 'rent' // Keep rent tab active since we're coming from rent flow
 }
 
+const handleUnpublishSpot = (spotId: string) => {
+  console.log('[App] Opening unpublish screen for spot:', spotId)
+  selectedSpotIdForUnpublish.value = spotId
+  stage.value = 'unpublish-spot'
+}
+
+const handleUnpublishSpotConfirm = async (cancelUpcomingBookings: boolean) => {
+  if (!selectedSpotIdForUnpublish.value) return
+
+  console.log('[App] Unpublishing spot:', selectedSpotIdForUnpublish.value, 'cancel bookings:', cancelUpcomingBookings)
+
+  // Show loading screen
+  loadingMessage.value = 'Снятие с публикации'
+  loadingSubtitle.value = ''
+  stage.value = 'loading'
+
+  try {
+    // Call archive API
+    await spotsApi.archiveSpot(selectedSpotIdForUnpublish.value, cancelUpcomingBookings)
+
+    console.log('[App] ✓ Spot unpublished successfully')
+
+    // After 1.5 seconds, navigate to my-spots to refresh the list
+    setTimeout(() => {
+      selectedSpotIdForUnpublish.value = null
+      stage.value = 'my-spots'
+      navSelection.value = 'rent'
+    }, 1500)
+  } catch (error: any) {
+    console.error('[App] ✗ Failed to unpublish spot:', error)
+
+    // Show error message
+    loadingMessage.value = 'Ошибка'
+    loadingSubtitle.value = error?.message || 'Не удалось снять место с публикации'
+
+    // After 2 seconds, go back to my-spots
+    setTimeout(() => {
+      selectedSpotIdForUnpublish.value = null
+      stage.value = 'my-spots'
+      navSelection.value = 'rent'
+    }, 2000)
+  }
+}
+
 const openHistoryFromHome = async () => {
   // Если есть бронирования, открываем список бронирований
   if (bookings.value.length > 0) {
