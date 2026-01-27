@@ -327,18 +327,18 @@ export const spotsApi = {
    */
   async updateSpot(id: string, data: CreateSpotRequest): Promise<CreateSpotResponse> {
     const API_URL = `${API_BASE_URL}/api/v1/spots/${id}`
-    
+
     console.log('[SpotsAPI] ===== UPDATE SPOT =====')
     console.log('[SpotsAPI] Spot ID:', id)
     console.log('[SpotsAPI] API Endpoint:', API_URL)
     console.log('[SpotsAPI] Request data:', JSON.stringify(data, null, 2))
-    
+
     // Get authentication token
     const token = localStorage.getItem('auth_token')
     if (!token) {
       throw new Error('Authentication token not found. Please login first.')
     }
-    
+
     try {
       const response = await fetch(API_URL, {
         method: 'PUT',
@@ -351,15 +351,15 @@ export const spotsApi = {
         mode: 'cors',
         credentials: 'omit',
       })
-      
+
       console.log('[SpotsAPI] Response status:', response.status)
       console.log('[SpotsAPI] Response ok:', response.ok)
-      
+
       if (!response.ok) {
         // Try to read error message from response
         let errorMessage = `HTTP error! status: ${response.status}`
         let errorBody = null
-        
+
         try {
           const contentType = response.headers.get('content-type')
           if (contentType && contentType.includes('application/json')) {
@@ -381,25 +381,108 @@ export const spotsApi = {
         } catch (e) {
           console.warn('[SpotsAPI] Could not read error response:', e)
         }
-        
+
         if (response.status === 401) {
           localStorage.removeItem('auth_token')
           throw new Error('Authentication failed. Please login again.')
         }
-        
+
         const error = new Error(errorMessage)
         ;(error as any).status = response.status
         ;(error as any).body = errorBody
         console.error('[SpotsAPI] ✗ Update spot failed:', errorMessage)
         throw error
       }
-      
+
       const result = await response.json()
       console.log('[SpotsAPI] ✓ Spot updated successfully')
       console.log('[SpotsAPI] Response:', result)
       return result
     } catch (error) {
       console.error('[SpotsAPI] Update spot error:', error)
+      throw error
+    }
+  },
+
+  /**
+   * Archive (unpublish) a parking spot
+   * POST /api/v1/spots/{id}/archive
+   *
+   * @param id - Spot ID to archive
+   * @param cancelUpcomingBookings - If true, cancel upcoming bookings; if false, wait for them to complete
+   */
+  async archiveSpot(id: string, cancelUpcomingBookings: boolean = false): Promise<void> {
+    const API_URL = `${API_BASE_URL}/api/v1/spots/${id}/archive`
+
+    console.log('[SpotsAPI] ===== ARCHIVE SPOT =====')
+    console.log('[SpotsAPI] Spot ID:', id)
+    console.log('[SpotsAPI] Cancel upcoming bookings:', cancelUpcomingBookings)
+    console.log('[SpotsAPI] API Endpoint:', API_URL)
+
+    // Get authentication token
+    const token = localStorage.getItem('auth_token')
+    if (!token) {
+      throw new Error('Authentication token not found. Please login first.')
+    }
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ cancelUpcomingBookings }),
+        mode: 'cors',
+        credentials: 'omit',
+      })
+
+      console.log('[SpotsAPI] Response status:', response.status)
+      console.log('[SpotsAPI] Response ok:', response.ok)
+
+      if (!response.ok) {
+        // Try to read error message from response
+        let errorMessage = `HTTP error! status: ${response.status}`
+        let errorBody = null
+
+        try {
+          const contentType = response.headers.get('content-type')
+          if (contentType && contentType.includes('application/json')) {
+            errorBody = await response.json()
+            console.log('[SpotsAPI] Error response body:', errorBody)
+            errorMessage = errorBody.message || errorBody.error || errorMessage
+          } else {
+            const errorText = await response.text()
+            console.log('[SpotsAPI] Error response text:', errorText)
+            if (errorText) {
+              try {
+                errorBody = JSON.parse(errorText)
+                errorMessage = errorBody.message || errorBody.error || errorMessage
+              } catch {
+                errorMessage = errorText || errorMessage
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[SpotsAPI] Could not read error response:', e)
+        }
+
+        if (response.status === 401) {
+          localStorage.removeItem('auth_token')
+          throw new Error('Authentication failed. Please login again.')
+        }
+
+        const error = new Error(errorMessage)
+        ;(error as any).status = response.status
+        ;(error as any).body = errorBody
+        console.error('[SpotsAPI] ✗ Archive spot failed:', errorMessage)
+        throw error
+      }
+
+      console.log('[SpotsAPI] ✓ Spot archived successfully')
+    } catch (error) {
+      console.error('[SpotsAPI] Archive spot error:', error)
       throw error
     }
   },
