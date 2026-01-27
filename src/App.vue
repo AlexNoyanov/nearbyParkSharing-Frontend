@@ -58,6 +58,7 @@ import BookingExtendedScreen from './views/BookingExtendedScreen.vue'
 import ProfileScreen from './views/ProfileScreen.vue'
 import ChangePhoneScreen from './views/ChangePhoneScreen.vue'
 import HelpSupportScreen from './views/HelpSupportScreen.vue'
+import UnpublishSpotScreen from './views/UnpublishSpotScreen.vue'
 
 type Stage =
   | 'onboarding1'
@@ -105,6 +106,7 @@ type Stage =
   | 'booking-extended'
   | 'help-support'
   | 'my-spots'
+  | 'unpublish-spot'
 
 const stage = ref<Stage>('onboarding1')
 const selectedParking = ref<ParkingSpot | null>(null)
@@ -131,6 +133,7 @@ const selectedPaymentCard = ref<{ id: string; name: string; type: 'visa' | 'mast
 const loadingMessage = ref<string>('Обрабатываем запрос')
 const loadingSubtitle = ref<string>('')
 const bookingsCount = ref<number>(0)
+const selectedSpotIdForUnpublish = ref<string | null>(null)
 
 type Booking = {
   id: string
@@ -267,7 +270,8 @@ const isNavVisible = computed(() =>
       stage.value !== 'early-booking' &&
       stage.value !== 'rental-completion' &&
       stage.value !== 'booking-extended' &&
-      stage.value !== 'my-spots'
+      stage.value !== 'my-spots' &&
+      stage.value !== 'unpublish-spot'
     )
 
 const ensureParkingSelected = () => {
@@ -707,6 +711,50 @@ const handleEditSpot = async (spotId: string) => {
 const handleGoToMySpots = async () => {
   stage.value = 'my-spots'
   navSelection.value = 'rent' // Keep rent tab active since we're coming from rent flow
+}
+
+const handleUnpublishSpot = (spotId: string) => {
+  console.log('[App] Opening unpublish screen for spot:', spotId)
+  selectedSpotIdForUnpublish.value = spotId
+  stage.value = 'unpublish-spot'
+}
+
+const handleUnpublishSpotConfirm = async (cancelUpcomingBookings: boolean) => {
+  if (!selectedSpotIdForUnpublish.value) return
+
+  console.log('[App] Unpublishing spot:', selectedSpotIdForUnpublish.value, 'cancel bookings:', cancelUpcomingBookings)
+
+  // Show loading screen
+  loadingMessage.value = 'Снятие с публикации'
+  loadingSubtitle.value = ''
+  stage.value = 'loading'
+
+  try {
+    // Call archive API
+    await spotsApi.archiveSpot(selectedSpotIdForUnpublish.value, cancelUpcomingBookings)
+
+    console.log('[App] ✓ Spot unpublished successfully')
+
+    // After 1.5 seconds, navigate to my-spots to refresh the list
+    setTimeout(() => {
+      selectedSpotIdForUnpublish.value = null
+      stage.value = 'my-spots'
+      navSelection.value = 'rent'
+    }, 1500)
+  } catch (error: any) {
+    console.error('[App] ✗ Failed to unpublish spot:', error)
+
+    // Show error message
+    loadingMessage.value = 'Ошибка'
+    loadingSubtitle.value = error?.message || 'Не удалось снять место с публикации'
+
+    // After 2 seconds, go back to my-spots
+    setTimeout(() => {
+      selectedSpotIdForUnpublish.value = null
+      stage.value = 'my-spots'
+      navSelection.value = 'rent'
+    }, 2000)
+  }
 }
 
 const openHistoryFromHome = async () => {
@@ -1906,6 +1954,15 @@ onMounted(async () => {
           @open-spot="(spot) => { console.log('Spot clicked:', spot); /* TODO: Navigate to spot details */ }"
           @edit-spot="handleEditSpot"
           @add-spot="openRentFromHome"
+          @hide-spot="handleUnpublishSpot"
+        />
+
+        <UnpublishSpotScreen
+          v-else-if="stage === 'unpublish-spot' && selectedSpotIdForUnpublish"
+          :spot-id="selectedSpotIdForUnpublish"
+          @back="goHome"
+          @cancel="goHome"
+          @confirm="handleUnpublishSpotConfirm"
         />
 
         <BookingDetailsScreen

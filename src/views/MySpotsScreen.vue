@@ -8,6 +8,7 @@ const emit = defineEmits<{
   (e: 'open-spot', spot: MySpot): void
   (e: 'edit-spot', spotId: string): void
   (e: 'add-spot'): void
+  (e: 'hide-spot', spotId: string): void
 }>()
 
 const spots = ref<MySpot[]>([])
@@ -63,8 +64,8 @@ const handleEdit = (spot: MySpot) => {
 }
 
 const handleHide = (spotId: string) => {
-  console.log('Hide place:', spotId)
-  // TODO: Implement hide functionality
+  console.log('Hide spot:', spotId)
+  emit('hide-spot', spotId)
 }
 
 const handleAddPlace = () => {
