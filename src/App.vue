@@ -58,6 +58,7 @@ import BookingExtendedScreen from './views/BookingExtendedScreen.vue'
 import ProfileScreen from './views/ProfileScreen.vue'
 import ChangePhoneScreen from './views/ChangePhoneScreen.vue'
 import HelpSupportScreen from './views/HelpSupportScreen.vue'
+import UnpublishSpotScreen from './views/UnpublishSpotScreen.vue'
 
 type Stage =
   | 'onboarding1'
@@ -105,6 +106,7 @@ type Stage =
   | 'booking-extended'
   | 'help-support'
   | 'my-spots'
+  | 'unpublish-spot'
 
 const stage = ref<Stage>('onboarding1')
 const selectedParking = ref<ParkingSpot | null>(null)
