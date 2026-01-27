@@ -1910,6 +1910,7 @@ onMounted(async () => {
           @open-spot="(spot) => { console.log('Spot clicked:', spot); /* TODO: Navigate to spot details */ }"
           @edit-spot="handleEditSpot"
           @add-spot="openRentFromHome"
+          @hide-spot="handleUnpublishSpot"
         />
 
         <UnpublishSpotScreen
