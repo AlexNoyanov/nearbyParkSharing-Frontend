@@ -1911,6 +1911,14 @@ onMounted(async () => {
           @add-spot="openRentFromHome"
         />
 
+        <UnpublishSpotScreen
+          v-else-if="stage === 'unpublish-spot' && selectedSpotIdForUnpublish"
+          :spot-id="selectedSpotIdForUnpublish"
+          @back="goHome"
+          @cancel="goHome"
+          @confirm="handleUnpublishSpotConfirm"
+        />
+
         <BookingDetailsScreen
           v-else-if="stage === 'booking-details' && selectedBooking"
           :booking="selectedBooking"
