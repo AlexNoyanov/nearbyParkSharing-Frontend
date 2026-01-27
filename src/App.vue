@@ -133,6 +133,7 @@ const selectedPaymentCard = ref<{ id: string; name: string; type: 'visa' | 'mast
 const loadingMessage = ref<string>('Обрабатываем запрос')
 const loadingSubtitle = ref<string>('')
 const bookingsCount = ref<number>(0)
+const selectedSpotIdForUnpublish = ref<string | null>(null)
 
 type Booking = {
   id: string
