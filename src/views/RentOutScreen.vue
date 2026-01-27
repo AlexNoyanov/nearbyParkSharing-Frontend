@@ -409,11 +409,18 @@ const loadSpotData = async () => {
     }
     
     // Fill description and access guide
-    if (spot.description) {
+    // Check if description is not just a placeholder "string" value
+    if (spot.description && spot.description !== 'string' && spot.description.trim() !== '') {
       description.value = spot.description
+    } else {
+      description.value = ''
     }
-    if (spot.accessGuide) {
+    
+    // Check if accessGuide is not just a placeholder "string" value
+    if (spot.accessGuide && spot.accessGuide !== 'string' && spot.accessGuide.trim() !== '') {
       accessGuide.value = spot.accessGuide
+    } else {
+      accessGuide.value = ''
     }
     
     // Load photos
@@ -790,7 +797,7 @@ const handleRetry = () => {
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 4L4 12M4 4L12 12" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
+            </svg>
             </button>
           </div>
           

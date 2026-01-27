@@ -704,6 +704,11 @@ const handleEditSpot = async (spotId: string) => {
   }
 }
 
+const handleGoToMySpots = async () => {
+  stage.value = 'my-spots'
+  navSelection.value = 'rent' // Keep rent tab active since we're coming from rent flow
+}
+
 const openHistoryFromHome = async () => {
   // Если есть бронирования, открываем список бронирований
   if (bookings.value.length > 0) {
@@ -1673,7 +1678,7 @@ onMounted(async () => {
 
     <RentOutSuccessScreen
       v-else-if="stage === 'rent-success'"
-      @go-to-ads="() => { navSelection = 'profile'; stage = 'profile' }"
+      @go-to-ads="handleGoToMySpots"
     />
 
     <template v-else>
