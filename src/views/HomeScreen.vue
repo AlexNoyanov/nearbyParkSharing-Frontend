@@ -55,6 +55,71 @@ const emit = defineEmits<{
 const userFromApi = ref<{ username: string } | null>(null)
 const isLoadingUser = ref(false)
 
+// Hardcoded test bookings for a specific test user (UI-only, no backend)
+const testBookings = computed<Booking[]>(() => {
+  if (userFromApi.value?.username !== 'zaharik') return []
+
+  const fallbackParkingId = featuredParkings[0]?.id
+  const fallbackAddress = featuredParkings[0]?.address || 'Москва, Тестовая парковка'
+
+  return [
+    {
+      id: 'test-booking-1',
+      address: fallbackAddress,
+      startDate: '2026-02-05',
+      endDate: '2026-02-05',
+      startTime: '10:00',
+      endTime: '13:00',
+      rentalType: 'hourly',
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6),
+      status: 'confirmed',
+      parkingSpotId: fallbackParkingId,
+    },
+    {
+      id: 'test-booking-2',
+      address: fallbackAddress,
+      startDate: '2026-02-10',
+      endDate: '2026-02-10',
+      startTime: '18:00',
+      endTime: '21:00',
+      rentalType: 'hourly',
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 30),
+      status: 'active',
+      parkingSpotId: fallbackParkingId,
+    },
+  ]
+})
+
+// Hardcoded test owner requests (bookings for "Сдача мест") for a specific test user (UI-only, no backend)
+const testOwnerRequests = computed<OwnerRequest[]>(() => {
+  if (userFromApi.value?.username !== 'zaharik') return []
+
+  const fallbackAddress = 'Москва, ул. Ленина 1'
+
+  return [
+    {
+      id: 'test-owner-request-1',
+      address: fallbackAddress,
+      startDate: '2026-02-08',
+      endDate: '2026-02-08',
+      startTime: '14:00',
+      endTime: '17:00',
+      renterName: 'Иван Петров',
+      status: 'confirmed',
+    },
+    {
+      id: 'test-owner-request-2',
+      address: fallbackAddress,
+      startDate: '2026-02-12',
+      endDate: '2026-02-12',
+      startTime: '09:00',
+      endTime: '12:00',
+      renterName: 'Мария Сидорова',
+      status: 'confirmed',
+    },
+  ]
+})
+
 // Load current user data from API using JWT token from login
 const loadCurrentUser = async () => {
   // Check if we have a token (JWT token from login method)
@@ -244,7 +309,8 @@ const displayedActivities = computed(() => {
   
   if (activeFilter?.id === 'rentals') {
     // Show bookings when "Аренда мест" filter is active
-    return (props.bookings || []).map(booking => {
+    const bookingsSource = [...(props.bookings || []), ...testBookings.value]
+    return bookingsSource.map(booking => {
       // Находим парковочное место для бронирования
       let parking: ParkingSpot | null = null
       if (booking.parkingSpotId) {
@@ -269,8 +335,9 @@ const displayedActivities = computed(() => {
     }).reverse() // Show newest bookings first
   } else if (activeFilter?.id === 'sharing') {
     // Заявки на бронирование ваших мест
-    if (props.ownerRequests && props.ownerRequests.length > 0) {
-      return props.ownerRequests.map((request) => {
+    const ownerRequestsSource = [...(props.ownerRequests || []), ...testOwnerRequests.value]
+    if (ownerRequestsSource.length > 0) {
+      return ownerRequestsSource.map((request) => {
         const statusLabel = getStatusLabel(request.status, 'ownerRequest')
         const statusColor = getStatusColor(request.status, 'ownerRequest')
 
@@ -301,7 +368,7 @@ const displayedActivities = computed(() => {
           booking: request,
           parking: null as ParkingSpot | null,
         }
-      })
+      }).reverse() // Show newest requests first
     }
     return recentActivities
   }
