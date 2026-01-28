@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
 
-type FAQCategory = 'all' | 'parking' | 'payment'
+type FAQCategory = 'all' | 'parking' | 'payment' | 'account'
 
 type FAQItem = {
   id: string
@@ -102,7 +102,10 @@ onMounted(async () => {
           <path d="M8.75 11.375L8.1875 12C7.875 12.3125 7.40625 12.3125 7.125 12L1.3125 6.125C1 5.8125 1 5.34375 1.3125 5.0625L7.125 -0.8125C7.40625 -1.125 7.90625 -1.125 8.1875 -0.8125L8.75 -0.1875C9.0625 0.125 9.03125 0.59375 8.75 0.90625L4.84375 4.625H13.3438C13.75 4.625 14.0938 4.96875 14.0938 5.375V6.375C14.0938 6.8125 13.75 7.125 13.3438 7.125H4.84375L8.75 10.8438C9.03125 11.1562 9.0625 11.625 8.75 11.375Z" fill="#4B5563"/>
         </svg>
       </button>
-      <h1 class="help-support__title">Часто задаваемые вопросы</h1>
+      <h1 class="help-support__title" aria-label="Часто задаваемые вопросы">
+        <span class="help-support__title-line help-support__title-line--top">Часто задаваемые</span>
+        <span class="help-support__title-line help-support__title-line--bottom">вопросы</span>
+      </h1>
       <div class="help-support__header-spacer"></div>
     </header>
 
@@ -132,6 +135,14 @@ onMounted(async () => {
           @click="selectedCategory = 'payment'"
         >
           Оплата
+        </button>
+        <button
+          type="button"
+          class="help-support__filter"
+          :class="{ 'help-support__filter--active': selectedCategory === 'account' }"
+          @click="selectedCategory = 'account'"
+        >
+          Аккаунт
         </button>
       </div>
 
@@ -211,20 +222,18 @@ onMounted(async () => {
 .help-support__header {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 12px 18px;
-  background: #F9FAFB;
-  border-bottom: 1px solid #E2E8F0;
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 18px;
+  background: #FFFFFF;
+  border-bottom: 1.33333px solid #E5E7EB;
 }
 
 .help-support__back {
   width: 30px;
   height: 30px;
-  border-radius: 50%;
-  background: #E2E8F0;
+  border-radius: 9999px;
+  background: #F3F4F6;
   border: none;
   display: flex;
   align-items: center;
@@ -237,11 +246,15 @@ onMounted(async () => {
   margin: 0;
   font-family: Inter, sans-serif;
   font-weight: 700;
-  font-size: 20px;
-  line-height: 1.2;
+  font-size: 14px;
+  line-height: 1.15;
   color: #1F2937;
   text-align: center;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
 }
 
 .help-support__header-spacer {
@@ -249,54 +262,85 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
+.help-support__title-line {
+  display: block;
+}
+
+.help-support__title-line--top {
+  font-size: 13.1px;
+  line-height: 2.14;
+}
+
+.help-support__title-line--bottom {
+  font-size: 13.6px;
+  line-height: 2.06;
+  margin-top: -10px;
+}
+
 .help-support__content {
   flex: 1;
-  padding: 18px;
-  overflow-y: auto;
-  padding-bottom: 20px;
+  padding: 0 18px 18px;
   background: #FFFFFF;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0;
+  overflow: hidden;
 }
 
 .help-support__filters {
   display: flex;
   gap: 8px;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
+  padding: 12px 18px 11px;
+  margin: 0 -18px 8px;
+  border-top: 1px solid #E5E7EB;
+  border-bottom: 1px solid #E5E7EB;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.help-support__filters::-webkit-scrollbar {
+  display: none;
 }
 
 .help-support__filter {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 20px;
-  background: #E2E8F0;
+  padding: 3.5px 12px;
+  border: 1px solid #D1D5DB;
+  border-radius: 9999px;
+  background: transparent;
   color: #4B5563;
   font-family: Inter, sans-serif;
   font-weight: 400;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 10.2px;
+  line-height: 1.96;
   cursor: pointer;
   transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
 .help-support__filter--active {
   background: #2563EB;
   color: #FFFFFF;
+  border-color: #2563EB;
 }
 
 .help-support__section {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  margin-bottom: 32px;
+  gap: 9px;
+  margin: 8px 0 18px;
 }
 
 .help-support__section-title {
   margin: 0;
   font-family: Inter, sans-serif;
   font-weight: 700;
-  font-size: 18px;
-  line-height: 1.5;
+  font-size: 13.5px;
+  line-height: 2.07;
   color: #1F2937;
+  text-align: center;
 }
 
 .help-support__faq-list {
@@ -306,7 +350,7 @@ onMounted(async () => {
 }
 
 .help-support__faq-item {
-  border: 1px solid #E2E8F0;
+  border: 1px solid #E5E7EB;
   border-radius: 12px;
   background: #FFFFFF;
   overflow: hidden;
@@ -322,21 +366,22 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px;
+  padding: 12px;
   background: transparent;
   border: none;
   cursor: pointer;
-  text-align: left;
+  text-align: center;
   gap: 16px;
 }
 
 .help-support__faq-question-text {
   flex: 1;
   font-family: Inter, sans-serif;
-  font-weight: 400;
-  font-size: 14px;
-  line-height: 1.5;
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 2.03;
   color: #1F2937;
+  text-align: center;
 }
 
 .help-support__faq-chevron {
@@ -351,32 +396,33 @@ onMounted(async () => {
 }
 
 .help-support__faq-answer {
-  padding: 0 16px 16px 16px;
+  padding: 8px 12px 12px;
   font-family: Inter, sans-serif;
   font-weight: 400;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 10px;
+  line-height: 2.27;
   color: #4B5563;
-  border-top: 1px solid #F3F4F6;
+  border-top: 1px solid #E5E7EB;
   margin-top: 0;
-  padding-top: 16px;
+  text-align: center;
 }
 
 .help-support__support-section {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 24px;
-  background: #FFFFFF;
-  border-radius: 12px;
+  gap: 9px;
+  padding: 18px;
+  background: #F9FAFB;
+  border-radius: 0;
+  margin: 6px -18px 0;
 }
 
 .help-support__support-icon {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: #E8F0FE;
+  background: #DBEAFE;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -391,9 +437,9 @@ onMounted(async () => {
 .help-support__support-title {
   margin: 0;
   font-family: Inter, sans-serif;
-  font-weight: 400;
-  font-size: 16px;
-  line-height: 1.5;
+  font-weight: 700;
+  font-size: 13.1px;
+  line-height: 2.14;
   color: #1F2937;
   text-align: center;
 }
@@ -402,8 +448,8 @@ onMounted(async () => {
   margin: 0;
   font-family: Inter, sans-serif;
   font-weight: 400;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 11.1px;
+  line-height: 2.16;
   color: #4B5563;
   text-align: center;
 }
@@ -412,16 +458,16 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
-  border: 1px solid #E2E8F0;
+  padding: 8px 16px;
+  border: none;
   border-radius: 12px;
   background: #F3F4F6;
   cursor: pointer;
   font-family: Inter, sans-serif;
   font-weight: 400;
-  font-size: 14px;
-  line-height: 1.5;
-  color: #4B5563;
+  font-size: 11.6px;
+  line-height: 2.07;
+  color: #374151;
   transition: all 0.2s ease;
   width: 100%;
   justify-content: center;
@@ -429,7 +475,6 @@ onMounted(async () => {
 
 .help-support__contact-button:hover {
   background: #E5E7EB;
-  border-color: #D1D5DB;
 }
 
 .help-support__contact-button svg {
@@ -441,7 +486,6 @@ onMounted(async () => {
 /* Tablet styles */
 @media (min-width: 768px) {
   .help-support__content {
-    padding: 24px 32px;
     max-width: 768px;
     margin: 0 auto;
   }
@@ -451,23 +495,22 @@ onMounted(async () => {
   }
 
   .help-support__title {
-    font-size: 24px;
+    font-size: 18px;
   }
 
   .help-support__section-title {
-    font-size: 20px;
+    font-size: 18px;
   }
 
   .help-support__faq-question-text,
   .help-support__faq-answer {
-    font-size: 16px;
+    font-size: 14px;
   }
 }
 
 /* Desktop styles */
 @media (min-width: 1024px) {
   .help-support__content {
-    padding: 32px 48px;
     max-width: 900px;
   }
 }
