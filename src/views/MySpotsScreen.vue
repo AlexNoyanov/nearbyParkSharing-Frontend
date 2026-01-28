@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { spotsApi, type MySpot } from '../services/spotsApi'
 import parkingLotImage from '../assets/images/parkinglot.jpg'
 
@@ -42,21 +42,44 @@ onMounted(() => {
   loadMySpots()
 })
 
+// Expose loadMySpots so parent can trigger refresh
+defineExpose({
+  refresh: loadMySpots
+})
+
 const handleTabChange = (tab: 'all' | 'active') => {
   activeTab.value = tab
 }
 
 const filteredSpots = computed(() => {
+  // Сначала отфильтруем только видимые (неархивированные/нескрытые) места
+  const visibleSpots = spots.value.filter((spot) => {
+    const anySpot = spot as any
+    const status = (anySpot.status || '').toString().toUpperCase()
+    const archivedFlag =
+      anySpot.archived === true ||
+      anySpot.isArchived === true ||
+      anySpot.isHidden === true
+
+    // Считаем место скрытым/архивированным, если:
+    // - есть явный флаг archived / isArchived / isHidden
+    // - либо статус ARCHIVED / HIDDEN / INACTIVE / DISABLED
+    const archivedByStatus =
+      status === 'ARCHIVED' ||
+      status === 'HIDDEN' ||
+      status === 'INACTIVE' ||
+      status === 'DISABLED'
+
+    return !(archivedFlag || archivedByStatus)
+  })
+
   if (activeTab.value === 'active') {
-    // Активные места - те, которые доступны для бронирования
-    // Пока считаем все места активными, если нет поля isHidden или status
-    return spots.value.filter(() => {
-      // Если в будущем будет поле isHidden или status, можно добавить проверку
-      // return !spot.isHidden || spot.status === 'active'
-      return true // Пока все места считаем активными
-    })
+    // Пока нет точного статуса из бэкенда, считаем все видимые места активными.
+    return visibleSpots
   }
-  return spots.value
+
+  // "Все места" — тоже только видимые (неархивированные)
+  return visibleSpots
 })
 
 const handleEdit = (spot: MySpot) => {

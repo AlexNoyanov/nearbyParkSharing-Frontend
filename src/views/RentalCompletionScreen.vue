@@ -107,7 +107,7 @@ const formatTime = (timeStr: string): string => {
         <div class="rental-completion__warning-content">
           <div class="rental-completion__warning-title">Досрочное завершение аренды</div>
           <div class="rental-completion__warning-text">
-            Если вы завершаете аренду ранее, то перерасчет может быть инициирован только по согласованию с арендодателем. Сообщите в поддержку и мы сделаем перерасчет, если арендатор его согласует. Перерасчет доступен только в почасовом тарифе
+            Денежные средства за неиспользование времени бронирования не возвращаются
           </div>
         </div>
       </div>

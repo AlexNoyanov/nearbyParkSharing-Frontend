@@ -71,6 +71,11 @@ export interface MySpot {
   availableDateTo?: string
   createdAt?: string
   updatedAt?: string
+  // Optional backend flags / status fields (for archive/hide logic)
+  status?: string
+  archived?: boolean
+  isArchived?: boolean
+  isHidden?: boolean
 }
 
 export const spotsApi = {
@@ -412,7 +417,12 @@ export const spotsApi = {
    * @param cancelUpcomingBookings - If true, cancel upcoming bookings; if false, wait for them to complete
    */
   async archiveSpot(id: string, cancelUpcomingBookings: boolean = false): Promise<void> {
-    const API_URL = `${API_BASE_URL}/api/v1/spots/${id}/archive`
+    // Some backends expect this flag as a query param rather than JSON body.
+    // To be maximally compatible with the Swagger method `/api/v1/spots/{id}/archive`,
+    // we pass it as a query parameter and do NOT send a JSON body.
+    const API_URL = `${API_BASE_URL}/api/v1/spots/${id}/archive${
+      cancelUpcomingBookings ? '?cancelUpcomingBookings=true' : ''
+    }`
 
     console.log('[SpotsAPI] ===== ARCHIVE SPOT =====')
     console.log('[SpotsAPI] Spot ID:', id)
@@ -429,11 +439,10 @@ export const spotsApi = {
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'Accept': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ cancelUpcomingBookings }),
+        // No body: backend Swagger `/api/v1/spots/{id}/archive` typically does not require one.
         mode: 'cors',
         credentials: 'omit',
       })

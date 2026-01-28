@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import AppBottomNav from './components/AppBottomNav.vue'
 import { featuredParkings, type ParkingSpot } from './data/parkings'
 import ActiveBookingScreen from './views/ActiveBookingScreen.vue'
@@ -134,6 +134,7 @@ const loadingMessage = ref<string>('Обрабатываем запрос')
 const loadingSubtitle = ref<string>('')
 const bookingsCount = ref<number>(0)
 const selectedSpotIdForUnpublish = ref<string | null>(null)
+const mySpotsScreenRef = ref<InstanceType<typeof MySpotsScreen> | null>(null)
 
 type Booking = {
   id: string
@@ -735,11 +736,16 @@ const handleUnpublishSpotConfirm = async (cancelUpcomingBookings: boolean) => {
 
     console.log('[App] ✓ Spot unpublished successfully')
 
-    // After 1.5 seconds, navigate to my-spots to refresh the list
-    setTimeout(() => {
+    // After 1.5 seconds, navigate to my-spots and refresh the list
+    setTimeout(async () => {
       selectedSpotIdForUnpublish.value = null
       stage.value = 'my-spots'
       navSelection.value = 'rent'
+      // Wait for component to mount, then refresh the spots list
+      await nextTick()
+      if (mySpotsScreenRef.value && typeof (mySpotsScreenRef.value as any).refresh === 'function') {
+        (mySpotsScreenRef.value as any).refresh()
+      }
     }, 1500)
   } catch (error: any) {
     console.error('[App] ✗ Failed to unpublish spot:', error)
@@ -749,10 +755,15 @@ const handleUnpublishSpotConfirm = async (cancelUpcomingBookings: boolean) => {
     loadingSubtitle.value = error?.message || 'Не удалось снять место с публикации'
 
     // After 2 seconds, go back to my-spots
-    setTimeout(() => {
+    setTimeout(async () => {
       selectedSpotIdForUnpublish.value = null
       stage.value = 'my-spots'
       navSelection.value = 'rent'
+      // Wait for component to mount, then refresh the spots list
+      await nextTick()
+      if (mySpotsScreenRef.value && typeof (mySpotsScreenRef.value as any).refresh === 'function') {
+        (mySpotsScreenRef.value as any).refresh()
+      }
     }, 2000)
   }
 }
@@ -1557,6 +1568,17 @@ watch(stage, async (newStage) => {
   }
 }, { immediate: true })
 
+// Watch for stage changes to refresh my-spots list when returning to it
+watch(stage, async (newStage) => {
+  if (newStage === 'my-spots') {
+    // Wait for component to mount, then refresh the spots list
+    await nextTick()
+    if (mySpotsScreenRef.value && typeof (mySpotsScreenRef.value as any).refresh === 'function') {
+      (mySpotsScreenRef.value as any).refresh()
+    }
+  }
+})
+
 // Get Telegram initData helper
 const getInitData = (): string => {
   if (window.Telegram?.WebApp?.initData) {
@@ -1950,6 +1972,7 @@ onMounted(async () => {
 
         <MySpotsScreen
           v-else-if="stage === 'my-spots'"
+          ref="mySpotsScreenRef"
           @back="goHome"
           @open-spot="(spot) => { console.log('Spot clicked:', spot); /* TODO: Navigate to spot details */ }"
           @edit-spot="handleEditSpot"

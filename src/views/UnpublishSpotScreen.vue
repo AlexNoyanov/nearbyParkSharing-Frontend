@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { spotsApi } from '../services/spotsApi'
 
 const props = defineProps<{
   spotId: string
@@ -13,9 +14,30 @@ const emit = defineEmits<{
 
 // Radio selection: cancel upcoming or wait for completion
 const selectedAction = ref<'cancel' | 'wait'>('cancel')
+const isLoading = ref(false)
+const error = ref<string | null>(null)
 
-const handleConfirm = () => {
-  emit('confirm', selectedAction.value === 'cancel')
+const handleConfirm = async () => {
+  if (isLoading.value) return
+  
+  isLoading.value = true
+  error.value = null
+  
+  try {
+    const cancelUpcomingBookings = selectedAction.value === 'cancel'
+    console.log('[UnpublishSpotScreen] Archiving spot:', props.spotId, 'cancel upcoming:', cancelUpcomingBookings)
+    
+    await spotsApi.archiveSpot(props.spotId, cancelUpcomingBookings)
+    
+    console.log('[UnpublishSpotScreen] ✓ Spot archived successfully')
+    
+    // Emit confirm event for parent component to handle navigation
+    emit('confirm', cancelUpcomingBookings)
+  } catch (err: any) {
+    console.error('[UnpublishSpotScreen] ✗ Failed to archive spot:', err)
+    error.value = err?.message || 'Не удалось снять место с публикации. Попробуйте еще раз.'
+    isLoading.value = false
+  }
 }
 
 const handleCancel = () => {
@@ -177,16 +199,21 @@ const handleBack = () => {
 
     <!-- Footer -->
     <footer class="unpublish-screen__footer">
+      <div v-if="error" class="unpublish-screen__error">
+        {{ error }}
+      </div>
       <button
         type="button"
         class="unpublish-screen__confirm-button"
+        :disabled="isLoading"
         @click="handleConfirm"
       >
-        Снять с публикации
+        {{ isLoading ? 'Снятие с публикации...' : 'Снять с публикации' }}
       </button>
       <button
         type="button"
         class="unpublish-screen__cancel-button"
+        :disabled="isLoading"
         @click="handleCancel"
       >
         Отмена
@@ -544,6 +571,29 @@ const handleBack = () => {
 
 .unpublish-screen__cancel-button:hover {
   color: #1F2937;
+}
+
+.unpublish-screen__cancel-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.unpublish-screen__confirm-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.unpublish-screen__error {
+  padding: 12px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: #FEE2E2;
+  color: #DC2626;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 400;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
 }
 
 /* Responsive adjustments */
