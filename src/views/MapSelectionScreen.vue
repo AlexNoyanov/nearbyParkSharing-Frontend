@@ -145,12 +145,18 @@ const handleSearchInput = () => {
 
 // Select a suggestion
 const selectSuggestion = (suggestion: { address: string; coords: [number, number] }) => {
-  if (!map) return
+  console.log('[MapSelection] Suggestion selected:', suggestion)
+
+  if (!map) {
+    console.error('[MapSelection] Map not initialized')
+    return
+  }
 
   showSuggestions.value = false
   searchSuggestions.value = []
   searchQuery.value = suggestion.address
 
+  console.log('[MapSelection] Setting map center to:', suggestion.coords)
   map.setCenter(suggestion.coords, 15)
 
   // Remove existing marker
@@ -165,6 +171,12 @@ const selectSuggestion = (suggestion: { address: string; coords: [number, number
   selectedAddress.value = suggestion.address
   selectedLatitude.value = suggestion.coords[0]
   selectedLongitude.value = suggestion.coords[1]
+
+  console.log('[MapSelection] Selection complete:', {
+    address: selectedAddress.value,
+    lat: selectedLatitude.value,
+    lng: selectedLongitude.value
+  })
 }
 
 // Close suggestions when clicking outside
@@ -353,7 +365,8 @@ const handleSelectAddress = () => {
             v-for="(suggestion, index) in searchSuggestions"
             :key="index"
             class="map-selection__suggestion-item"
-            @click="selectSuggestion(suggestion)"
+            @click.stop="selectSuggestion(suggestion)"
+            @mousedown.stop
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" class="map-selection__suggestion-icon">
               <path d="M8 0C3.58 0 0 3.58 0 8C0 12.42 8 16 8 16C8 16 16 12.42 16 8C16 3.58 12.42 0 8 0ZM8 10C6.9 10 6 9.1 6 8C6 6.9 6.9 6 8 6C9.1 6 10 6.9 10 8C10 9.1 9.1 10 8 10Z" fill="#9CA3AF"/>
