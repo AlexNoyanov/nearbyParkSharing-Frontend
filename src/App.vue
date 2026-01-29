@@ -33,7 +33,7 @@ import BookingConfirmationScreen from './views/BookingConfirmationScreen.vue'
 import FullScreenMapScreen from './views/FullScreenMapScreen.vue'
 import type { User } from './services/mockAuth'
 import { featureToggles, type FeatureKey } from './services/featureToggles'
-import { authApi } from './services/authApi'
+import { authApi, getTestZaharikToken, PREVIEW_AS_ZAHARIK_KEY, PREVIEW_ZAHARIK_USER } from './services/authApi'
 import { spotsApi } from './services/spotsApi'
 import chatIconSvg from './assets/icons/bottom-nav-chat.svg?raw'
 import homeIconSvg from './assets/icons/bottom-nav-home.svg?raw'
@@ -436,9 +436,27 @@ const goToLogin = async () => {
 }
 
 const goToHomeAsGuest = async () => {
-  currentUser.value = null
-  userName.value = undefined
-  ownerRequests.value = []
+  // «Просто посмотреть» — переключаемся на тестовую учётную запись zaharik для тестирования
+  localStorage.setItem(PREVIEW_AS_ZAHARIK_KEY, '1')
+  // Токен zaharik: из .env (VITE_TEST_ZAHARIK_TOKEN) или константы TEST_ZAHARIK_TOKEN, иначе запасной для тестового бэкенда
+  const testZaharikToken = getTestZaharikToken() || 'zaharik'
+  localStorage.setItem('auth_token', testZaharikToken)
+  currentUser.value = {
+    id: PREVIEW_ZAHARIK_USER.id,
+    name: PREVIEW_ZAHARIK_USER.username,
+    phone: PREVIEW_ZAHARIK_USER.phoneNumber,
+  }
+  userName.value = PREVIEW_ZAHARIK_USER.username
+  // Тестовые заявки владельца (как у +79990001122)
+  ownerRequests.value = [
+    { id: 'owner-req-1', address: 'Москва, Тверская, 15', startDate: '2025-12-15', endDate: '2025-12-15', startTime: '10:00', endTime: '14:00', renterName: 'Михаил', status: 'awaiting' },
+    { id: 'owner-req-2', address: 'Москва, Тверская, 15', startDate: '2025-12-15', endDate: '2025-12-15', startTime: '16:00', endTime: '20:00', renterName: 'Елена', status: 'cancelled' },
+    { id: 'owner-req-3', address: 'Москва, Тверская, 15', startDate: '2025-12-14', endDate: '2025-12-14', startTime: '09:00', endTime: '12:00', renterName: 'Дмитрий', status: 'completed' },
+    { id: 'owner-req-4', address: 'Москва, Тверская, 15', startDate: '2025-12-16', endDate: '2025-12-16', startTime: '14:00', endTime: '18:00', renterName: 'Алексей', status: 'active' },
+    { id: 'owner-req-5', address: 'Москва, Тверская, 15', startDate: '2025-12-17', endDate: '2025-12-17', startTime: '10:00', endTime: '18:00', renterName: 'Иван', status: 'confirmed' },
+  ]
+  bookings.value = []
+  bookingsCount.value = 0
   await checkFeatureAndNavigate('home', 'home')
   if (stage.value === 'home') {
     navSelection.value = 'home'
@@ -501,6 +519,7 @@ const goToCallVerification = async (arg1: string, arg2?: string) => {
 }
 
 const handleAuthSuccess = (user: User) => {
+  localStorage.removeItem(PREVIEW_AS_ZAHARIK_KEY)
   currentUser.value = user
   userName.value = user.name
 
@@ -1507,9 +1526,10 @@ const handleLogout = () => {
   bookingsCount.value = 0
   ownerRequests.value = []
   
-  // Clear auth token
+  // Clear auth token and режим «Просто посмотреть»
   localStorage.removeItem('auth_token')
-  
+  localStorage.removeItem(PREVIEW_AS_ZAHARIK_KEY)
+
   // Navigate to login
   stage.value = 'login'
   navSelection.value = 'home'

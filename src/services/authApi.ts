@@ -45,6 +45,34 @@ export interface UserMeResponse {
   username: string
 }
 
+/** Ключ в localStorage: режим «Просто посмотреть» под тестовым пользователем zaharik */
+export const PREVIEW_AS_ZAHARIK_KEY = 'preview_as_zaharik'
+
+/** Mock-ответ /users/me для тестового пользователя zaharik (режим «Просто посмотреть») */
+export const PREVIEW_ZAHARIK_USER: UserMeResponse = {
+  id: 'zaharik-preview-id',
+  telegramId: 0,
+  phoneNumber: '+79990001122',
+  firstName: 'Zaharik',
+  lastName: null,
+  username: 'zaharik',
+}
+
+/**
+ * Тестовый JWT для учётной записи zaharik (режим «Просто посмотреть»).
+ * При истечении токена — залогиньтесь под zaharik заново и обновите значение (или задайте VITE_TEST_ZAHARIK_TOKEN в .env.local).
+ */
+export const TEST_ZAHARIK_TOKEN: string =
+  'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjNWZkNDIxZC0wMGRkLTQwZTMtOTVlOC1kZDNlOWJhMzBhOTciLCJyb2xlIjoiVVNFUiIsInRlbGVncmFtSWQiOjExMTIyMjMzMywiaWF0IjoxNzY5Njg5NDA3LCJleHAiOjE3Njk3NzU4MDd9.F4EfISRr3JntGAdM2kFqwG19mxM2w8kbwcKKVqMBEkg'
+
+export function getTestZaharikToken(): string {
+  const fromEnv = import.meta.env.VITE_TEST_ZAHARIK_TOKEN
+  if (fromEnv && typeof fromEnv === 'string' && fromEnv.trim()) return fromEnv.trim()
+  const fromConst = TEST_ZAHARIK_TOKEN
+  if (fromConst && typeof fromConst === 'string' && fromConst.trim()) return fromConst.trim()
+  return ''
+}
+
 /**
  * Parse Telegram initData query string to extract auth_date
  * @param initData - Telegram initData query string (e.g., "auth_date=1768317980&query_id=...")
@@ -714,18 +742,25 @@ export const authApi = {
    * Requires authentication token in Authorization header
    */
   async getCurrentUser(): Promise<UserMeResponse> {
+    // Режим «Просто посмотреть» без тестового токена — возвращаем mock, чтобы не падать без auth
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(PREVIEW_AS_ZAHARIK_KEY) && !token) {
+      console.log('[AuthAPI] Preview as zaharik (no token): returning mock user')
+      return Promise.resolve({ ...PREVIEW_ZAHARIK_USER })
+    }
+
     const API_URL = `${API_BASE_URL}/api/v1/users/me`
     
     console.log('[AuthAPI] ===== GET CURRENT USER =====')
     console.log('[AuthAPI] API Endpoint:', API_URL)
     
-    // Get token from localStorage
-    const token = localStorage.getItem('auth_token')
-    if (!token) {
+    // Get token from localStorage (в режиме «Просто посмотреть» с VITE_TEST_ZAHARIK_TOKEN уже установлен)
+    const authToken = token ?? localStorage.getItem('auth_token')
+    if (!authToken) {
       throw new Error('Authentication token not found. Please login first.')
     }
     
-    console.log('[AuthAPI] Token found:', token ? 'yes' : 'no')
+    console.log('[AuthAPI] Token found:', authToken ? 'yes' : 'no')
     
     try {
       const response = await fetch(API_URL, {
@@ -733,7 +768,7 @@ export const authApi = {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${authToken}`,
         },
         mode: 'cors',
         credentials: 'omit',

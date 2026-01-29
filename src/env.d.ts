@@ -8,6 +8,8 @@ interface ImportMetaEnv {
   readonly VITE_FIREBASE_MESSAGING_SENDER_ID: string
   readonly VITE_FIREBASE_APP_ID: string
   readonly VITE_FIREBASE_MEASUREMENT_ID?: string
+  /** Тестовый JWT для учётной записи zaharik (режим «Просто посмотреть»). Задать в .env.local */
+  readonly VITE_TEST_ZAHARIK_TOKEN?: string
 }
 
 interface ImportMeta {
