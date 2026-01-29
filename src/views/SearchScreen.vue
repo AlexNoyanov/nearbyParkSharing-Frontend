@@ -197,8 +197,14 @@ const handleSearchInput = () => {
 
 // Select a suggestion
 const selectSuggestion = (suggestion: { address: string; coords: [number, number] }) => {
-  if (!map) return
+  console.log('[SearchScreen] selectSuggestion called:', suggestion)
+  
+  if (!map) {
+    console.error('[SearchScreen] Map not initialized')
+    return
+  }
 
+  console.log('[SearchScreen] Closing suggestions and moving map to:', suggestion.coords)
   showSuggestions.value = false
   searchSuggestions.value = []
 
@@ -584,7 +590,9 @@ const mapLocationToParkingSpot = (location: Location): ParkingSpot => {
             v-for="(suggestion, index) in searchSuggestions"
             :key="index"
             class="search-screen__suggestion-item"
-            @click="selectSuggestion(suggestion)"
+            @click.stop.prevent="selectSuggestion(suggestion)"
+            @mousedown.stop.prevent
+            @touchstart.stop.prevent
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" class="search-screen__suggestion-icon">
               <path d="M8 0C3.58 0 0 3.58 0 8C0 12.42 8 16 8 16C8 16 16 12.42 16 8C16 3.58 12.42 0 8 0ZM8 10C6.9 10 6 9.1 6 8C6 6.9 6.9 6 8 6C9.1 6 10 6.9 10 8C10 9.1 9.1 10 8 10Z" fill="#9CA3AF"/>
@@ -834,7 +842,8 @@ const mapLocationToParkingSpot = (location: Location): ParkingSpot => {
   display: flex;
   align-items: center;
   gap: 12px;
-  z-index: 1000;
+  z-index: 2001;
+  position: relative;
 }
 
 .search-screen__back {
@@ -864,6 +873,7 @@ const mapLocationToParkingSpot = (location: Location): ParkingSpot => {
   position: relative;
   display: flex;
   align-items: center;
+  z-index: 2002;
 }
 
 .search-screen__search-input {
@@ -917,6 +927,7 @@ const mapLocationToParkingSpot = (location: Location): ParkingSpot => {
   max-height: 300px;
   overflow-y: auto;
   z-index: 2000;
+  pointer-events: auto;
 }
 
 .search-screen__suggestion-item {
@@ -927,6 +938,9 @@ const mapLocationToParkingSpot = (location: Location): ParkingSpot => {
   cursor: pointer;
   transition: background-color 0.2s ease;
   border-bottom: 1px solid #f3f4f6;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .search-screen__suggestion-item:last-child {
@@ -960,6 +974,9 @@ const mapLocationToParkingSpot = (location: Location): ParkingSpot => {
   right: 0;
   bottom: 0;
   z-index: 1999;
+  pointer-events: auto;
+  /* Overlay should not block header area where suggestions are */
+  background: transparent;
 }
 
 .search-screen__map-area {
