@@ -98,7 +98,7 @@ const isLoadingBookings = ref(false)
 // Helper to format datetime from ISO string
 function formatDateFromISO(isoString: string): { date: string; time: string } {
   const dt = new Date(isoString)
-  const date = dt.toISOString().split('T')[0] // YYYY-MM-DD
+  const date = dt.toISOString().split('T')[0] ?? '' // YYYY-MM-DD
   const time = dt.toTimeString().slice(0, 5) // HH:mm
   return { date, time }
 }

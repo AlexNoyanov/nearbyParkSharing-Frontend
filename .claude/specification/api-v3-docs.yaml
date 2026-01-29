@@ -1,0 +1,2595 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ParkSharing API",
+    "description": "API для аренды парковок и авторизации через Telegram + SMS",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "/parkshare"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Чаты",
+      "description": "Управление чатами и сообщениями между участниками бронирования"
+    },
+    {
+      "name": "Пользователи",
+      "description": "Управление данными профиля пользователя"
+    },
+    {
+      "name": "Spots",
+      "description": "Управление парковочными местами (Сдать место)"
+    },
+    {
+      "name": "Автомобили",
+      "description": "Управление списком автомобилей пользователя (гараж)"
+    },
+    {
+      "name": "Авторизация",
+      "description": "Флоу авторизации через Telegram Mini Apps и верификацию номера телефона (Call Check)"
+    },
+    {
+      "name": "Bookings",
+      "description": "Управление жизненным циклом бронирования: создание, подтверждение, завершение"
+    },
+    {
+      "name": "Медиа",
+      "description": "Загрузка и управление файлами (S3)"
+    }
+  ],
+  "paths": {
+    "/api/v1/spots/{id}": {
+      "get": {
+        "tags": [
+          "Spots"
+        ],
+        "summary": "Получить детали места по ID (публичный)",
+        "description": "Используется после выбора места на карте. Возвращает детали только для активных мест.",
+        "operationId": "getById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpotDetailsPublicResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Spots"
+        ],
+        "summary": "Редактировать объявление",
+        "description": "Полное обновление полей. Если изменить список фото, лишние удалятся из S3.",
+        "operationId": "update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpotResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cars/{id}": {
+      "put": {
+        "tags": [
+          "Автомобили"
+        ],
+        "summary": "Редактировать автомобиль",
+        "description": "Позволяет изменить данные (номер, марка, модель, цвет) существующего автомобиля. Можно редактировать только свои машины.",
+        "operationId": "updateCar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CarRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Успешное обновление",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CarResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Машина не найдена или принадлежит другому пользователю",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CarResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Автомобили"
+        ],
+        "summary": "Удалить автомобиль",
+        "description": "Безвозвратное удаление автомобиля из профиля пользователя. Можно удалить только свою машину.",
+        "operationId": "deleteCar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Машина удалена"
+          }
+        }
+      }
+    },
+    "/api/v1/spots": {
+      "post": {
+        "tags": [
+          "Spots"
+        ],
+        "summary": "Создать объявление",
+        "description": "Принимает данные места и список URL фото (загруженных ранее)",
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpotResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/spots/{id}/archive": {
+      "post": {
+        "tags": [
+          "Spots"
+        ],
+        "summary": "Снять место с публикации (архивировать)",
+        "description": "Переводит место в архив (active=false). Доступно только владельцу места.\n\nТело запроса опционально:\n- Если тело не передано или cancelBlockingBookings=false — место снимается с публикации, бронирования не изменяются.\n- Если cancelBlockingBookings=true — отменяются только предстоящие бронирования (WAITING_CONFIRMATION, WAITING_START).\n  Если при этом есть активное бронирование (ACTIVE), возвращается 409 (нельзя отменить активное).\n",
+        "operationId": "archive",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveSpotRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Место снято с публикации"
+          },
+          "401": {
+            "description": "Неавторизован"
+          },
+          "403": {
+            "description": "Нет прав (не владелец)"
+          },
+          "404": {
+            "description": "Место не найдено"
+          },
+          "409": {
+            "description": "Конфликт: есть активное бронирование при cancelBlockingBookings=true"
+          }
+        }
+      }
+    },
+    "/api/v1/spots/{id}/activate": {
+      "post": {
+        "tags": [
+          "Spots"
+        ],
+        "summary": "Вернуть из архива",
+        "description": "Сделать объявление снова активным",
+        "operationId": "activate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/media/upload": {
+      "post": {
+        "tags": [
+          "Медиа"
+        ],
+        "summary": "Загрузить изображение",
+        "description": "Загружает файл в S3 и возвращает его публичный URL. Этот URL необходимо сохранить и передать в списке фото при создании/редактировании объявления (Spot).",
+        "operationId": "upload",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Файл изображения (jpg, png)"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Файл загружен",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "example": {
+                    "url": "https://s3.../img.jpg"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cars": {
+      "get": {
+        "tags": [
+          "Автомобили"
+        ],
+        "summary": "Получить список моих авто",
+        "description": "Возвращает все автомобили, добавленные текущим пользователем.",
+        "operationId": "getMyCars",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CarResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Автомобили"
+        ],
+        "summary": "Добавить новый автомобиль",
+        "description": "Регистрирует новый автомобиль в системе для текущего пользователя.",
+        "operationId": "addCar",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CarRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Машина успешно добавлена",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CarResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bookings": {
+      "post": {
+        "tags": [
+          "Bookings"
+        ],
+        "summary": "Создать запрос на бронирование",
+        "description": "Создаёт новую заявку на бронирование в статусе WAITING_CONFIRMATION. Также автоматически создается заблокированный чат.",
+        "operationId": "create_1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBookingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Бронирование создано",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingDetailsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные входные данные",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingDetailsResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Выбранный интервал времени уже занят",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingDetailsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bookings/{id}/start": {
+      "post": {
+        "tags": [
+          "Bookings"
+        ],
+        "summary": "Начать парковку (арендатор)",
+        "description": "Арендатор подтверждает начало парковки: WAITING_START -\u003E ACTIVE.",
+        "operationId": "start",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID бронирования",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Парковка начата",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingDetailsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bookings/{id}/finish": {
+      "post": {
+        "tags": [
+          "Bookings"
+        ],
+        "summary": "Завершить бронирование",
+        "description": "Переводит бронирование в статус FINISHED и закрывает чат. Доступно обоим участникам.",
+        "operationId": "finish",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID бронирования",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Бронирование завершено",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingDetailsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bookings/{id}/confirm": {
+      "post": {
+        "tags": [
+          "Bookings"
+        ],
+        "summary": "Подтвердить бронирование (владелец)",
+        "description": "Переводит бронирование в статус WAITING_START и разблокирует чат.",
+        "operationId": "confirm",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID бронирования",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Бронирование подтверждено",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingDetailsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Неверное состояние бронирования",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingDetailsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Бронирование не найдено",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingDetailsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bookings/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Bookings"
+        ],
+        "summary": "Отменить бронирование",
+        "description": "Отменяет бронирование и закрывает чат. Доступно обоим участникам.",
+        "operationId": "cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID бронирования",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelBookingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Бронирование отменено",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingDetailsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "Авторизация"
+        ],
+        "summary": "Шаг 1: Вход / Проверка сессии",
+        "description": "Вызывается при запуске приложения. Проверяет подпись Telegram initData. Если пользователь новый или не подтвердил телефон, возвращает статус NEED_PHONE.",
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Успешная проверка",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthLoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Невалидная initData (подпись не совпала)"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/call-check/status": {
+      "post": {
+        "tags": [
+          "Авторизация"
+        ],
+        "summary": "Шаг 3: Проверка статуса звонка (Polling)",
+        "description": "Опрашивать этот эндпоинт каждые 3-5 секунд, пока пользователь звонит. Когда звонок будет зафиксирован, вернет статус OK и JWT токен.",
+        "operationId": "checkStatus",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhoneStatusRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Статус проверки",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthLoginResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/call-check/init": {
+      "post": {
+        "tags": [
+          "Авторизация"
+        ],
+        "summary": "Шаг 2: Инициализация проверки телефона",
+        "description": "Используется, если на шаге 1 получен статус NEED_PHONE. Возвращает номер (callToNumber), на который пользователь должен совершить звонок.",
+        "operationId": "initCall",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhoneRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Номер для звонка получен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallCheckResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/me": {
+      "get": {
+        "tags": [
+          "Пользователи"
+        ],
+        "summary": "Получить мой профиль",
+        "description": "Возвращает информацию о текущем авторизованном пользователе (на основе JWT).",
+        "operationId": "me",
+        "responses": {
+          "200": {
+            "description": "Профиль успешно получен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Неавторизован"
+          }
+        }
+      }
+    },
+    "/api/v1/spots/{id}/archive/preview": {
+      "get": {
+        "tags": [
+          "Spots"
+        ],
+        "summary": "Предпросмотр снятия с публикации",
+        "description": "Возвращает список активных и предстоящих бронирований, которые мешают архивации. Доступно только владельцу.",
+        "operationId": "previewArchive",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpotBlockingBookingsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/spots/search": {
+      "get": {
+        "tags": [
+          "Spots"
+        ],
+        "summary": "Поиск парковочных мест (карта + доступность)",
+        "description": "Ищет места, подходящие под тип аренды и свободные в указанном интервале.\nГео-фильтры (bbox или радиус) необязательны.\n\nОбязательные поля по типам аренды:\n- HOURLY: date, timeFrom, timeTo\n- DAILY/MONTHLY: dateFrom, dateTo\n\nПравила доступности:\n- Место должно быть активно.\n- Тип аренды должен быть включен для этого места.\n- Интервал должен попадать в календарь доступности владельца.\n- Исключаются места с пересекающимися бронированиями (статусы WAITING_CONFIRMATION, WAITING_START, ACTIVE).\n",
+        "operationId": "search",
+        "parameters": [
+          {
+            "name": "req",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SpotSearchRequest"
+            }
+          },
+          {
+            "name": "rentType",
+            "in": "query",
+            "description": "Rent type: HOURLY, DAILY, MONTHLY. Example: HOURLY",
+            "required": true
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "description": "HOURLY only. Date in YYYY-MM-DD. Example: 2026-01-15"
+          },
+          {
+            "name": "timeFrom",
+            "in": "query",
+            "description": "HOURLY only. Start time in HH:mm. Example: 10:00"
+          },
+          {
+            "name": "timeTo",
+            "in": "query",
+            "description": "HOURLY only. End time in HH:mm. Example: 12:00"
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "description": "DAILY/MONTHLY only. Start date in YYYY-MM-DD. Example: 2026-01-15"
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "description": "DAILY/MONTHLY only. End date in YYYY-MM-DD. Example: 2026-01-20"
+          },
+          {
+            "name": "minLat",
+            "in": "query",
+            "description": "Map bbox. Minimum latitude. Example: 55.70"
+          },
+          {
+            "name": "minLng",
+            "in": "query",
+            "description": "Map bbox. Minimum longitude. Example: 37.50"
+          },
+          {
+            "name": "maxLat",
+            "in": "query",
+            "description": "Map bbox. Maximum latitude. Example: 55.90"
+          },
+          {
+            "name": "maxLng",
+            "in": "query",
+            "description": "Map bbox. Maximum longitude. Example: 37.80"
+          },
+          {
+            "name": "centerLat",
+            "in": "query",
+            "description": "Map radius search. Center latitude. Example: 55.7558"
+          },
+          {
+            "name": "centerLng",
+            "in": "query",
+            "description": "Map radius search. Center longitude. Example: 37.6173"
+          },
+          {
+            "name": "radiusMeters",
+            "in": "query",
+            "description": "Map radius search. Radius in meters. Example: 1500"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SpotSearchItemResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/spots/my": {
+      "get": {
+        "tags": [
+          "Spots"
+        ],
+        "summary": "Мои объявления",
+        "description": "Список всех мест текущего пользователя",
+        "operationId": "getMySpots",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SpotResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/chats/{chatId}/messages": {
+      "get": {
+        "tags": [
+          "Чаты"
+        ],
+        "summary": "Получить сообщения чата",
+        "description": "Возвращает пагинированный список сообщений чата от новых к старым.",
+        "operationId": "getMessages",
+        "parameters": [
+          {
+            "name": "chatId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pageable",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Pageable"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageChatMessageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/chats/by-booking/{bookingId}": {
+      "get": {
+        "tags": [
+          "Чаты"
+        ],
+        "summary": "Получить чат по ID бронирования",
+        "description": "Возвращает ID чата и его текущее состояние. Доступно только участникам (владельцу или арендатору).",
+        "operationId": "getChatByBooking",
+        "parameters": [
+          {
+            "name": "bookingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bookings/{id}": {
+      "get": {
+        "tags": [
+          "Bookings"
+        ],
+        "summary": "Детали бронирования",
+        "description": "Возвращает подробную информацию о бронировании по его ID. Доступно владельцу или арендатору.",
+        "operationId": "details",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID бронирования",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Детали успешно получены",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingDetailsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Бронирование не найдено",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingDetailsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bookings/my/renting": {
+      "get": {
+        "tags": [
+          "Bookings"
+        ],
+        "summary": "Мои бронирования (я арендатор)",
+        "description": "Возвращает список бронирований, где текущий пользователь является арендатором. Используется для вкладки 'Аренда мест' и в разделе 'Чаты' (фильтрация по аренде).",
+        "operationId": "myRenting",
+        "parameters": [
+          {
+            "name": "activeOnly",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "pageable",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Pageable"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageBookingListItemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bookings/my/leasing": {
+      "get": {
+        "tags": [
+          "Bookings"
+        ],
+        "summary": "Мои сдачи (я владелец)",
+        "description": "Возвращает список бронирований, где текущий пользователь является владельцем места. Используется для вкладки 'Сдача мест' и в разделе 'Чаты' (фильтрация по сдаче).",
+        "operationId": "myLeasing",
+        "parameters": [
+          {
+            "name": "activeOnly",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "pageable",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Pageable"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageBookingListItemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SpotRequest": {
+        "type": "object",
+        "description": "Запрос на создание/редактирование парковочного места",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Адрес места",
+            "example": "Москва, Красная площадь, 1",
+            "minLength": 1
+          },
+          "latitude": {
+            "type": "number",
+            "format": "double",
+            "description": "Широта (Lat)",
+            "example": 55.7558
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double",
+            "description": "Долгота (Lng)",
+            "example": 37.6173
+          },
+          "vehicleType": {
+            "type": "string",
+            "description": "Тип транспортного средства",
+            "enum": [
+              "CAR",
+              "SUV",
+              "VAN",
+              "TRUCK",
+              "MOTORCYCLE"
+            ],
+            "example": "CAR"
+          },
+          "pricePerHour": {
+            "type": "number",
+            "description": "Цена за час (RUB)",
+            "example": 199.99,
+            "minimum": 0
+          },
+          "pricePerDay": {
+            "type": "number",
+            "description": "Цена за сутки (RUB)",
+            "example": 999,
+            "minimum": 0
+          },
+          "pricePerMonth": {
+            "type": "number",
+            "description": "Цена за месяц (RUB)",
+            "example": 10000,
+            "minimum": 0
+          },
+          "scheduleType": {
+            "type": "string",
+            "description": "Тип расписания (ALWAYS/CUSTOM)",
+            "enum": [
+              "ALWAYS",
+              "CUSTOM"
+            ],
+            "example": "ALWAYS"
+          },
+          "availableFrom": {
+            "type": "string",
+            "description": "Время начала доступности (для CUSTOM)",
+            "example": "08:00"
+          },
+          "availableTo": {
+            "type": "string",
+            "description": "Время окончания доступности (для CUSTOM)",
+            "example": "22:00"
+          },
+          "availableDays": {
+            "type": "array",
+            "description": "Разрешенные дни недели (1-7, для CUSTOM)",
+            "example": [1, 2, 3, 4, 5],
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "covered": {
+            "type": "boolean",
+            "description": "Наличие навеса/крыши"
+          },
+          "hasSecurity": {
+            "type": "boolean",
+            "description": "Наличие охраны"
+          },
+          "hasEvCharging": {
+            "type": "boolean",
+            "description": "Наличие зарядки для электромобилей"
+          },
+          "openSpace": {
+            "type": "boolean",
+            "description": "Открытая площадка (не гараж)"
+          },
+          "inYard": {
+            "type": "boolean",
+            "description": "Находится во дворе"
+          },
+          "privateTerritory": {
+            "type": "boolean",
+            "description": "Закрытая/частная территория"
+          },
+          "hasCctv": {
+            "type": "boolean",
+            "description": "Наличие видеонаблюдения"
+          },
+          "description": {
+            "type": "string",
+            "description": "Общее описание места"
+          },
+          "accessGuide": {
+            "type": "string",
+            "description": "Инструкция по доступу (как заехать/пройти)",
+            "example": "Код от шлагбаума 1234"
+          },
+          "photos": {
+            "type": "array",
+            "description": "Список URL фотографий (полученных из /api/v1/media/upload)",
+            "items": {
+              "type": "string"
+            }
+          },
+          "hourlyEnabled": {
+            "type": "boolean",
+            "description": "Включена ли почасовая аренда (если null, вычисляется по цене)"
+          },
+          "dailyEnabled": {
+            "type": "boolean",
+            "description": "Включена ли посуточная аренда (если null, вычисляется по цене)"
+          },
+          "monthlyEnabled": {
+            "type": "boolean",
+            "description": "Включена ли помесячная аренда (если null, вычисляется по цене)"
+          },
+          "availableDateFrom": {
+            "type": "string",
+            "format": "date",
+            "description": "Дата начала календарной доступности (YYYY-MM-DD)",
+            "example": "2026-01-15"
+          },
+          "availableDateTo": {
+            "type": "string",
+            "format": "date",
+            "description": "Дата окончания календарной доступности (YYYY-MM-DD)",
+            "example": "2026-06-30"
+          }
+        },
+        "required": [
+          "address",
+          "latitude",
+          "longitude",
+          "scheduleType",
+          "vehicleType"
+        ]
+      },
+      "SpotResponse": {
+        "type": "object",
+        "description": "Полная информация о парковочном месте",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID места"
+          },
+          "ownerId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID владельца"
+          },
+          "address": {
+            "type": "string",
+            "description": "Адрес"
+          },
+          "latitude": {
+            "type": "number",
+            "format": "double",
+            "description": "Широта"
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double",
+            "description": "Долгота"
+          },
+          "vehicleType": {
+            "type": "string",
+            "description": "Тип транспорта",
+            "enum": [
+              "CAR",
+              "SUV",
+              "VAN",
+              "TRUCK",
+              "MOTORCYCLE"
+            ]
+          },
+          "pricePerHour": {
+            "type": "number",
+            "description": "Цена за час"
+          },
+          "pricePerDay": {
+            "type": "number",
+            "description": "Цена за сутки"
+          },
+          "pricePerMonth": {
+            "type": "number",
+            "description": "Цена за месяц"
+          },
+          "hourlyEnabled": {
+            "type": "boolean",
+            "description": "Почасовая аренда включена"
+          },
+          "dailyEnabled": {
+            "type": "boolean",
+            "description": "Посуточная аренда включена"
+          },
+          "monthlyEnabled": {
+            "type": "boolean",
+            "description": "Помесячная аренда включена"
+          },
+          "availableDateFrom": {
+            "type": "string",
+            "format": "date",
+            "description": "Дата начала календарной доступности"
+          },
+          "availableDateTo": {
+            "type": "string",
+            "format": "date",
+            "description": "Дата окончания календарной доступности"
+          },
+          "scheduleType": {
+            "type": "string",
+            "description": "Тип расписания (ALWAYS/CUSTOM)",
+            "enum": [
+              "ALWAYS",
+              "CUSTOM"
+            ]
+          },
+          "availableFrom": {
+            "type": "string",
+            "description": "Время начала (для CUSTOM)"
+          },
+          "availableTo": {
+            "type": "string",
+            "description": "Время окончания (для CUSTOM)"
+          },
+          "availableDays": {
+            "type": "array",
+            "description": "Разрешенные дни недели (для CUSTOM)",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "covered": {
+            "type": "boolean",
+            "description": "Наличие навеса"
+          },
+          "hasSecurity": {
+            "type": "boolean",
+            "description": "Наличие охраны"
+          },
+          "hasEvCharging": {
+            "type": "boolean",
+            "description": "Наличие зарядки"
+          },
+          "openSpace": {
+            "type": "boolean",
+            "description": "Открытая площадка"
+          },
+          "inYard": {
+            "type": "boolean",
+            "description": "Во дворе"
+          },
+          "privateTerritory": {
+            "type": "boolean",
+            "description": "Частная территория"
+          },
+          "hasCctv": {
+            "type": "boolean",
+            "description": "Видеонаблюдение"
+          },
+          "description": {
+            "type": "string",
+            "description": "Описание"
+          },
+          "photos": {
+            "type": "array",
+            "description": "Список фото",
+            "items": {
+              "type": "string"
+            }
+          },
+          "active": {
+            "type": "boolean",
+            "description": "Активно ли объявление (снято ли с публикации)"
+          }
+        }
+      },
+      "CarRequest": {
+        "type": "object",
+        "properties": {
+          "licensePlate": {
+            "type": "string",
+            "description": "Госномер РФ (можно с пробелами)",
+            "example": "А 777 АА 777",
+            "minLength": 1,
+            "pattern": "^[А-Яа-яA-Z0-9\\s]+$"
+          },
+          "brand": {
+            "type": "string",
+            "description": "Марка авто",
+            "example": "Toyota",
+            "minLength": 1
+          },
+          "model": {
+            "type": "string",
+            "description": "Модель авто",
+            "example": "Camry"
+          },
+          "color": {
+            "type": "string",
+            "description": "Цвет авто",
+            "example": "Черный"
+          }
+        },
+        "required": [
+          "brand",
+          "licensePlate"
+        ]
+      },
+      "CarResponse": {
+        "type": "object",
+        "description": "Информация об автомобиле",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID автомобиля"
+          },
+          "licensePlate": {
+            "type": "string",
+            "description": "Госномер (нормализованный)",
+            "example": "А777АА777"
+          },
+          "brand": {
+            "type": "string",
+            "description": "Марка",
+            "example": "Toyota"
+          },
+          "model": {
+            "type": "string",
+            "description": "Модель",
+            "example": "Camry"
+          },
+          "color": {
+            "type": "string",
+            "description": "Цвет",
+            "example": "Черный"
+          }
+        }
+      },
+      "ArchiveSpotRequest": {
+        "type": "object",
+        "description": "Параметры снятия места с публикации",
+        "properties": {
+          "cancelBlockingBookings": {
+            "type": "boolean",
+            "description": "Если true — отменить активные/предстоящие бронирования и снять с публикации. Если false — снять с публикации можно только при отсутствии таких бронирований.",
+            "example": false
+          },
+          "cancelReason": {
+            "type": "string",
+            "description": "Причина отмены (опционально). Используется, если cancelBlockingBookings=true.",
+            "example": "Место временно недоступно"
+          }
+        }
+      },
+      "CreateBookingRequest": {
+        "type": "object",
+        "description": "Создание заявки на бронирование.\n\nПоля зависят от rentType:\n- HOURLY: date + timeFrom + timeTo\n- DAILY/MONTHLY: dateFrom + dateTo (обе даты включительно по смыслу UI)\ncarId обязателен (показывается в деталях заявки).\n",
+        "properties": {
+          "spotId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID места."
+          },
+          "carId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID автомобиля арендатора."
+          },
+          "rentType": {
+            "type": "string",
+            "description": "Тип аренды: HOURLY / DAILY / MONTHLY.",
+            "enum": [
+              "HOURLY",
+              "DAILY",
+              "MONTHLY"
+            ]
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "Дата для HOURLY (YYYY-MM-DD).",
+            "example": "2026-01-15"
+          },
+          "timeFrom": {
+            "type": "string",
+            "description": "Время начала для HOURLY (HH:mm).",
+            "example": "10:00"
+          },
+          "timeTo": {
+            "type": "string",
+            "description": "Время окончания для HOURLY (HH:mm).",
+            "example": "12:00"
+          },
+          "dateFrom": {
+            "type": "string",
+            "format": "date",
+            "description": "Дата начала для DAILY/MONTHLY (YYYY-MM-DD).",
+            "example": "2026-01-15"
+          },
+          "dateTo": {
+            "type": "string",
+            "format": "date",
+            "description": "Дата окончания для DAILY/MONTHLY (YYYY-MM-DD, включительно).",
+            "example": "2026-01-20"
+          },
+          "clientTotalAmount": {
+            "type": "number",
+            "description": "Сумма, рассчитанная фронтом, для отображения (RUB).",
+            "example": 160
+          }
+        },
+        "required": [
+          "carId",
+          "rentType",
+          "spotId"
+        ]
+      },
+      "BookingDetailsResponse": {
+        "type": "object",
+        "description": "Детальная модель бронирования (для экрана заявки/чата).",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID бронирования."
+          },
+          "spot": {
+            "$ref": "#/components/schemas/SpotShortResponse",
+            "description": "Место, которое бронируют."
+          },
+          "owner": {
+            "$ref": "#/components/schemas/PersonShortResponse",
+            "description": "Владелец места (арендодатель)."
+          },
+          "renter": {
+            "$ref": "#/components/schemas/PersonShortResponse",
+            "description": "Арендатор (кто создал заявку)."
+          },
+          "car": {
+            "$ref": "#/components/schemas/CarShortResponse",
+            "description": "Выбранный автомобиль арендатора."
+          },
+          "rentType": {
+            "type": "string",
+            "description": "Тип аренды: HOURLY / DAILY / MONTHLY.",
+            "enum": [
+              "HOURLY",
+              "DAILY",
+              "MONTHLY"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "description": "Статус (под UI).",
+            "enum": [
+              "WAITING_CONFIRMATION",
+              "WAITING_START",
+              "ACTIVE",
+              "CANCELED",
+              "FINISHED"
+            ]
+          },
+          "startAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Начало интервала аренды (нормализовано сервером).\nФормат ISO-8601 с offset (например ...Z).\n",
+            "example": "2026-01-15T10:00:00Z"
+          },
+          "endAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Конец интервала аренды, end-exclusive.\nДля посуточной (dateFrom..dateTo включительно) endAt будет dateTo+1 в 00:00.\n",
+            "example": "2026-01-15T12:00:00Z"
+          },
+          "totalAmount": {
+            "type": "number",
+            "description": "Итоговая стоимость.\nНа MVP можно хранить/возвращать clientTotalAmount, чтобы в чате показывать сумму как на макете.\n",
+            "example": 160
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Когда создана заявка.",
+            "example": "2026-01-13T12:30:00Z"
+          }
+        }
+      },
+      "CarShortResponse": {
+        "type": "object",
+        "description": "Короткая информация об автомобиле, выбранном для бронирования.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID автомобиля."
+          },
+          "licensePlate": {
+            "type": "string",
+            "description": "Госномер (нормализованный, без пробелов).",
+            "example": "A123BB77"
+          },
+          "brand": {
+            "type": "string",
+            "description": "Марка.",
+            "example": "Toyota"
+          },
+          "model": {
+            "type": "string",
+            "description": "Модель.",
+            "example": "Camry"
+          },
+          "color": {
+            "type": "string",
+            "description": "Цвет.",
+            "example": "Black"
+          }
+        }
+      },
+      "PersonShortResponse": {
+        "type": "object",
+        "description": "Короткая информация о пользователе для карточек/деталей бронирования.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID пользователя."
+          },
+          "firstName": {
+            "type": "string",
+            "description": "Имя (как пришло из Telegram).",
+            "example": "Михаил"
+          },
+          "lastName": {
+            "type": "string",
+            "description": "Фамилия (если есть).",
+            "example": "Иванов"
+          },
+          "username": {
+            "type": "string",
+            "description": "Username Telegram (если есть).",
+            "example": "mikhail"
+          },
+          "phoneNumber": {
+            "type": "string",
+            "description": "Телефон (если подтвержден).",
+            "example": 79990001122
+          }
+        }
+      },
+      "SpotShortResponse": {
+        "type": "object",
+        "description": "Короткая информация о парковочном месте для карточек/деталей бронирования.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID места."
+          },
+          "address": {
+            "type": "string",
+            "description": "Адрес (строкой).",
+            "example": "Москва, Тверская, 15"
+          },
+          "latitude": {
+            "type": "number",
+            "format": "double",
+            "description": "Широта.",
+            "example": 55.7558
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double",
+            "description": "Долгота.",
+            "example": 37.6173
+          },
+          "description": {
+            "type": "string",
+            "description": "Описание."
+          },
+          "photos": {
+            "type": "array",
+            "description": "Фотографии места.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "vehicleType": {
+            "type": "string",
+            "description": "Тип транспорта.",
+            "enum": [
+              "CAR",
+              "SUV",
+              "VAN",
+              "TRUCK",
+              "MOTORCYCLE"
+            ]
+          },
+          "covered": {
+            "type": "boolean",
+            "description": "Крытая."
+          },
+          "hasSecurity": {
+            "type": "boolean",
+            "description": "Охрана."
+          },
+          "hasEvCharging": {
+            "type": "boolean",
+            "description": "Электрозарядка."
+          },
+          "openSpace": {
+            "type": "boolean",
+            "description": "Открытая."
+          },
+          "inYard": {
+            "type": "boolean",
+            "description": "Во дворе."
+          },
+          "privateTerritory": {
+            "type": "boolean",
+            "description": "Частная."
+          },
+          "hasCctv": {
+            "type": "boolean",
+            "description": "Камеры."
+          }
+        }
+      },
+      "CancelBookingRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "AuthLoginRequest": {
+        "type": "object",
+        "description": "Запрос на вход через Telegram",
+        "properties": {
+          "initData": {
+            "type": "string",
+            "description": "Данные инициализации Telegram WebApp",
+            "example": "user=%7B%22id%22%3A123...hash=abcdef",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "initData"
+        ]
+      },
+      "AuthLoginResponse": {
+        "type": "object",
+        "description": "Ответ на запрос авторизации",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "Статус авторизации (OK / NEED_PHONE / ERROR)",
+            "enum": [
+              "OK",
+              "NEED_PHONE",
+              "ERROR"
+            ]
+          },
+          "token": {
+            "type": "string",
+            "description": "JWT токен доступа (выдается только при статусе OK)"
+          }
+        }
+      },
+      "PhoneStatusRequest": {
+        "type": "object",
+        "description": "Запрос статуса верификации телефона",
+        "properties": {
+          "phoneNumber": {
+            "type": "string",
+            "description": "Номер телефона пользователя",
+            "example": 79991234567,
+            "minLength": 1
+          }
+        },
+        "required": [
+          "phoneNumber"
+        ]
+      },
+      "PhoneRequest": {
+        "type": "object",
+        "description": "Запрос на инициализацию проверки номера телефона",
+        "properties": {
+          "initData": {
+            "type": "string",
+            "description": "Данные инициализации Telegram WebApp",
+            "example": "user=%7B%22id%22%3A123...hash=abcdef",
+            "minLength": 1
+          },
+          "phoneNumber": {
+            "type": "string",
+            "description": "Номер телефона пользователя",
+            "example": 79991234567,
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "description": "Имя пользователя для профиля",
+            "example": "Иван",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "initData",
+          "name",
+          "phoneNumber"
+        ]
+      },
+      "CallCheckResponse": {
+        "type": "object",
+        "description": "Информация о номере для совершения звонка",
+        "properties": {
+          "prettyPhone": {
+            "type": "string",
+            "description": "Номер телефона в красивом формате для отображения",
+            "example": "+7 (800) 555-35-35"
+          },
+          "rawPhone": {
+            "type": "string",
+            "description": "Номер телефона в сыром формате для tel: ссылки",
+            "example": 78005553535
+          }
+        }
+      },
+      "UserResponse": {
+        "type": "object",
+        "description": "Информация о профиле пользователя",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID пользователя"
+          },
+          "telegramId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "ID Telegram"
+          },
+          "phoneNumber": {
+            "type": "string",
+            "description": "Подтвержденный номер телефона"
+          },
+          "firstName": {
+            "type": "string",
+            "description": "Имя"
+          },
+          "lastName": {
+            "type": "string",
+            "description": "Фамилия"
+          },
+          "username": {
+            "type": "string",
+            "description": "Username в Telegram"
+          }
+        }
+      },
+      "SpotDetailsPublicResponse": {
+        "type": "object",
+        "description": "Полная публичная информация о парковочном месте",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID места"
+          },
+          "address": {
+            "type": "string",
+            "description": "Адрес",
+            "example": "Москва, Тверская, 1"
+          },
+          "latitude": {
+            "type": "number",
+            "format": "double",
+            "description": "Широта",
+            "example": 55.7558
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double",
+            "description": "Долгота",
+            "example": 37.6173
+          },
+          "vehicleType": {
+            "type": "string",
+            "description": "Тип транспорта",
+            "enum": [
+              "CAR",
+              "SUV",
+              "VAN",
+              "TRUCK",
+              "MOTORCYCLE"
+            ],
+            "example": "CAR"
+          },
+          "pricePerHour": {
+            "type": "number",
+            "description": "Цена за час (RUB)",
+            "example": 100
+          },
+          "pricePerDay": {
+            "type": "number",
+            "description": "Цена за сутки (RUB)",
+            "example": 800
+          },
+          "pricePerMonth": {
+            "type": "number",
+            "description": "Цена за месяц (RUB)",
+            "example": 15000
+          },
+          "hourlyEnabled": {
+            "type": "boolean",
+            "description": "Доступна ли почасовая аренда"
+          },
+          "dailyEnabled": {
+            "type": "boolean",
+            "description": "Доступна ли посуточная аренда"
+          },
+          "monthlyEnabled": {
+            "type": "boolean",
+            "description": "Доступна ли помесячная аренда"
+          },
+          "availableDateFrom": {
+            "type": "string",
+            "format": "date",
+            "description": "Дата начала календарной доступности",
+            "example": "2026-01-15"
+          },
+          "availableDateTo": {
+            "type": "string",
+            "format": "date",
+            "description": "Дата окончания календарной доступности",
+            "example": "2026-12-31"
+          },
+          "scheduleType": {
+            "type": "string",
+            "description": "Тип расписания (ALWAYS/CUSTOM)",
+            "enum": [
+              "ALWAYS",
+              "CUSTOM"
+            ]
+          },
+          "availableFrom": {
+            "type": "string",
+            "description": "Время начала (для CUSTOM)",
+            "example": "09:00"
+          },
+          "availableTo": {
+            "type": "string",
+            "description": "Время окончания (для CUSTOM)",
+            "example": "21:00"
+          },
+          "availableDays": {
+            "type": "array",
+            "description": "Разрешенные дни недели (для CUSTOM)",
+            "example": [1, 2, 3, 4, 5],
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "covered": {
+            "type": "boolean",
+            "description": "Наличие навеса"
+          },
+          "hasSecurity": {
+            "type": "boolean",
+            "description": "Наличие охраны"
+          },
+          "hasEvCharging": {
+            "type": "boolean",
+            "description": "Электрозарядка"
+          },
+          "openSpace": {
+            "type": "boolean",
+            "description": "Открытая площадка"
+          },
+          "inYard": {
+            "type": "boolean",
+            "description": "Во дворе"
+          },
+          "privateTerritory": {
+            "type": "boolean",
+            "description": "Закрытая территория"
+          },
+          "hasCctv": {
+            "type": "boolean",
+            "description": "Видеонаблюдение"
+          },
+          "description": {
+            "type": "string",
+            "description": "Описание"
+          },
+          "accessGuide": {
+            "type": "string",
+            "description": "Инструкция по доступу"
+          },
+          "photos": {
+            "type": "array",
+            "description": "Список фото",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CarShort": {
+        "type": "object",
+        "description": "Короткая информация об автомобиле",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID"
+          },
+          "licensePlate": {
+            "type": "string",
+            "description": "Госномер"
+          },
+          "brand": {
+            "type": "string",
+            "description": "Марка"
+          },
+          "model": {
+            "type": "string",
+            "description": "Модель"
+          },
+          "color": {
+            "type": "string",
+            "description": "Цвет"
+          }
+        }
+      },
+      "PersonShort": {
+        "type": "object",
+        "description": "Короткая информация о пользователе",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID"
+          },
+          "firstName": {
+            "type": "string",
+            "description": "Имя"
+          },
+          "lastName": {
+            "type": "string",
+            "description": "Фамилия"
+          },
+          "username": {
+            "type": "string",
+            "description": "Username"
+          },
+          "phoneNumber": {
+            "type": "string",
+            "description": "Телефон"
+          }
+        }
+      },
+      "SpotBlockingBookingsResponse": {
+        "type": "object",
+        "description": "Список бронирований, мешающих архивации места",
+        "properties": {
+          "spotId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID места"
+          },
+          "activeCount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Количество активных бронирований"
+          },
+          "upcomingCount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Количество предстоящих бронирований"
+          },
+          "active": {
+            "type": "array",
+            "description": "Список активных бронирований",
+            "items": {
+              "$ref": "#/components/schemas/SpotBookingOwnerItem"
+            }
+          },
+          "upcoming": {
+            "type": "array",
+            "description": "Список предстоящих бронирований",
+            "items": {
+              "$ref": "#/components/schemas/SpotBookingOwnerItem"
+            }
+          }
+        }
+      },
+      "SpotBookingOwnerItem": {
+        "type": "object",
+        "description": "Информация о бронировании для владельца",
+        "properties": {
+          "bookingId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID бронирования"
+          },
+          "status": {
+            "type": "string",
+            "description": "Статус",
+            "enum": [
+              "WAITING_CONFIRMATION",
+              "WAITING_START",
+              "ACTIVE",
+              "CANCELED",
+              "FINISHED"
+            ]
+          },
+          "rentType": {
+            "type": "string",
+            "description": "Тип аренды",
+            "enum": [
+              "HOURLY",
+              "DAILY",
+              "MONTHLY"
+            ]
+          },
+          "startAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Начало"
+          },
+          "endAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Конец"
+          },
+          "renter": {
+            "$ref": "#/components/schemas/PersonShort",
+            "description": "Информация об арендаторе"
+          },
+          "car": {
+            "$ref": "#/components/schemas/CarShort",
+            "description": "Информация об автомобиле"
+          }
+        }
+      },
+      "SpotSearchRequest": {
+        "type": "object",
+        "description": "Фильтры поиска мест. Даты и гео-параметры опциональны. Если availableNow=true -\u003E поиск доступных прямо сейчас (HOURLY, на 2 часа).",
+        "properties": {
+          "availableNow": {
+            "type": "boolean",
+            "description": "Поиск 'Прямо сейчас'. Если true, форсирует HOURLY и интервал now..now+2h (UTC).",
+            "example": true
+          },
+          "rentType": {
+            "type": "string",
+            "description": "Тип аренды. Обязателен, если availableNow=false.",
+            "enum": [
+              "HOURLY",
+              "DAILY",
+              "MONTHLY"
+            ],
+            "example": "HOURLY"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "Дата для HOURLY (YYYY-MM-DD).",
+            "example": "2026-01-15"
+          },
+          "timeFrom": {
+            "type": "string",
+            "description": "Время начала для HOURLY (HH:mm).",
+            "example": "10:00"
+          },
+          "timeTo": {
+            "type": "string",
+            "description": "Время окончания для HOURLY (HH:mm).",
+            "example": "12:00"
+          },
+          "dateFrom": {
+            "type": "string",
+            "format": "date",
+            "description": "Дата начала для DAILY/MONTHLY (YYYY-MM-DD).",
+            "example": "2026-01-15"
+          },
+          "dateTo": {
+            "type": "string",
+            "format": "date",
+            "description": "Дата окончания для DAILY/MONTHLY (YYYY-MM-DD).",
+            "example": "2026-01-20"
+          },
+          "minLat": {
+            "type": "number",
+            "format": "double",
+            "description": "BBox: Минимальная широта",
+            "example": 55.7
+          },
+          "minLng": {
+            "type": "number",
+            "format": "double",
+            "description": "BBox: Минимальная долгота",
+            "example": 37.5
+          },
+          "maxLat": {
+            "type": "number",
+            "format": "double",
+            "description": "BBox: Максимальная широта",
+            "example": 55.9
+          },
+          "maxLng": {
+            "type": "number",
+            "format": "double",
+            "description": "BBox: Максимальная долгота",
+            "example": 37.8
+          },
+          "centerLat": {
+            "type": "number",
+            "format": "double",
+            "description": "Радиус: Широта центра",
+            "example": 55.7558
+          },
+          "centerLng": {
+            "type": "number",
+            "format": "double",
+            "description": "Радиус: Долгота центра",
+            "example": 37.6173
+          },
+          "radiusMeters": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Радиус: Радиус в метрах",
+            "example": 1500
+          }
+        }
+      },
+      "SpotSearchItemResponse": {
+        "type": "object",
+        "description": "Элемент поисковой выдачи мест",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID места"
+          },
+          "address": {
+            "type": "string",
+            "description": "Адрес"
+          },
+          "latitude": {
+            "type": "number",
+            "format": "double",
+            "description": "Широта"
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double",
+            "description": "Долгота"
+          },
+          "rentType": {
+            "type": "string",
+            "description": "Тип аренды, для которого показана цена",
+            "enum": [
+              "HOURLY",
+              "DAILY",
+              "MONTHLY"
+            ]
+          },
+          "price": {
+            "type": "number",
+            "description": "Цена"
+          },
+          "photos": {
+            "type": "array",
+            "description": "Список фото (превью)",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Pageable": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 1
+          },
+          "sort": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ChatMessageResponse": {
+        "type": "object",
+        "description": "Сообщение в чате",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID сообщения"
+          },
+          "senderUserId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID отправителя (null для системных сообщений)"
+          },
+          "type": {
+            "type": "string",
+            "description": "Тип сообщения (USER/SYSTEM)",
+            "enum": [
+              "USER",
+              "SYSTEM"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "description": "Текст сообщения"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Дата и время отправки"
+          }
+        }
+      },
+      "PageChatMessageResponse": {
+        "type": "object",
+        "properties": {
+          "totalElements": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "content": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatMessageResponse"
+            }
+          },
+          "number": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageable": {
+            "$ref": "#/components/schemas/PageableObject"
+          },
+          "sort": {
+            "$ref": "#/components/schemas/SortObject"
+          },
+          "numberOfElements": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "first": {
+            "type": "boolean"
+          },
+          "last": {
+            "type": "boolean"
+          },
+          "empty": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PageableObject": {
+        "type": "object",
+        "properties": {
+          "offset": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "paged": {
+            "type": "boolean"
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "sort": {
+            "$ref": "#/components/schemas/SortObject"
+          },
+          "unpaged": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SortObject": {
+        "type": "object",
+        "properties": {
+          "empty": {
+            "type": "boolean"
+          },
+          "sorted": {
+            "type": "boolean"
+          },
+          "unsorted": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ChatResponse": {
+        "type": "object",
+        "description": "Информация о чате",
+        "properties": {
+          "chatId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID чата"
+          },
+          "state": {
+            "type": "string",
+            "description": "Текущее состояние чата (LOCKED/OPEN/CLOSED)",
+            "enum": [
+              "LOCKED",
+              "OPEN",
+              "CLOSED"
+            ]
+          }
+        }
+      },
+      "BookingListItemResponse": {
+        "type": "object",
+        "description": "Модель бронирования для списков. Используется на вкладках 'Чаты' (список всех/активных бронирований), 'Мои бронирования' (Аренда мест / Сдача мест).",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID бронирования."
+          },
+          "spot": {
+            "$ref": "#/components/schemas/SpotShortResponse",
+            "description": "Адрес и координаты места (для отображения в карточке)."
+          },
+          "description": {
+            "type": "string",
+            "description": "Описание места."
+          },
+          "photos": {
+            "type": "array",
+            "description": "Фотографии места.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "counterparty": {
+            "$ref": "#/components/schemas/PersonShortResponse",
+            "description": "Контрагент для этой карточки.\nЕсли список 'Аренда мест' (я арендатор) — тут будет owner.\nЕсли список 'Сдача мест' (я владелец) — тут будет renter.\n"
+          },
+          "rentType": {
+            "type": "string",
+            "description": "Тип аренды.",
+            "enum": [
+              "HOURLY",
+              "DAILY",
+              "MONTHLY"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "description": "Статус (под UI).",
+            "enum": [
+              "WAITING_CONFIRMATION",
+              "WAITING_START",
+              "ACTIVE",
+              "CANCELED",
+              "FINISHED"
+            ]
+          },
+          "startAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Начало интервала аренды."
+          },
+          "endAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Конец интервала аренды."
+          },
+          "totalAmount": {
+            "type": "number",
+            "description": "Сумма для отображения в списке (если нужна).",
+            "example": 1500
+          }
+        }
+      },
+      "PageBookingListItemResponse": {
+        "type": "object",
+        "properties": {
+          "totalElements": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "content": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BookingListItemResponse"
+            }
+          },
+          "number": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageable": {
+            "$ref": "#/components/schemas/PageableObject"
+          },
+          "sort": {
+            "$ref": "#/components/schemas/SortObject"
+          },
+          "numberOfElements": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "first": {
+            "type": "boolean"
+          },
+          "last": {
+            "type": "boolean"
+          },
+          "empty": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}

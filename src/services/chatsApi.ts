@@ -189,4 +189,48 @@ export const chatsApi = {
       throw error
     }
   },
+
+  /**
+   * Send message to chat
+   * POST /api/v1/chats/{chatId}/messages
+   */
+  async sendMessage(chatId: string, text: string): Promise<ChatMessage> {
+    const API_URL = `${API_BASE_URL}/api/v1/chats/${chatId}/messages`
+
+    console.log('[ChatsAPI] ===== SEND MESSAGE =====')
+    console.log('[ChatsAPI] Chat ID:', chatId)
+    console.log('[ChatsAPI] Message text:', text)
+    console.log('[ChatsAPI] API Endpoint:', API_URL)
+
+    const token = getAuthToken()
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        mode: 'cors',
+        credentials: 'omit',
+        body: JSON.stringify({ text }),
+      })
+
+      console.log('[ChatsAPI] Response status:', response.status)
+
+      if (!response.ok) {
+        await handleApiError(response, 'Send message')
+      }
+
+      const result = await response.json()
+      console.log('[ChatsAPI] ✓ Message sent successfully')
+      console.log('[ChatsAPI] Message ID:', result.id)
+
+      return result
+    } catch (error) {
+      console.error('[ChatsAPI] Send message error:', error)
+      throw error
+    }
+  },
 }

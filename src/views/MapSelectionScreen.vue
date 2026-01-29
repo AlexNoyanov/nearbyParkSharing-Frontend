@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
+import { loadYandexMaps } from '../services/yandexMaps'
 
 const emit = defineEmits<{
   (e: 'back'): void
@@ -13,94 +12,78 @@ const selectedAddress = ref('')
 const selectedLatitude = ref<number | null>(null)
 const selectedLongitude = ref<number | null>(null)
 const mapContainer = ref<HTMLElement | null>(null)
-let map: L.Map | null = null
-let marker: L.Marker | null = null
+let map: any = null
+let marker: any = null
 let isLoadingAddress = ref(false)
 
-// Fix Leaflet default icon issue
-delete (L.Icon.Default.prototype as any)._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-})
+onMounted(async () => {
+  setTimeout(async () => {
+    try {
+      await loadYandexMaps()
 
-onMounted(() => {
-  // Use nextTick to ensure DOM is fully rendered
-  setTimeout(() => {
-    if (mapContainer.value) {
-      // Initialize map centered on Moscow
-      map = L.map(mapContainer.value, {
-        zoomControl: false, // We'll use custom controls
-        attributionControl: false, // Remove attribution control
-      }).setView([55.7558, 37.6173], 13)
+      if (mapContainer.value && window.ymaps) {
+        // Create Yandex Map
+        map = new window.ymaps.Map(mapContainer.value, {
+          center: [55.7558, 37.6173],
+          zoom: 13,
+          controls: [],
+        })
 
-      // Add OpenStreetMap tiles
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '', // Empty attribution
-        maxZoom: 19,
-      }).addTo(map)
+        // Add click handler to map
+        map.events.add('click', async (e: any) => {
+          const coords = e.get('coords')
+          const lat = coords[0]
+          const lng = coords[1]
 
-      // Invalidate map size to ensure proper rendering
-      setTimeout(() => {
-        map?.invalidateSize()
-      }, 100)
+          // Save coordinates
+          selectedLatitude.value = lat
+          selectedLongitude.value = lng
 
-      // Add click handler to map
-      map.on('click', async (e: L.LeafletMouseEvent) => {
-        const { lat, lng } = e.latlng
-        
-        // Save coordinates
-        selectedLatitude.value = lat
-        selectedLongitude.value = lng
-        
-        // Remove existing marker
-        if (marker) {
-          map?.removeLayer(marker)
-        }
+          // Remove existing marker
+          if (marker) {
+            map.geoObjects.remove(marker)
+          }
 
-        // Add new marker at clicked location
-        marker = L.marker([lat, lng]).addTo(map!)
+          // Add new marker at clicked location
+          marker = new window.ymaps.Placemark([lat, lng])
+          map.geoObjects.add(marker)
 
-        // Get address from coordinates (reverse geocoding)
-        await getAddressFromCoordinates(lat, lng)
-      })
-
-      // Don't request geolocation automatically - user can use the button
-      // This prevents the permission popup on page load
+          // Get address from coordinates (reverse geocoding)
+          await getAddressFromCoordinates(lat, lng)
+        })
+      }
+    } catch (error) {
+      console.error('Failed to load Yandex Maps:', error)
     }
   }, 100)
 })
 
 onBeforeUnmount(() => {
   if (map) {
-    map.remove()
+    if (marker) {
+      map.geoObjects.remove(marker)
+    }
+    map.destroy()
     map = null
   }
+  marker = null
 })
 
-// Reverse geocoding using Nominatim (free OpenStreetMap service)
+// Reverse geocoding using Yandex Geocoder
 const getAddressFromCoordinates = async (lat: number, lng: number) => {
   isLoadingAddress.value = true
   try {
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-      {
-        headers: {
-          'User-Agent': 'ParkShareApp/1.0' // Required by Nominatim
-        }
-      }
-    )
-    
-    if (!response.ok) {
-      throw new Error('Failed to get address')
+    if (!window.ymaps) {
+      throw new Error('Yandex Maps not loaded')
     }
 
-    const data = await response.json()
-    
-    if (data && data.display_name) {
-      selectedAddress.value = data.display_name
-      searchQuery.value = data.display_name
+    const geocoder = await window.ymaps.geocode([lat, lng])
+    const firstGeoObject = geocoder.geoObjects.get(0)
+
+    if (firstGeoObject) {
+      const address = firstGeoObject.getAddressLine()
+      selectedAddress.value = address
+      searchQuery.value = address
     } else {
       selectedAddress.value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`
       searchQuery.value = selectedAddress.value
@@ -116,42 +99,34 @@ const getAddressFromCoordinates = async (lat: number, lng: number) => {
 
 // Search for address and move map
 const searchAddress = async () => {
-  if (!searchQuery.value.trim() || !map) return
+  if (!searchQuery.value.trim() || !map || !window.ymaps) return
 
   isLoadingAddress.value = true
   try {
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery.value)}&limit=1`,
-      {
-        headers: {
-          'User-Agent': 'ParkShareApp/1.0'
-        }
-      }
-    )
+    const geocoder = await window.ymaps.geocode(searchQuery.value)
+    const firstGeoObject = geocoder.geoObjects.get(0)
 
-    if (!response.ok) {
-      throw new Error('Failed to search address')
-    }
-
-    const data = await response.json()
-    
-    if (data && data.length > 0) {
-      const { lat, lon, display_name } = data[0]
-      const latitude = parseFloat(lat)
-      const longitude = parseFloat(lon)
+    if (firstGeoObject) {
+      const coords = firstGeoObject.geometry.getCoordinates()
+      const latitude = coords[0]
+      const longitude = coords[1]
+      const address = firstGeoObject.getAddressLine()
 
       // Move map to found location
-      map.setView([latitude, longitude], 15)
+      map.setCenter([latitude, longitude], 15)
 
       // Remove existing marker
       if (marker) {
-        map.removeLayer(marker)
+        map.geoObjects.remove(marker)
       }
 
       // Add marker at found location
-      marker = L.marker([latitude, longitude]).addTo(map)
-      
-      selectedAddress.value = display_name
+      marker = new window.ymaps.Placemark([latitude, longitude])
+      map.geoObjects.add(marker)
+
+      selectedAddress.value = address
+      selectedLatitude.value = latitude
+      selectedLongitude.value = longitude
     }
   } catch (error) {
     console.error('Error searching address:', error)
@@ -169,11 +144,17 @@ const handleSearchKeydown = (e: KeyboardEvent) => {
 
 // Zoom controls
 const zoomIn = () => {
-  map?.zoomIn()
+  if (map) {
+    const currentZoom = map.getZoom()
+    map.setZoom(currentZoom + 1)
+  }
 }
 
 const zoomOut = () => {
-  map?.zoomOut()
+  if (map) {
+    const currentZoom = map.getZoom()
+    map.setZoom(currentZoom - 1)
+  }
 }
 
 // Get current location
@@ -182,14 +163,21 @@ const getCurrentLocation = () => {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords
-        map?.setView([latitude, longitude], 15)
-        
-        if (marker) {
-          map?.removeLayer(marker)
+
+        if (map && window.ymaps) {
+          map.setCenter([latitude, longitude], 15)
+
+          if (marker) {
+            map.geoObjects.remove(marker)
+          }
+
+          marker = new window.ymaps.Placemark([latitude, longitude])
+          map.geoObjects.add(marker)
+
+          selectedLatitude.value = latitude
+          selectedLongitude.value = longitude
+          getAddressFromCoordinates(latitude, longitude)
         }
-        
-        marker = L.marker([latitude, longitude]).addTo(map!)
-        getAddressFromCoordinates(latitude, longitude)
       },
       () => {
         alert('Не удалось получить ваше местоположение')

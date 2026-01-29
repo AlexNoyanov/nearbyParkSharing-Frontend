@@ -112,36 +112,7 @@ export interface MySpot {
   archived?: boolean
   isArchived?: boolean
   isHidden?: boolean
-}
-
-export interface SpotSearchRequest {
-  rentType: RentType // Required
-  // For HOURLY
-  date?: string // YYYY-MM-DD
-  timeFrom?: string // HH:mm
-  timeTo?: string // HH:mm
-  // For DAILY/MONTHLY
-  dateFrom?: string // YYYY-MM-DD
-  dateTo?: string // YYYY-MM-DD
-  // Geo: bounding box
-  minLat?: number
-  minLng?: number
-  maxLat?: number
-  maxLng?: number
-  // Geo: radius search
-  centerLat?: number
-  centerLng?: number
-  radiusMeters?: number
-}
-
-export interface SpotSearchItem {
-  id: string
-  address: string
-  latitude: number
-  longitude: number
-  rentType: RentType
-  price: number
-  photos?: string[]
+  active?: boolean // Backend sets active=false when archived
 }
 
 export interface ArchivePreviewResponse {
@@ -152,12 +123,28 @@ export interface ArchivePreviewResponse {
   upcoming: SpotBookingItem[]
 }
 
-export interface SpotBookingItem {
+export interface PersonShort {
   id: string
-  renterName?: string
+  firstName?: string
+  lastName?: string
+  username?: string
+}
+
+export interface CarShort {
+  id: string
+  licensePlate?: string
+  brand?: string
+  model?: string
+}
+
+export interface SpotBookingItem {
+  bookingId: string
+  status: string
+  rentType?: string
   startAt: string
   endAt: string
-  status: string
+  renter?: PersonShort
+  car?: CarShort
 }
 
 // ============================================================================
@@ -239,6 +226,49 @@ function getAuthToken(): string {
 // ============================================================================
 // API Methods
 // ============================================================================
+
+export interface SpotSearchParams {
+  /**
+   * If true -> "available right now" mode (server may force HOURLY and interval now..now+2h).
+   */
+  availableNow?: boolean
+
+  /**
+   * Required only if availableNow is not set or false.
+   * If availableNow=true, rentType is optional (backend will handle it).
+   */
+  rentType?: RentType
+
+  // HOURLY only
+  date?: string // YYYY-MM-DD
+  timeFrom?: string // HH:mm
+  timeTo?: string // HH:mm
+
+  // DAILY/MONTHLY only
+  dateFrom?: string // YYYY-MM-DD
+  dateTo?: string // YYYY-MM-DD
+
+  // bbox
+  minLat?: number
+  minLng?: number
+  maxLat?: number
+  maxLng?: number
+
+  // radius
+  centerLat?: number
+  centerLng?: number
+  radiusMeters?: number
+}
+
+export interface SpotSearchItemResponse {
+  id: string
+  address: string
+  latitude: number
+  longitude: number
+  rentType: RentType
+  price: number
+  photos?: string[]
+}
 
 export const spotsApi = {
   /**
@@ -324,73 +354,6 @@ export const spotsApi = {
       return mapSpotFromBackend(result)
     } catch (error) {
       console.error('[SpotsAPI] Get spot by ID error:', error)
-      throw error
-    }
-  },
-
-  /**
-   * Search parking spots
-   * GET /api/v1/spots/search
-   */
-  async searchSpots(params: SpotSearchRequest): Promise<SpotSearchItem[]> {
-    const queryParams = new URLSearchParams()
-
-    // rentType is required
-    queryParams.append('rentType', params.rentType)
-
-    // Time params based on rentType
-    if (params.rentType === 'HOURLY') {
-      if (params.date) queryParams.append('date', params.date)
-      if (params.timeFrom) queryParams.append('timeFrom', params.timeFrom)
-      if (params.timeTo) queryParams.append('timeTo', params.timeTo)
-    } else {
-      if (params.dateFrom) queryParams.append('dateFrom', params.dateFrom)
-      if (params.dateTo) queryParams.append('dateTo', params.dateTo)
-    }
-
-    // Geo: bounding box
-    if (params.minLat !== undefined) queryParams.append('minLat', String(params.minLat))
-    if (params.minLng !== undefined) queryParams.append('minLng', String(params.minLng))
-    if (params.maxLat !== undefined) queryParams.append('maxLat', String(params.maxLat))
-    if (params.maxLng !== undefined) queryParams.append('maxLng', String(params.maxLng))
-
-    // Geo: radius
-    if (params.centerLat !== undefined) queryParams.append('centerLat', String(params.centerLat))
-    if (params.centerLng !== undefined) queryParams.append('centerLng', String(params.centerLng))
-    if (params.radiusMeters !== undefined) queryParams.append('radiusMeters', String(params.radiusMeters))
-
-    const API_URL = `${API_BASE_URL}/api/v1/spots/search?${queryParams.toString()}`
-
-    console.log('[SpotsAPI] ===== SEARCH SPOTS =====')
-    console.log('[SpotsAPI] API Endpoint:', API_URL)
-    console.log('[SpotsAPI] Search params:', params)
-
-    const token = getAuthToken()
-
-    try {
-      const response = await fetch(API_URL, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        mode: 'cors',
-        credentials: 'omit',
-      })
-
-      console.log('[SpotsAPI] Response status:', response.status)
-
-      if (!response.ok) {
-        await handleApiError(response, 'Search spots')
-      }
-
-      const result = await response.json()
-      console.log('[SpotsAPI] ✓ Search completed successfully')
-      console.log('[SpotsAPI] Results count:', Array.isArray(result) ? result.length : 'not an array')
-
-      return Array.isArray(result) ? result : (result.content || result.data || [])
-    } catch (error) {
-      console.error('[SpotsAPI] Search spots error:', error)
       throw error
     }
   },
@@ -621,6 +584,108 @@ export const spotsApi = {
       return result
     } catch (error) {
       console.error('[SpotsAPI] Get archive preview error:', error)
+      throw error
+    }
+  },
+
+  /**
+   * Search for parking spots
+   * GET /api/v1/spots/search
+   *
+   * Swagger: /parkshare/swagger-ui/index.html#/Spots/search
+   */
+  async searchSpots(params: SpotSearchParams): Promise<SpotSearchItemResponse[]> {
+    const query = new URLSearchParams()
+
+    // rentType обязателен только если не используется availableNow
+    // Если availableNow=true, то rentType не передаем (бэкенд сам разрулит)
+    if (params.rentType) {
+      query.set('rentType', params.rentType)
+    }
+
+    if (typeof params.availableNow === 'boolean') {
+      query.set('availableNow', String(params.availableNow))
+    }
+
+    if (params.date) query.set('date', params.date)
+    if (params.timeFrom) query.set('timeFrom', params.timeFrom)
+    if (params.timeTo) query.set('timeTo', params.timeTo)
+
+    if (params.dateFrom) query.set('dateFrom', params.dateFrom)
+    if (params.dateTo) query.set('dateTo', params.dateTo)
+
+    if (typeof params.minLat === 'number') query.set('minLat', String(params.minLat))
+    if (typeof params.minLng === 'number') query.set('minLng', String(params.minLng))
+    if (typeof params.maxLat === 'number') query.set('maxLat', String(params.maxLat))
+    if (typeof params.maxLng === 'number') query.set('maxLng', String(params.maxLng))
+
+    if (typeof params.centerLat === 'number') query.set('centerLat', String(params.centerLat))
+    if (typeof params.centerLng === 'number') query.set('centerLng', String(params.centerLng))
+    if (typeof params.radiusMeters === 'number') query.set('radiusMeters', String(params.radiusMeters))
+
+    const API_URL = `${API_BASE_URL}/api/v1/spots/search?${query.toString()}`
+
+    console.log('[SpotsAPI] ===== SEARCH SPOTS =====')
+    console.log('[SpotsAPI] API Endpoint:', API_URL)
+    console.log('[SpotsAPI] Params:', params)
+
+    // Token might be optional for this endpoint; send if present.
+    const token = localStorage.getItem('auth_token')
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        mode: 'cors',
+        credentials: 'omit',
+      })
+
+      console.log('[SpotsAPI] Response status:', response.status)
+      console.log('[SpotsAPI] Response ok:', response.ok)
+
+      if (!response.ok) {
+        let errorMessage = `HTTP error! status: ${response.status}`
+        let errorBody = null
+
+        try {
+          const contentType = response.headers.get('content-type')
+          if (contentType && contentType.includes('application/json')) {
+            errorBody = await response.json()
+            console.log('[SpotsAPI] Error response body:', errorBody)
+            errorMessage = errorBody.message || errorBody.error || errorMessage
+          } else {
+            const errorText = await response.text()
+            console.log('[SpotsAPI] Error response text:', errorText)
+            if (errorText) {
+              try {
+                errorBody = JSON.parse(errorText)
+                errorMessage = errorBody.message || errorBody.error || errorMessage
+              } catch {
+                errorMessage = errorText || errorMessage
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[SpotsAPI] Could not read error response:', e)
+        }
+
+        const error = new Error(errorMessage)
+        ;(error as any).status = response.status
+        ;(error as any).body = errorBody
+        console.error('[SpotsAPI] ✗ Search spots failed:', errorMessage)
+        throw error
+      }
+
+      const result = await response.json()
+      console.log('[SpotsAPI] ✓ Search spots success')
+      console.log('[SpotsAPI] Response:', result)
+
+      return Array.isArray(result) ? result : (result?.data ?? result?.spots ?? [])
+    } catch (error) {
+      console.error('[SpotsAPI] Search spots error:', error)
       throw error
     }
   },

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
+import { loadYandexMaps, createParkingPlacemark, createSimpleParkingPlacemark } from '../services/yandexMaps'
 import parkingLotImage from '../assets/images/parkinglot.jpg'
-import { spotsApi, type SpotSearchItem } from '../services/spotsApi'
+import { spotsApi, type SpotSearchItemResponse } from '../services/spotsApi'
+import { getYandexSuggestions, geocodeYandexAddress } from '../services/yandexMaps'
+import { searchAddress as nominatimSearch } from '../services/nominatimGeocoder'
 
 type Location = {
   id: string
@@ -26,6 +27,13 @@ const selectedPreviewLocation = ref<Location | null>(null)
 const isDragging = ref(false)
 const dragStartY = ref(0)
 const dragStartHeight = ref(0)
+
+// Search functionality
+const searchQuery = ref('')
+const isSearching = ref(false)
+const searchSuggestions = ref<Array<{ address: string; coords: [number, number] }>>([])
+const showSuggestions = ref(false)
+let suggestTimeout: number | null = null
 
 // Gallery state for preview
 const previewGalleryContainer = ref<HTMLElement | null>(null)
@@ -54,17 +62,18 @@ const hourlyRent = ref(false)
 const dailyRent = ref(true)
 const monthlyRent = ref(false)
 
-let map: L.Map | null = null
-let markers: L.Marker[] = []
+let map: any = null
+let markers: any[] = []
 const currentZoom = ref(13)
-const zoomThreshold = 15 // Показывать полный значок при зуме >= 15
+const zoomThreshold = 15
+let loadSpotsTimeout: number | null = null
 
 // Spots loaded from API
 const apiSpots = ref<Location[]>([])
 const isLoadingSpots = ref(false)
 
 // Convert API spot to Location format
-const spotToLocation = (spot: SpotSearchItem): Location => {
+const spotToLocation = (spot: SpotSearchItemResponse): Location => {
   // Format price based on rentType
   let priceStr = `${spot.price}₽`
   if (spot.rentType === 'HOURLY') {
@@ -98,6 +107,17 @@ const getCurrentRentType = (): 'HOURLY' | 'DAILY' | 'MONTHLY' => {
   return 'DAILY'
 }
 
+// Load spots from API (debounced)
+const loadSpotsFromApiDebounced = () => {
+  if (loadSpotsTimeout) {
+    clearTimeout(loadSpotsTimeout)
+  }
+
+  loadSpotsTimeout = window.setTimeout(() => {
+    loadSpotsFromApi()
+  }, 500) // Wait 500ms after user stops moving the map
+}
+
 // Load spots from API based on map bounds
 const loadSpotsFromApi = async () => {
   if (!map) return
@@ -110,13 +130,16 @@ const loadSpotsFromApi = async () => {
   }
 
   const bounds = map.getBounds()
-  const minLat = bounds.getSouth()
-  const maxLat = bounds.getNorth()
-  const minLng = bounds.getWest()
-  const maxLng = bounds.getEast()
+  const minLat = bounds[0][0]
+  const maxLat = bounds[1][0]
+  const minLng = bounds[0][1]
+  const maxLng = bounds[1][1]
+
+  // Get zoom level for logging
+  const zoom = map.getZoom()
 
   const rentType = getCurrentRentType()
-  console.log('[RentOutMap] Loading spots for bounds:', { minLat, maxLat, minLng, maxLng, rentType })
+  console.log('[RentOutMap] Loading spots for bounds:', { minLat, maxLat, minLng, maxLng, rentType, zoom })
   isLoadingSpots.value = true
 
   try {
@@ -165,236 +188,262 @@ const getLocationPrice = (location: Location): string => {
   return location.price
 }
 
-// Fix Leaflet default icon issue
-delete (L.Icon.Default.prototype as any)._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-})
+// Get search suggestions using Yandex Suggest API
+const getSuggestions = async () => {
+  if (!searchQuery.value.trim() || searchQuery.value.length < 2) {
+    searchSuggestions.value = []
+    showSuggestions.value = false
+    return
+  }
 
-// Custom marker icon for parking locations - full version
-const createFullParkingIcon = (price: string) => {
-  return L.divIcon({
-    className: 'parking-marker',
-    html: `
-      <div style="
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        width: 60px;
-      ">
-        <!-- Price tag -->
-        <div style="
-          background: #2563EB;
-          color: white;
-          padding: 4px 8px;
-          border-radius: 8px;
-          font-family: Inter, sans-serif;
-          font-size: 12px;
-          font-weight: 600;
-          white-space: nowrap;
-          margin-bottom: 4px;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        ">
-          ${price}
-        </div>
-        <!-- Green pin with P logo -->
-        <div style="
-          position: relative;
-          width: 48px;
-          height: 65px;
-        ">
-          <!-- Green pin shape -->
-          <svg width="48" height="65" viewBox="0 0 48 65" fill="none" xmlns="http://www.w3.org/2000/svg" style="position: absolute; top: 0; left: 0;">
-            <path d="M21.5 62.75C3.25 36.5 0 33.75 0 24C0 10.75 10.625 0 24 0C37.25 0 48 10.75 48 24C48 33.75 44.625 36.5 26.375 62.75C25.25 64.5 22.625 64.5 21.5 62.75ZM24 34C29.5 34 34 29.625 34 24C34 18.5 29.5 14 24 14C18.375 14 14 18.5 14 24C14 29.625 18.375 34 24 34Z" fill="#10B981"/>
-          </svg>
-          <!-- White circle with P inside -->
-          <div style="
-            position: absolute;
-            top: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 20px;
-            height: 30px;
-            background: white;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 10;
-          ">
-            <!-- P logo -->
-            <svg width="8" height="8" viewBox="0 0 8 8" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: block;">
-              <path d="M-0.000195298 6.14003H0.499805V1.64003H-0.000195298V2.87294e-05H4.3898C5.2498 2.87294e-05 5.90647 0.186695 6.3598 0.560029C6.81314 0.926695 7.03981 1.52336 7.03981 2.35003C7.03981 3.1767 6.81314 3.7767 6.3598 4.15003C5.90647 4.5167 5.2498 4.70003 4.3898 4.70003H3.2998V6.14003H4.2598V7.78003H-0.000195298V6.14003ZM3.6398 3.28003C4.02647 3.28003 4.21981 3.0667 4.21981 2.64003V2.28003C4.21981 2.06003 4.1698 1.90003 4.0698 1.80003C3.97647 1.69336 3.83314 1.64003 3.6398 1.64003H3.2998V3.28003H3.6398Z" fill="#10B981"/>
-            </svg>
-          </div>
-        </div>
-      </div>
-    `,
-    iconSize: [60, 75],
-    iconAnchor: [30, 75],
+  isSearching.value = true
+
+  try {
+    // Используем Яндекс.Саджест
+    const suggestions = await getYandexSuggestions(searchQuery.value, 5)
+    
+    // Если саджест не нашел результатов, не показываем пустой список
+    // Функция getYandexSuggestions сама попробует прямое геокодирование
+    if (suggestions.length === 0) {
+      searchSuggestions.value = []
+      showSuggestions.value = false
+      console.log('[RentOutMap] No suggestions found, user can search directly')
+    } else {
+      searchSuggestions.value = suggestions.map(s => ({
+        address: s.address,
+        coords: s.coords,
+      }))
+      showSuggestions.value = true
+      console.log('[RentOutMap] Yandex suggestions:', suggestions.length)
+    }
+  } catch (error) {
+    console.error('[RentOutMap] Failed to get Yandex suggestions, falling back to Nominatim:', error)
+    // Fallback to Nominatim if Yandex fails
+    try {
+      const suggestions = await nominatimSearch(searchQuery.value, 5)
+      if (suggestions.length > 0) {
+        searchSuggestions.value = suggestions
+        showSuggestions.value = true
+      } else {
+        searchSuggestions.value = []
+        showSuggestions.value = false
+      }
+    } catch (nominatimError) {
+      console.error('[RentOutMap] Nominatim fallback also failed:', nominatimError)
+      searchSuggestions.value = []
+      showSuggestions.value = false
+    }
+  } finally {
+    isSearching.value = false
+  }
+}
+
+// Debounced suggestions (1 second to respect Nominatim rate limits)
+const getSuggestionsDebounced = () => {
+  if (suggestTimeout) {
+    clearTimeout(suggestTimeout)
+  }
+
+  suggestTimeout = window.setTimeout(() => {
+    getSuggestions()
+  }, 1000)
+}
+
+// Handle input change
+const handleSearchInput = () => {
+  getSuggestionsDebounced()
+}
+
+// Select a suggestion
+const selectSuggestion = (suggestion: { address: string; coords: [number, number] }) => {
+  if (!map) return
+
+  showSuggestions.value = false
+  searchSuggestions.value = []
+
+  map.setCenter(suggestion.coords, 15, {
+    duration: 500,
   })
+
+  setTimeout(() => {
+    loadSpotsFromApi()
+    searchQuery.value = ''
+  }, 600)
 }
 
-// Simplified marker icon - circle with P and price above
-const createSimpleParkingIcon = (price: string) => {
-  return L.divIcon({
-    className: 'parking-marker-simple',
-    html: `
-      <div style="
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        width: 50px;
-      ">
-        <!-- Price tag -->
-        <div style="
-          background: #2563EB;
-          color: white;
-          padding: 3px 6px;
-          border-radius: 6px;
-          font-family: Inter, sans-serif;
-          font-size: 10px;
-          font-weight: 600;
-          white-space: nowrap;
-          margin-bottom: 2px;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-        ">
-          ${price}
-        </div>
-        <!-- Green circle with P inside -->
-        <div style="
-          width: 32px;
-          height: 32px;
-          background: #10B981;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-          border: 2px solid white;
-        ">
-          <!-- P logo -->
-          <svg width="14" height="14" viewBox="0 0 8 8" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: block;">
-            <path d="M-0.000195298 6.14003H0.499805V1.64003H-0.000195298V2.87294e-05H4.3898C5.2498 2.87294e-05 5.90647 0.186695 6.3598 0.560029C6.81314 0.926695 7.03981 1.52336 7.03981 2.35003C7.03981 3.1767 6.81314 3.7767 6.3598 4.15003C5.90647 4.5167 5.2498 4.70003 4.3898 4.70003H3.2998V6.14003H4.2598V7.78003H-0.000195298V6.14003ZM3.6398 3.28003C4.02647 3.28003 4.21981 3.0667 4.21981 2.64003V2.28003C4.21981 2.06003 4.1698 1.90003 4.0698 1.80003C3.97647 1.69336 3.83314 1.64003 3.6398 1.64003H3.2998V3.28003H3.6398Z" fill="white"/>
-          </svg>
-        </div>
-      </div>
-    `,
-    iconSize: [50, 50],
-    iconAnchor: [25, 50],
-  })
+// Search for address using Yandex Geocoder
+const searchAddress = async () => {
+  if (!searchQuery.value.trim() || !map) return
+
+  if (searchSuggestions.value.length > 0) {
+    selectSuggestion(searchSuggestions.value[0])
+    return
+  }
+
+  isSearching.value = true
+  showSuggestions.value = false
+
+  try {
+    // Используем Яндекс.Геокодер
+    const result = await geocodeYandexAddress(searchQuery.value)
+    if (result) {
+      map.setCenter(result.coords, 15, {
+        duration: 500,
+      })
+      setTimeout(() => {
+        loadSpotsFromApi()
+        searchQuery.value = ''
+      }, 600)
+      return
+    }
+    
+    // Fallback to Nominatim if Yandex fails
+    const results = await nominatimSearch(searchQuery.value, 1)
+    if (results.length > 0) {
+      map.setCenter(results[0].coords, 15, {
+        duration: 500,
+      })
+      setTimeout(() => {
+        loadSpotsFromApi()
+        searchQuery.value = ''
+      }, 600)
+    }
+  } catch (error) {
+    console.error('[RentOutMap] Search failed:', error)
+  } finally {
+    isSearching.value = false
+  }
 }
 
-// Get appropriate icon based on zoom level
-const getParkingIcon = (price: string) => {
-  return currentZoom.value >= zoomThreshold 
-    ? createFullParkingIcon(price)
-    : createSimpleParkingIcon(price)
+// Handle Enter key in search
+const handleSearchKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Enter') {
+    searchAddress()
+  } else if (e.key === 'Escape') {
+    showSuggestions.value = false
+    searchSuggestions.value = []
+  }
 }
+
+// Close suggestions when clicking outside
+const handleClickOutside = () => {
+  showSuggestions.value = false
+}
+
+// Helper to get location price
 
 onMounted(() => {
   setTimeout(async () => {
-    if (mapContainer.value) {
-      // Initialize map centered on Moscow
-      map = L.map(mapContainer.value, {
-        zoomControl: false,
-        attributionControl: false,
-      }).setView([55.7558, 37.6173], 13)
+    try {
+      // Load Yandex Maps API
+      await loadYandexMaps()
 
-      // Add OpenStreetMap tiles
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '',
-        maxZoom: 19,
-      }).addTo(map)
-
-      // Invalidate map size
-      setTimeout(() => {
-        map?.invalidateSize()
-      }, 100)
-
-      // Add markers function
-      const addMarkers = () => {
-        // Remove existing markers
-        markers.forEach(marker => {
-          map?.removeLayer(marker)
+      if (mapContainer.value && window.ymaps) {
+        // Create Yandex Map
+        map = new window.ymaps.Map(mapContainer.value, {
+          center: [55.7558, 37.6173],
+          zoom: 13,
+          controls: [],
         })
-        markers = []
 
-        // Add filtered location markers
-        filteredLocations.value.forEach((location) => {
-          const marker = L.marker([location.lat, location.lng], {
-            icon: getParkingIcon(getLocationPrice(location)),
-          }).addTo(map!)
+        // Add zoom control
+        map.controls.add('zoomControl', {
+          position: { right: 10, top: 50 }
+        })
 
-          marker.on('click', () => {
-            // Открываем предпросмотр в шторке вместо перехода на полный экран
-            selectedPreviewLocation.value = location
-            filterSheetOpen.value = true
-            filterSheetHeight.value = 500
+        // Add markers function
+        const addMarkers = () => {
+          if (!map || !window.ymaps) return
+
+          // Remove existing markers
+          markers.forEach(marker => {
+            map.geoObjects.remove(marker)
           })
+          markers = []
 
-          markers.push(marker)
-        })
-      }
+          // Add filtered location markers
+          filteredLocations.value.forEach((location) => {
+            const createMarker = currentZoom.value >= zoomThreshold
+              ? createParkingPlacemark
+              : createSimpleParkingPlacemark
 
-      // Update markers when zoom changes
-      const updateMarkersOnZoom = () => {
-        if (map) {
-          currentZoom.value = map.getZoom()
-          filteredLocations.value.forEach((location, index) => {
-            if (markers[index]) {
-              markers[index].setIcon(getParkingIcon(getLocationPrice(location)))
-            }
+            const marker = createMarker(
+              window.ymaps,
+              location.lat,
+              location.lng,
+              getLocationPrice(location),
+              () => {
+                selectedPreviewLocation.value = location
+                filterSheetOpen.value = true
+                filterSheetHeight.value = 500
+              }
+            )
+
+            map.geoObjects.add(marker)
+            markers.push(marker)
           })
         }
-      }
 
-      // Watch for zoom changes
-      if (map) {
-        map.on('zoomend', updateMarkersOnZoom)
-        map.on('zoom', updateMarkersOnZoom)
+        // Update markers when zoom changes
+        const updateMarkersOnZoom = () => {
+          if (map) {
+            currentZoom.value = map.getZoom()
+            // Redraw markers with appropriate style
+            addMarkers()
+          }
+        }
 
-        // Load spots when map bounds change (after move/zoom ends)
-        map.on('moveend', async () => {
-          await loadSpotsFromApi()
-          addMarkers()
+        // Listen for map movement end (when user stops dragging/zooming)
+        map.events.add('actionend', (e: any) => {
+          const newZoom = map.getZoom()
+          if (newZoom !== currentZoom.value) {
+            currentZoom.value = newZoom
+            updateMarkersOnZoom()
+          }
+          // Load spots when map movement ends (debounced)
+          loadSpotsFromApiDebounced()
         })
+
+        // Watch for filter changes - reload spots from API with new rentType
+        watch([hourlyRent, dailyRent, monthlyRent], () => {
+          if (map) {
+            loadSpotsFromApi()
+            // addMarkers will be called automatically by watch(apiSpots)
+          }
+        })
+
+        // Watch for API spots changes and update markers automatically
+        watch(apiSpots, () => {
+          if (map) {
+            addMarkers()
+          }
+        })
+
+        // Initial load of spots
+        await loadSpotsFromApi()
+        // addMarkers will be called automatically by watch(apiSpots)
       }
-
-      // Watch for filter changes - reload spots from API with new rentType
-      watch([hourlyRent, dailyRent, monthlyRent], async () => {
-        if (map) {
-          await loadSpotsFromApi()
-          addMarkers()
-        }
-      })
-
-      // Watch for API spots changes and update markers
-      watch(apiSpots, () => {
-        if (map) {
-          addMarkers()
-        }
-      })
-
-      // Initial load of spots
-      await loadSpotsFromApi()
-      addMarkers()
+    } catch (error) {
+      console.error('Failed to load Yandex Maps:', error)
     }
   }, 100)
 })
 
 onBeforeUnmount(() => {
+  if (loadSpotsTimeout) {
+    clearTimeout(loadSpotsTimeout)
+  }
+  if (suggestTimeout) {
+    clearTimeout(suggestTimeout)
+  }
   if (map) {
-    map.off('zoomend')
-    map.off('zoom')
-    map.remove()
+    markers.forEach(marker => {
+      map.geoObjects.remove(marker)
+    })
+    markers = []
+    map.destroy()
     map = null
   }
-  markers = []
 })
 
 // Filter sheet drag handlers
@@ -489,9 +538,40 @@ watch(monthlyRent, (isMonthly) => {
           <path d="M8.125 12.8125L7.4375 13.5C7.125 13.7812 6.65625 13.7812 6.375 13.5L0.3125 7.40625C0 7.125 0 6.65625 0.3125 6.375L6.375 0.28125C6.65625 0 7.15625 0 7.4375 0.28125L8.125 0.96875C8.4375 1.28125 8.40625 1.75 8.125 2.0625L4.34375 5.625H13.3438C13.75 5.625 14.0938 5.96875 14.0938 6.375V7.375C14.0938 7.8125 13.75 8.125 13.3438 8.125H4.34375L8.125 11.7188C8.40625 12.0312 8.4375 12.5 8.125 12.8125Z" fill="white"/>
         </svg>
       </button>
-      <h1 class="rent-out-map__title">Выберите место на карте</h1>
-      <div class="rent-out-map__header-spacer"></div>
+      <div class="rent-out-map__search-container">
+        <input
+          v-model="searchQuery"
+          type="text"
+          class="rent-out-map__search-input"
+          placeholder="Поиск адреса..."
+          @input="handleSearchInput"
+          @keydown="handleSearchKeydown"
+        />
+        <svg v-if="!isSearching" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" class="rent-out-map__search-icon">
+          <path d="M7.33333 12.6667C10.2789 12.6667 12.6667 10.2789 12.6667 7.33333C12.6667 4.38781 10.2789 2 7.33333 2C4.38781 2 2 4.38781 2 7.33333C2 10.2789 4.38781 12.6667 7.33333 12.6667Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M14 14L11.1 11.1" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div v-else class="rent-out-map__search-spinner"></div>
+
+        <!-- Suggestions dropdown -->
+        <div v-if="showSuggestions" class="rent-out-map__suggestions">
+          <div
+            v-for="(suggestion, index) in searchSuggestions"
+            :key="index"
+            class="rent-out-map__suggestion-item"
+            @click="selectSuggestion(suggestion)"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" class="rent-out-map__suggestion-icon">
+              <path d="M8 0C3.58 0 0 3.58 0 8C0 12.42 8 16 8 16C8 16 16 12.42 16 8C16 3.58 12.42 0 8 0ZM8 10C6.9 10 6 9.1 6 8C6 6.9 6.9 6 8 6C9.1 6 10 6.9 10 8C10 9.1 9.1 10 8 10Z" fill="#9CA3AF"/>
+            </svg>
+            <span class="rent-out-map__suggestion-text">{{ suggestion.address }}</span>
+          </div>
+        </div>
+      </div>
     </header>
+
+    <!-- Overlay to close suggestions -->
+    <div v-if="showSuggestions" class="rent-out-map__overlay" @click="handleClickOutside"></div>
 
     <div class="rent-out-map__map-area">
       <div ref="mapContainer" class="rent-out-map__map-container"></div>
@@ -765,12 +845,11 @@ watch(monthlyRent, (isMonthly) => {
 }
 
 .rent-out-map__header {
-  padding: calc(env(safe-area-inset-top) + 24px) 24px 24px;
+  padding: calc(env(safe-area-inset-top) + 16px) 16px 16px;
   background: linear-gradient(90deg, rgba(147, 51, 234, 1) 0%, rgba(37, 99, 235, 1) 100%);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   z-index: 1000;
 }
 
@@ -796,20 +875,107 @@ watch(monthlyRent, (isMonthly) => {
   display: block;
 }
 
-.rent-out-map__title {
-  margin: 0;
-  font-family: Inter, sans-serif;
-  font-weight: 600;
-  font-size: 18px;
-  line-height: 1.5;
-  text-align: center;
-  color: #ffffff;
+.rent-out-map__search-container {
   flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
-.rent-out-map__header-spacer {
-  width: 40px;
+.rent-out-map__search-input {
+  width: 100%;
+  padding: 12px 40px 12px 16px;
+  border: none;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  font-family: Inter, sans-serif;
+  font-size: 14px;
+  color: #1f2937;
+  transition: all 0.2s ease;
+}
+
+.rent-out-map__search-input::placeholder {
+  color: #9ca3af;
+}
+
+.rent-out-map__search-input:focus {
+  outline: none;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+}
+
+.rent-out-map__search-icon {
+  position: absolute;
+  right: 12px;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.rent-out-map__search-spinner {
+  position: absolute;
+  right: 12px;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+.rent-out-map__suggestions {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 2000;
+}
+
+.rent-out-map__suggestion-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.rent-out-map__suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.rent-out-map__suggestion-item:hover {
+  background-color: #f9fafb;
+}
+
+.rent-out-map__suggestion-item:active {
+  background-color: #f3f4f6;
+}
+
+.rent-out-map__suggestion-icon {
   flex-shrink: 0;
+}
+
+.rent-out-map__suggestion-text {
+  flex: 1;
+  font-family: Inter, sans-serif;
+  font-size: 14px;
+  color: #1f2937;
+  line-height: 1.5;
+}
+
+.rent-out-map__overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1999;
 }
 
 .rent-out-map__map-area {

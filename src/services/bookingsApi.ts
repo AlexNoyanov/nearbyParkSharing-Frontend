@@ -146,18 +146,6 @@ async function handleApiError(response: Response, context: string): Promise<neve
   throw error
 }
 
-function buildPaginationQuery(params?: PaginationParams): string {
-  if (!params) return ''
-
-  const queryParams = new URLSearchParams()
-  if (params.page !== undefined) queryParams.append('page', String(params.page))
-  if (params.size !== undefined) queryParams.append('size', String(params.size))
-  if (params.sort) queryParams.append('sort', params.sort)
-
-  const query = queryParams.toString()
-  return query ? `?${query}` : ''
-}
-
 // ============================================================================
 // API Methods
 // ============================================================================
