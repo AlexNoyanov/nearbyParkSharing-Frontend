@@ -2,9 +2,9 @@
  * Yandex Maps API loader and helper functions
  */
 
-const YANDEX_MAPS_API_KEY = import.meta.env.VITE_YANDEX_MAPS_API_KEY || '903f27d8-9806-458c-b3a8-ba251a05bb08'
+const YANDEX_MAPS_API_KEY = import.meta.env.VITE_YANDEX_MAPS_API_KEY || 'afcc721c-b810-4389-9362-08bbb3ad0d97'
 const YANDEX_MAPS_VERSION = '2.1'
-const YANDEX_SUGGEST_API_KEY = import.meta.env.VITE_YANDEX_SUGGEST_API_KEY || YANDEX_MAPS_API_KEY
+const YANDEX_SUGGEST_API_KEY = import.meta.env.VITE_YANDEX_SUGGEST_API_KEY || '903f27d8-9806-458c-b3a8-ba251a05bb08'
 
 let isLoaded = false
 let loadPromise: Promise<void> | null = null

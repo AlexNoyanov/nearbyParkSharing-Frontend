@@ -424,7 +424,8 @@ const handleSelectAddress = () => {
   display: flex;
   align-items: center;
   gap: 12px;
-  z-index: 1000;
+  z-index: 2001;
+  position: relative;
 }
 
 .map-selection__back {
