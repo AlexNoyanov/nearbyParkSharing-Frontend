@@ -12,7 +12,6 @@ type Location = {
   priceHour: string
   priceDay: string
   priceMonth: string
-  availability: 'hourly' | 'daily' | 'monthly'
 }
 
 const props = defineProps<{
@@ -180,15 +179,15 @@ const handleGalleryScroll = () => {
       <div class="parking-details__section parking-details__rates">
         <h3 class="parking-details__rates-title">Тарифы</h3>
         <div class="parking-details__rates-list">
-          <div class="parking-details__rate-item">
+          <div v-if="location.priceHour !== '—'" class="parking-details__rate-item">
             <div class="parking-details__rate-price">{{ location.priceHour.replace('₽/ч', '').trim() }} ₽</div>
             <div class="parking-details__rate-label">за час</div>
           </div>
-          <div class="parking-details__rate-item">
+          <div v-if="location.priceDay !== '—'" class="parking-details__rate-item">
             <div class="parking-details__rate-price parking-details__rate-price--green">{{ location.priceDay.replace('₽/день', '').trim() }} ₽</div>
             <div class="parking-details__rate-label">за день</div>
           </div>
-          <div class="parking-details__rate-item">
+          <div v-if="location.priceMonth !== '—'" class="parking-details__rate-item">
             <div class="parking-details__rate-price parking-details__rate-price--purple">{{ location.priceMonth.replace('₽/мес', '').trim() }} ₽</div>
             <div class="parking-details__rate-label">за месяц</div>
           </div>

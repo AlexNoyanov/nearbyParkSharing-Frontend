@@ -1,15 +1,75 @@
 <script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { bookingTimeline } from '../data/parkings'
 import type { ParkingSpot } from '../data/parkings'
+import type { Booking } from '../services/bookingsApi'
 
-defineProps<{
+const props = defineProps<{
   parking: ParkingSpot
+  booking?: Booking // Optional booking data from API
 }>()
 
 const emit = defineEmits<{
   (e: 'finish'): void
   (e: 'extend'): void
 }>()
+
+// Calculate remaining time
+const remainingTime = ref('--:--:--')
+let timerInterval: number | null = null
+
+const updateRemainingTime = () => {
+  if (!props.booking?.endAt) {
+    remainingTime.value = '--:--:--'
+    return
+  }
+
+  const now = new Date()
+  const end = new Date(props.booking.endAt)
+  const diff = end.getTime() - now.getTime()
+
+  if (diff <= 0) {
+    remainingTime.value = '00:00:00'
+    return
+  }
+
+  const hours = Math.floor(diff / (1000 * 60 * 60))
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+  const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+
+  remainingTime.value = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+}
+
+onMounted(() => {
+  updateRemainingTime()
+  timerInterval = window.setInterval(updateRemainingTime, 1000)
+})
+
+onUnmounted(() => {
+  if (timerInterval) {
+    clearInterval(timerInterval)
+  }
+})
+
+// Computed properties for display
+const bookingId = computed(() => {
+  if (props.booking?.id) {
+    return `ID ${props.booking.id.substring(0, 8).toUpperCase()}`
+  }
+  return 'ID --'
+})
+
+const ownerName = computed(() => {
+  if (props.booking?.owner) {
+    const { firstName, lastName } = props.booking.owner
+    return lastName ? `${firstName} ${lastName}` : firstName
+  }
+  return 'Владелец'
+})
+
+const ownerPhone = computed(() => {
+  return props.booking?.owner?.phoneNumber || ''
+})
 </script>
 
 <template>
@@ -17,24 +77,24 @@ const emit = defineEmits<{
     <header class="active__header">
       <div>
         <h1 class="active__title">Активная бронь</h1>
-        <p class="active__subtitle">{{ parking.name }}</p>
+        <p class="active__subtitle">{{ booking?.spot?.address || parking.name }}</p>
       </div>
-      <div class="active__status">ID BR-2842</div>
+      <div class="active__status">{{ bookingId }}</div>
     </header>
 
     <article class="active__card">
       <div class="active__timer">
         <span class="active__timer-label">Осталось времени</span>
-        <span class="active__timer-value">01:42:18</span>
+        <span class="active__timer-value">{{ remainingTime }}</span>
       </div>
       <div class="active__info">
-        <div>
-          <p class="active__info-label">Код доступа</p>
-          <p class="active__info-value">4378</p>
+        <div v-if="booking?.car">
+          <p class="active__info-label">Автомобиль</p>
+          <p class="active__info-value">{{ booking.car.licensePlate }}</p>
         </div>
         <div>
-          <p class="active__info-label">Место</p>
-          <p class="active__info-value">Уровень -1, место 42B</p>
+          <p class="active__info-label">Адрес</p>
+          <p class="active__info-value">{{ booking?.spot?.address || parking.address }}</p>
         </div>
       </div>
     </article>
@@ -52,14 +112,14 @@ const emit = defineEmits<{
       </ol>
     </section>
 
-    <section class="active__section">
-      <h2 class="active__section-title">Контакты парковки</h2>
+    <section class="active__section" v-if="ownerName">
+      <h2 class="active__section-title">Контакты владельца</h2>
       <div class="active__contacts">
         <div>
-          <p class="active__contact-label">Контроллер</p>
-          <p class="active__contact-value">Антон Васильев</p>
+          <p class="active__contact-label">Владелец</p>
+          <p class="active__contact-value">{{ ownerName }}</p>
         </div>
-        <a class="active__contact-action" href="tel:+79991234567">📞 Позвонить</a>
+        <a v-if="ownerPhone" class="active__contact-action" :href="`tel:${ownerPhone}`">Позвонить</a>
       </div>
     </section>
 

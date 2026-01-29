@@ -4,6 +4,7 @@ import type { ParkingSpot } from '../data/parkings'
 import { featuredParkings } from '../data/parkings'
 import type { User } from '../services/mockAuth'
 import { authApi } from '../services/authApi'
+import { bookingsApi, type BookingStatus } from '../services/bookingsApi'
 import searchIconUrl from '../assets/icons/icon-search.svg?url'
 
 type Booking = {
@@ -32,6 +33,40 @@ type OwnerRequest = {
   status: OwnerRequestStatus
 }
 
+// Map backend booking status to frontend status
+function mapBookingStatus(backendStatus: BookingStatus): Booking['status'] {
+  switch (backendStatus) {
+    case 'WAITING_CONFIRMATION': return 'awaiting'
+    case 'WAITING_START': return 'confirmed'
+    case 'ACTIVE': return 'active'
+    case 'FINISHED': return 'completed'
+    case 'CANCELED': return 'cancelled'
+    default: return 'awaiting'
+  }
+}
+
+// Map backend status to owner request status
+function mapOwnerRequestStatus(backendStatus: BookingStatus): OwnerRequestStatus {
+  switch (backendStatus) {
+    case 'WAITING_CONFIRMATION': return 'awaiting'
+    case 'WAITING_START': return 'confirmed'
+    case 'ACTIVE': return 'active'
+    case 'FINISHED': return 'completed'
+    case 'CANCELED': return 'cancelled'
+    default: return 'awaiting'
+  }
+}
+
+// Map backend rentType to frontend rentalType
+function mapRentType(backendRentType: string): 'hourly' | 'daily' | 'monthly' {
+  switch (backendRentType) {
+    case 'HOURLY': return 'hourly'
+    case 'DAILY': return 'daily'
+    case 'MONTHLY': return 'monthly'
+    default: return 'hourly'
+  }
+}
+
 const props = defineProps<{ 
   userName?: string
   currentUser?: User | null
@@ -55,70 +90,79 @@ const emit = defineEmits<{
 const userFromApi = ref<{ username: string } | null>(null)
 const isLoadingUser = ref(false)
 
-// Hardcoded test bookings for a specific test user (UI-only, no backend)
-const testBookings = computed<Booking[]>(() => {
-  if (userFromApi.value?.username !== 'zaharik') return []
+// Bookings data from API
+const myRentals = ref<Booking[]>([])
+const myLeases = ref<OwnerRequest[]>([])
+const isLoadingBookings = ref(false)
 
-  const fallbackParkingId = featuredParkings[0]?.id
-  const fallbackAddress = featuredParkings[0]?.address || 'Москва, Тестовая парковка'
+// Helper to format datetime from ISO string
+function formatDateFromISO(isoString: string): { date: string; time: string } {
+  const dt = new Date(isoString)
+  const date = dt.toISOString().split('T')[0] // YYYY-MM-DD
+  const time = dt.toTimeString().slice(0, 5) // HH:mm
+  return { date, time }
+}
 
-  return [
-    {
-      id: 'test-booking-1',
-      address: fallbackAddress,
-      startDate: '2026-02-05',
-      endDate: '2026-02-05',
-      startTime: '10:00',
-      endTime: '13:00',
-      rentalType: 'hourly',
-      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6),
-      status: 'confirmed',
-      parkingSpotId: fallbackParkingId,
-    },
-    {
-      id: 'test-booking-2',
-      address: fallbackAddress,
-      startDate: '2026-02-10',
-      endDate: '2026-02-10',
-      startTime: '18:00',
-      endTime: '21:00',
-      rentalType: 'hourly',
-      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 30),
-      status: 'active',
-      parkingSpotId: fallbackParkingId,
-    },
-  ]
-})
+// Load bookings from API
+const loadBookings = async () => {
+  const token = localStorage.getItem('auth_token')
+  if (!token) {
+    console.log('[HomeScreen] No auth token, skipping bookings load')
+    return
+  }
 
-// Hardcoded test owner requests (bookings for "Сдача мест") for a specific test user (UI-only, no backend)
-const testOwnerRequests = computed<OwnerRequest[]>(() => {
-  if (userFromApi.value?.username !== 'zaharik') return []
+  isLoadingBookings.value = true
+  console.log('[HomeScreen] Loading bookings from API...')
 
-  const fallbackAddress = 'Москва, ул. Ленина 1'
+  try {
+    // Load my rentals (I'm the renter)
+    const rentalsResponse = await bookingsApi.getMyRentals(false, { size: 20, sort: 'createdAt,desc' })
+    console.log('[HomeScreen] Rentals loaded:', rentalsResponse.totalElements)
 
-  return [
-    {
-      id: 'test-owner-request-1',
-      address: fallbackAddress,
-      startDate: '2026-02-08',
-      endDate: '2026-02-08',
-      startTime: '14:00',
-      endTime: '17:00',
-      renterName: 'Иван Петров',
-      status: 'confirmed',
-    },
-    {
-      id: 'test-owner-request-2',
-      address: fallbackAddress,
-      startDate: '2026-02-12',
-      endDate: '2026-02-12',
-      startTime: '09:00',
-      endTime: '12:00',
-      renterName: 'Мария Сидорова',
-      status: 'confirmed',
-    },
-  ]
-})
+    myRentals.value = rentalsResponse.content.map(item => {
+      const start = formatDateFromISO(item.startAt)
+      const end = formatDateFromISO(item.endAt)
+      return {
+        id: item.id,
+        address: item.spot.address,
+        startDate: start.date,
+        endDate: end.date,
+        startTime: start.time,
+        endTime: end.time,
+        rentalType: mapRentType(item.rentType),
+        createdAt: new Date(),
+        status: mapBookingStatus(item.status),
+        parkingSpotId: item.spot.id,
+      }
+    })
+
+    // Load my leases (I'm the owner - requests for my spots)
+    const leasesResponse = await bookingsApi.getMyLeases(false, { size: 20, sort: 'createdAt,desc' })
+    console.log('[HomeScreen] Leases loaded:', leasesResponse.totalElements)
+
+    myLeases.value = leasesResponse.content.map(item => {
+      const start = formatDateFromISO(item.startAt)
+      const end = formatDateFromISO(item.endAt)
+      return {
+        id: item.id,
+        address: item.spot.address,
+        startDate: start.date,
+        endDate: end.date,
+        startTime: start.time,
+        endTime: end.time,
+        renterName: item.car?.licensePlate || 'Клиент', // Use license plate as identifier for now
+        status: mapOwnerRequestStatus(item.status),
+      }
+    })
+
+    console.log('[HomeScreen] ✓ Bookings loaded successfully')
+  } catch (error) {
+    console.error('[HomeScreen] Failed to load bookings:', error)
+    // Keep empty arrays on error
+  } finally {
+    isLoadingBookings.value = false
+  }
+}
 
 // Load current user data from API using JWT token from login
 const loadCurrentUser = async () => {
@@ -157,9 +201,10 @@ const loadCurrentUser = async () => {
   }
 }
 
-// Load user data on mount
+// Load user data and bookings on mount
 onMounted(() => {
   loadCurrentUser()
+  loadBookings()
 })
 
 // Computed property for user name - priority: API username > props > userName prop
@@ -306,10 +351,11 @@ const getStatusColor = (status: string, type: 'booking' | 'ownerRequest'): strin
 // Computed property to get activities based on active filter
 const displayedActivities = computed(() => {
   const activeFilter = activityFilters.value.find(f => f.isActive)
-  
+
   if (activeFilter?.id === 'rentals') {
     // Show bookings when "Аренда мест" filter is active
-    const bookingsSource = [...(props.bookings || []), ...testBookings.value]
+    // Combine props bookings with API-loaded rentals
+    const bookingsSource = [...(props.bookings || []), ...myRentals.value]
     return bookingsSource.map(booking => {
       // Находим парковочное место для бронирования
       let parking: ParkingSpot | null = null
@@ -335,7 +381,8 @@ const displayedActivities = computed(() => {
     }).reverse() // Show newest bookings first
   } else if (activeFilter?.id === 'sharing') {
     // Заявки на бронирование ваших мест
-    const ownerRequestsSource = [...(props.ownerRequests || []), ...testOwnerRequests.value]
+    // Combine props owner requests with API-loaded leases
+    const ownerRequestsSource = [...(props.ownerRequests || []), ...myLeases.value]
     if (ownerRequestsSource.length > 0) {
       return ownerRequestsSource.map((request) => {
         const statusLabel = getStatusLabel(request.status, 'ownerRequest')

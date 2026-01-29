@@ -122,7 +122,7 @@ const isRegistrationFlow = ref<boolean>(false)
 const selectedAddress = ref<string>('')
 const selectedLatitude = ref<number | null>(null)
 const selectedLongitude = ref<number | null>(null)
-const selectedLocation = ref<{ id: string; address: string; lat: number; lng: number; priceHour: string; priceDay: string; priceMonth: string; availability: 'hourly' | 'daily' | 'monthly' } | null>(null)
+const selectedLocation = ref<{ id: string; address: string; lat: number; lng: number; priceHour: string; priceDay: string; priceMonth: string } | null>(null)
 const fullScreenMapLocation = ref<{ lat: number; lng: number; address?: string } | null>(null)
 const userCar = ref<{ id: string; brand: string; model: string; number: string; region?: string; color?: string; isForeign: boolean } | null>(null)
 const userCars = ref<Array<{ id: string; brand: string; model: string; number: string; region?: string; color?: string; isForeign: boolean }>>([])
@@ -1496,6 +1496,39 @@ const handleCloseFullScreenMap = () => {
   fullScreenMapLocation.value = null
 }
 
+// Handle selecting a location from the map - fetch full details
+const handleSelectMapLocation = async (location: { id: string; address: string; lat: number; lng: number; price: string; rentType: string }) => {
+  try {
+    console.log('[App] Fetching full spot details for:', location.id)
+    const fullSpot = await spotsApi.getSpotById(location.id)
+    console.log('[App] Full spot details:', fullSpot)
+
+    selectedLocation.value = {
+      id: fullSpot.id,
+      address: fullSpot.address,
+      lat: fullSpot.latitude,
+      lng: fullSpot.longitude,
+      priceHour: fullSpot.pricePerHour ? `${fullSpot.pricePerHour}₽/ч` : '—',
+      priceDay: fullSpot.pricePerDay ? `${fullSpot.pricePerDay}₽/день` : '—',
+      priceMonth: fullSpot.pricePerMonth ? `${fullSpot.pricePerMonth}₽/мес` : '—',
+    }
+    stage.value = 'rent-map-details'
+  } catch (error) {
+    console.error('[App] Failed to fetch spot details:', error)
+    // Fallback: use the basic info we have
+    selectedLocation.value = {
+      id: location.id,
+      address: location.address,
+      lat: location.lat,
+      lng: location.lng,
+      priceHour: location.rentType === 'HOURLY' ? location.price : '—',
+      priceDay: location.rentType === 'DAILY' ? location.price : '—',
+      priceMonth: location.rentType === 'MONTHLY' ? location.price : '—',
+    }
+    stage.value = 'rent-map-details'
+  }
+}
+
 const handleLogout = () => {
   // Clear user data
   currentUser.value = null
@@ -1835,7 +1868,7 @@ onMounted(async () => {
         <RentOutMapScreen
           v-else-if="stage === 'rent-map'"
           @back="goHome"
-          @select-location="(location) => { selectedLocation = location; stage = 'rent-map-details'; }"
+          @select-location="handleSelectMapLocation"
         />
         
         <ParkingSpotDetailsScreen

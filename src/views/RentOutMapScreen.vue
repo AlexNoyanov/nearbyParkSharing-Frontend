@@ -3,16 +3,15 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import parkingLotImage from '../assets/images/parkinglot.jpg'
+import { spotsApi, type SpotSearchItem } from '../services/spotsApi'
 
 type Location = {
   id: string
   address: string
   lat: number
   lng: number
-  priceHour: string
-  priceDay: string
-  priceMonth: string
-  availability: 'hourly' | 'daily' | 'monthly'
+  price: string
+  rentType: string
 }
 
 const emit = defineEmits<{
@@ -44,8 +43,11 @@ const handlePreviewGalleryScroll = () => {
 // Filter state
 const availableNow = ref(true)
 // Используем формат YYYY-MM-DD для date input
-const fromDate = ref('2024-12-15')
-const toDate = ref('2025-03-15')
+// Default to today + 7 days
+const today = new Date()
+const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)
+const fromDate = ref(today.toISOString().split('T')[0])
+const toDate = ref(nextWeek.toISOString().split('T')[0])
 const fromTime = ref('08:00')
 const toTime = ref('22:00')
 const hourlyRent = ref(false)
@@ -57,37 +59,110 @@ let markers: L.Marker[] = []
 const currentZoom = ref(13)
 const zoomThreshold = 15 // Показывать полный значок при зуме >= 15
 
-// Test locations with different availability types
-const testLocations: Location[] = [
-  { id: '1', address: 'ул. Тверская, 10', lat: 55.7558, lng: 37.6173, priceHour: '200₽/ч', priceDay: '1500₽/день', priceMonth: '35000₽/мес', availability: 'hourly' },
-  { id: '2', address: 'Красная площадь, 1', lat: 55.7539, lng: 37.6208, priceHour: '150₽/ч', priceDay: '1200₽/день', priceMonth: '30000₽/мес', availability: 'daily' },
-  { id: '3', address: 'ул. Арбат, 20', lat: 55.7520, lng: 37.5925, priceHour: '180₽/ч', priceDay: '1400₽/день', priceMonth: '32000₽/мес', availability: 'hourly' },
-  { id: '4', address: 'Ленинградский проспект, 15', lat: 55.7776, lng: 37.5856, priceHour: '120₽/ч', priceDay: '1000₽/день', priceMonth: '28000₽/мес', availability: 'monthly' },
-  { id: '5', address: 'ул. Новый Арбат, 25', lat: 55.7525, lng: 37.5920, priceHour: '250₽/ч', priceDay: '1800₽/день', priceMonth: '40000₽/мес', availability: 'daily' },
-]
+// Spots loaded from API
+const apiSpots = ref<Location[]>([])
+const isLoadingSpots = ref(false)
 
-// Computed filtered locations based on availability filter
-const filteredLocations = computed(() => {
-  if (hourlyRent.value) {
-    return testLocations.filter(loc => loc.availability === 'hourly')
-  } else if (dailyRent.value) {
-    return testLocations.filter(loc => loc.availability === 'daily')
-  } else if (monthlyRent.value) {
-    return testLocations.filter(loc => loc.availability === 'monthly')
+// Convert API spot to Location format
+const spotToLocation = (spot: SpotSearchItem): Location => {
+  // Format price based on rentType
+  let priceStr = `${spot.price}₽`
+  if (spot.rentType === 'HOURLY') {
+    priceStr = `${spot.price}₽/ч`
+  } else if (spot.rentType === 'DAILY') {
+    priceStr = `${spot.price}₽/день`
+  } else if (spot.rentType === 'MONTHLY') {
+    priceStr = `${spot.price}₽/мес`
   }
-  return testLocations // Show all if none selected
+
+  return {
+    id: spot.id,
+    address: spot.address,
+    lat: spot.latitude,
+    lng: spot.longitude,
+    price: priceStr,
+    rentType: spot.rentType,
+  }
+}
+
+// Get current rentType based on selected filter
+const getCurrentRentType = (): 'HOURLY' | 'DAILY' | 'MONTHLY' => {
+  console.log('[RentOutMap] getCurrentRentType called:', {
+    hourlyRent: hourlyRent.value,
+    dailyRent: dailyRent.value,
+    monthlyRent: monthlyRent.value
+  })
+  if (hourlyRent.value === true) return 'HOURLY'
+  if (monthlyRent.value === true) return 'MONTHLY'
+  // Default to DAILY
+  return 'DAILY'
+}
+
+// Load spots from API based on map bounds
+const loadSpotsFromApi = async () => {
+  if (!map) return
+
+  // Check if user is logged in
+  const token = localStorage.getItem('auth_token')
+  if (!token) {
+    console.log('[RentOutMap] No auth token, skipping spots load')
+    return
+  }
+
+  const bounds = map.getBounds()
+  const minLat = bounds.getSouth()
+  const maxLat = bounds.getNorth()
+  const minLng = bounds.getWest()
+  const maxLng = bounds.getEast()
+
+  const rentType = getCurrentRentType()
+  console.log('[RentOutMap] Loading spots for bounds:', { minLat, maxLat, minLng, maxLng, rentType })
+  isLoadingSpots.value = true
+
+  try {
+    // Build search params based on rentType
+    const searchParams: Parameters<typeof spotsApi.searchSpots>[0] = {
+      rentType,
+      minLat,
+      maxLat,
+      minLng,
+      maxLng,
+    }
+
+    // Add date/time params based on rentType
+    if (rentType === 'HOURLY') {
+      // For hourly: use today's date and selected times
+      const today = new Date().toISOString().split('T')[0]
+      searchParams.date = today
+      searchParams.timeFrom = fromTime.value
+      searchParams.timeTo = toTime.value
+    } else {
+      // For DAILY/MONTHLY: use selected date range
+      searchParams.dateFrom = fromDate.value
+      searchParams.dateTo = toDate.value
+    }
+
+    console.log('[RentOutMap] Search params:', searchParams)
+    const spots = await spotsApi.searchSpots(searchParams)
+
+    console.log('[RentOutMap] Spots loaded:', spots.length)
+    apiSpots.value = spots.map(spotToLocation)
+  } catch (error) {
+    console.error('[RentOutMap] Failed to load spots:', error)
+    // Keep existing spots on error
+  } finally {
+    isLoadingSpots.value = false
+  }
+}
+
+// Filtered locations - API already returns spots filtered by rentType
+const filteredLocations = computed(() => {
+  return apiSpots.value
 })
 
-// Get price for location based on selected availability
+// Get price for location
 const getLocationPrice = (location: Location): string => {
-  if (hourlyRent.value) {
-    return location.priceHour
-  } else if (dailyRent.value) {
-    return location.priceDay
-  } else if (monthlyRent.value) {
-    return location.priceMonth
-  }
-  return location.priceHour // Default to hourly
+  return location.price
 }
 
 // Fix Leaflet default icon issue
@@ -222,7 +297,7 @@ const getParkingIcon = (price: string) => {
 }
 
 onMounted(() => {
-  setTimeout(() => {
+  setTimeout(async () => {
     if (mapContainer.value) {
       // Initialize map centered on Moscow
       map = L.map(mapContainer.value, {
@@ -278,21 +353,36 @@ onMounted(() => {
         }
       }
 
-      // Initial markers
-      addMarkers()
-
       // Watch for zoom changes
       if (map) {
         map.on('zoomend', updateMarkersOnZoom)
         map.on('zoom', updateMarkersOnZoom)
+
+        // Load spots when map bounds change (after move/zoom ends)
+        map.on('moveend', async () => {
+          await loadSpotsFromApi()
+          addMarkers()
+        })
       }
 
-      // Watch for filter changes and update markers
-      watch([hourlyRent, dailyRent, monthlyRent], () => {
+      // Watch for filter changes - reload spots from API with new rentType
+      watch([hourlyRent, dailyRent, monthlyRent], async () => {
+        if (map) {
+          await loadSpotsFromApi()
+          addMarkers()
+        }
+      })
+
+      // Watch for API spots changes and update markers
+      watch(apiSpots, () => {
         if (map) {
           addMarkers()
         }
       })
+
+      // Initial load of spots
+      await loadSpotsFromApi()
+      addMarkers()
     }
   }, 100)
 })
@@ -488,19 +578,13 @@ watch(monthlyRent, (isMonthly) => {
 
           <!-- Rates Section -->
           <div class="parking-details__section parking-details__rates">
-            <h3 class="parking-details__rates-title">Тарифы</h3>
+            <h3 class="parking-details__rates-title">Тариф</h3>
             <div class="parking-details__rates-list">
               <div class="parking-details__rate-item">
-                <div class="parking-details__rate-price">{{ selectedPreviewLocation.priceHour.replace('₽/ч', '').trim() }} ₽</div>
-                <div class="parking-details__rate-label">за час</div>
-              </div>
-              <div class="parking-details__rate-item">
-                <div class="parking-details__rate-price parking-details__rate-price--green">{{ selectedPreviewLocation.priceDay.replace('₽/день', '').trim() }} ₽</div>
-                <div class="parking-details__rate-label">за день</div>
-              </div>
-              <div class="parking-details__rate-item">
-                <div class="parking-details__rate-price parking-details__rate-price--purple">{{ selectedPreviewLocation.priceMonth.replace('₽/мес', '').trim() }} ₽</div>
-                <div class="parking-details__rate-label">за месяц</div>
+                <div class="parking-details__rate-price parking-details__rate-price--green">{{ selectedPreviewLocation.price }}</div>
+                <div class="parking-details__rate-label">
+                  {{ selectedPreviewLocation.rentType === 'HOURLY' ? 'за час' : selectedPreviewLocation.rentType === 'DAILY' ? 'за день' : 'за месяц' }}
+                </div>
               </div>
             </div>
           </div>
