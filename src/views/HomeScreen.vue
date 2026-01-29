@@ -4,6 +4,7 @@ import type { ParkingSpot } from '../data/parkings'
 import { featuredParkings } from '../data/parkings'
 import type { User } from '../services/mockAuth'
 import { authApi } from '../services/authApi'
+import { spotsApi } from '../services/spotsApi'
 import searchIconUrl from '../assets/icons/icon-search.svg?url'
 
 type Booking = {
@@ -196,13 +197,35 @@ type StatCard = {
   tone: 'violet' | 'mint'
 }
 
-const stats: StatCard[] = props.currentUser ? [
-  { id: 'bookings', label: 'Мои брони', caption: 'Активные аренды', count: props.bookingsCount || 0, tone: 'violet' },
-  { id: 'spaces', label: 'Мои места', caption: 'Сдаются сейчас', count: 1, tone: 'mint' },
-] : [
-  { id: 'bookings', label: 'Мои брони', caption: 'Активные аренды', count: 0, tone: 'violet' },
-  { id: 'spaces', label: 'Мои места', caption: 'Сдаются сейчас', count: 0, tone: 'mint' },
-]
+// Количество доступных мест (active) из /api/v1/spots/my
+const mySpotsCount = ref(0)
+
+const loadMySpotsCount = async () => {
+  if (!props.currentUser) {
+    mySpotsCount.value = 0
+    return
+  }
+  try {
+    const spots = await spotsApi.getMySpots()
+    mySpotsCount.value = spots.filter(spot => spot.active === true).length
+  } catch {
+    mySpotsCount.value = 0
+  }
+}
+
+watch(() => props.currentUser, (user) => {
+  if (user) loadMySpotsCount()
+  else mySpotsCount.value = 0
+}, { immediate: true })
+
+onMounted(() => {
+  if (props.currentUser) loadMySpotsCount()
+})
+
+const stats = computed<StatCard[]>(() => [
+  { id: 'bookings', label: 'Мои брони', caption: 'Активные аренды', count: props.bookingsCount ?? 0, tone: 'violet' },
+  { id: 'spaces', label: 'Мои места', caption: 'Сдаются сейчас', count: props.currentUser ? mySpotsCount.value : 0, tone: 'mint' },
+])
 
 type ActivityEntry = {
   id: string

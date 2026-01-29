@@ -478,8 +478,9 @@ const getSpotImages = (spot: MySpot): string[] => {
 .parking-card__status {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 2px 7px 6px;
+  padding: 4px 7px;
   border-radius: 8px;
   border: 1px solid;
   align-self: flex-start;
@@ -504,7 +505,6 @@ const getSpotImages = (spot: MySpot): string[] => {
   justify-content: center;
   align-items: flex-start;
   gap: 8px;
-  padding-top: 3px;
 }
 
 .parking-card__button {
@@ -747,7 +747,7 @@ const getSpotImages = (spot: MySpot): string[] => {
   }
 
   .parking-card__status {
-    padding: 1px 5px 4px;
+    padding: 3px 5px;
     border-radius: 6px;
     gap: 6px;
   }
@@ -1004,7 +1004,7 @@ const getSpotImages = (spot: MySpot): string[] => {
   }
 
   .parking-card__status {
-    padding: 3px 8px 7px;
+    padding: 5px 8px;
   }
 
   .parking-card__status-text {
@@ -1115,7 +1115,7 @@ const getSpotImages = (spot: MySpot): string[] => {
   }
 
   .parking-card__status {
-    padding: 4px 10px 8px;
+    padding: 6px 10px;
     border-radius: 10px;
   }
 
@@ -1239,7 +1239,7 @@ const getSpotImages = (spot: MySpot): string[] => {
   }
 
   .parking-card__status {
-    padding: 5px 12px 10px;
+    padding: 8px 12px;
     border-radius: 12px;
     gap: 10px;
   }
