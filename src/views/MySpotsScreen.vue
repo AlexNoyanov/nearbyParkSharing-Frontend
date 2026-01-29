@@ -25,11 +25,11 @@ const loadMySpots = async () => {
     console.log('[MySpotsScreen] Loading user spots...')
     const spotsData = await spotsApi.getMySpots()
     spots.value = spotsData
+    console.log('[MySpotsScreen] ✓ Spots loaded:', spotsData.length)
     // Initialize currentImageIndex for all spots
     spots.value.forEach((spot) => {
       currentImageIndex.value[spot.id] = 0
     })
-    console.log('[MySpotsScreen] ✓ Spots loaded:', spotsData.length)
   } catch (err: any) {
     console.error('[MySpotsScreen] ✗ Failed to load spots:', err)
     error.value = err?.message || 'Не удалось загрузить список мест'
@@ -52,34 +52,8 @@ const handleTabChange = (tab: 'all' | 'active') => {
 }
 
 const filteredSpots = computed(() => {
-  // Сначала отфильтруем только видимые (неархивированные/нескрытые) места
-  const visibleSpots = spots.value.filter((spot) => {
-    const anySpot = spot as any
-    const status = (anySpot.status || '').toString().toUpperCase()
-    const archivedFlag =
-      anySpot.archived === true ||
-      anySpot.isArchived === true ||
-      anySpot.isHidden === true
-
-    // Считаем место скрытым/архивированным, если:
-    // - есть явный флаг archived / isArchived / isHidden
-    // - либо статус ARCHIVED / HIDDEN / INACTIVE / DISABLED
-    const archivedByStatus =
-      status === 'ARCHIVED' ||
-      status === 'HIDDEN' ||
-      status === 'INACTIVE' ||
-      status === 'DISABLED'
-
-    return !(archivedFlag || archivedByStatus)
-  })
-
-  if (activeTab.value === 'active') {
-    // Пока нет точного статуса из бэкенда, считаем все видимые места активными.
-    return visibleSpots
-  }
-
-  // "Все места" — тоже только видимые (неархивированные)
-  return visibleSpots
+  // Показываем все места из ответа API без фильтрации
+  return spots.value
 })
 
 const handleEdit = (spot: MySpot) => {
@@ -91,12 +65,33 @@ const handleHide = (spotId: string) => {
   emit('hide-spot', spotId)
 }
 
+const activatingSpotId = ref<string | null>(null)
+
+const handleActivate = async (spotId: string) => {
+  if (activatingSpotId.value) return
+  activatingSpotId.value = spotId
+  try {
+    await spotsApi.activateSpot(spotId)
+    await loadMySpots()
+  } catch (err: any) {
+    console.error('[MySpotsScreen] Activate failed:', err)
+    error.value = err?.message || 'Не удалось опубликовать повторно'
+  } finally {
+    activatingSpotId.value = null
+  }
+}
+
 const handleAddPlace = () => {
   emit('add-spot')
 }
 
-const getStatusColor = () => {
-  // Все места считаются доступными для бронирования
+// Место активно только если бэкенд явно вернул active: true
+const isSpotActive = (spot: MySpot) => spot.active === true
+
+const getStatusColor = (spot: MySpot) => {
+  if (!isSpotActive(spot)) {
+    return { bg: '#F3F4F6', border: '#E5E7EB', text: '#4B5563' }
+  }
   return { bg: '#DCFCE7', border: '#22C55E', text: '#16A34A' }
 }
 
@@ -205,45 +200,61 @@ const getSpotImages = (spot: MySpot): string[] => {
             <!-- Status badge -->
             <div
               class="parking-card__status"
+              :class="{ 'parking-card__status--inactive': !isSpotActive(spot) }"
               :style="{
-                backgroundColor: getStatusColor().bg,
-                borderColor: getStatusColor().border,
+                backgroundColor: getStatusColor(spot).bg,
+                borderColor: getStatusColor(spot).border,
               }"
             >
               <span
                 class="parking-card__status-dot"
-                :style="{ backgroundColor: getStatusColor().border }"
+                :style="{ backgroundColor: getStatusColor(spot).border }"
               ></span>
               <span
                 class="parking-card__status-text"
-                :style="{ color: getStatusColor().text }"
+                :style="{ color: getStatusColor(spot).text }"
               >
-                Доступно для бронирования
+                {{ isSpotActive(spot) ? 'Доступно для бронирования' : 'Снято с публикации' }}
               </span>
             </div>
 
-            <!-- Action buttons -->
+            <!-- Action buttons: для неактивного места — только «Опубликовать повторно» -->
             <div class="parking-card__actions">
-              <button
-                type="button"
-                class="parking-card__button parking-card__button--edit"
-                @click="handleEdit(spot)"
-              >
-                <svg width="16" height="15" viewBox="0 0 16 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M10.9922 2.37891L13.4531 4.83984C13.5625 4.94922 13.5625 5.11328 13.4531 5.22266L7.49219 11.1836L4.94922 11.457C4.62109 11.5117 4.32031 11.2109 4.375 10.8828L4.64844 8.33984L10.6094 2.37891C10.7188 2.26953 10.8828 2.26953 10.9922 2.37891ZM15.4219 1.75C15.832 2.16016 15.832 2.84375 15.4219 3.25391L14.4648 4.21094C14.3555 4.32031 14.1914 4.32031 14.082 4.21094L11.6211 1.75C11.5117 1.64062 11.5117 1.47656 11.6211 1.36719L12.5781 0.410156C12.9883 0 13.6719 0 14.082 0.410156L15.4219 1.75ZM10.5 9.57031C10.5 9.46094 10.5273 9.37891 10.582 9.32422L11.6758 8.23047C11.8945 8.03906 12.25 8.17578 12.25 8.47656V12.7695C12.25 13.5078 11.6484 14.082 10.9375 14.082H1.3125C0.574219 14.082 0 13.5078 0 12.7695V3.14453C0 2.43359 0.574219 1.83203 1.3125 1.83203H9.10547C9.40625 1.83203 9.54297 2.1875 9.35156 2.40625L8.25781 3.5C8.20312 3.55469 8.12109 3.58203 8.01172 3.58203H1.75V12.332H10.5V9.57031Z" fill="#374151"/>
-                </svg>
-                <span>Редактировать</span>
-              </button>
-              <button
-                type="button"
-                class="parking-card__button parking-card__button--hide"
-                @click="handleHide(spot.id)"
-              >
-                <svg width="18" height="14" viewBox="0 0 18 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M8.75 10.9102C8.96875 10.9102 9.21484 10.9102 9.46094 10.8555L10.8555 11.9492C10.1719 12.1133 9.46094 12.2227 8.75 12.2227C5.38672 12.2227 2.43359 10.2812 0.957031 7.38281C0.902344 7.27344 0.875 7.13672 0.875 6.97266C0.875 6.83594 0.902344 6.69922 0.957031 6.58984C1.23047 6.04297 1.58594 5.55078 1.96875 5.05859L4.83984 7.27344C4.97656 9.32422 6.67188 10.9102 8.75 10.9102ZM17.3086 12.5234C17.418 12.6055 17.4727 12.7148 17.4727 12.8516C17.4727 12.9609 17.4453 13.043 17.3906 13.125L16.8711 13.8086C16.7891 13.918 16.6523 13.9727 16.5156 13.9727C16.4062 13.9727 16.3242 13.9453 16.2422 13.8906L0.164062 1.44922C0.0546875 1.36719 0 1.25781 0 1.12109C0 1.01172 0.0273438 0.929688 0.0820312 0.847656L0.628906 0.164062C0.683594 0.0546875 0.820312 0 0.957031 0C1.06641 0 1.14844 0.0273438 1.23047 0.0820312L4.70312 2.76172C5.90625 2.10547 7.27344 1.75 8.75 1.72266C12.0859 1.72266 15.0391 3.69141 16.5156 6.58984C16.5703 6.69922 16.5977 6.83594 16.5977 7C16.5977 7.13672 16.5703 7.27344 16.5156 7.38281C15.9688 8.44922 15.2031 9.40625 14.3008 10.1719L17.3086 12.5234ZM12.3047 8.64062C12.5234 8.12109 12.6875 7.57422 12.6875 6.97266C12.6875 4.8125 10.9102 3.03516 8.75 3.03516C7.79297 3.0625 6.91797 3.39062 6.23438 3.96484L8.25781 5.49609C8.28516 5.41406 8.28516 5.33203 8.3125 5.22266C8.28516 4.94922 8.20312 4.67578 8.03906 4.45703C8.28516 4.40234 8.53125 4.34766 8.77734 4.34766C10.1992 4.34766 11.375 5.52344 11.375 6.94531C11.375 6.97266 11.375 6.97266 11.375 6.97266C11.3477 7.27344 11.3203 7.54688 11.2109 7.79297L12.3047 8.64062Z" fill="#DC2626"/>
-                </svg>
-                <span>Скрыть</span>
-              </button>
+              <template v-if="!isSpotActive(spot)">
+                <button
+                  type="button"
+                  class="parking-card__button parking-card__button--activate"
+                  :disabled="activatingSpotId === spot.id"
+                  @click="handleActivate(spot.id)"
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <path d="M13.4805 0C13.6445 0 13.8086 0.164062 13.8086 0.328125V5.82422C13.8086 5.98828 13.6445 6.15234 13.4805 6.15234H8.01172C7.82031 6.15234 7.68359 5.98828 7.68359 5.82422V4.51172H7.65625C7.65625 4.34766 7.82031 4.18359 7.98438 4.18359C8.01172 4.18359 8.01172 4.18359 8.01172 4.18359L10.8008 4.32031C9.92578 3.03516 8.44922 2.1875 6.80859 2.1875C4.12891 2.1875 1.99609 4.34766 1.99609 7C1.99609 9.67969 4.12891 11.8125 6.80859 11.8125C8.01172 11.8125 9.13281 11.375 9.98047 10.6367C10.0352 10.582 10.1172 10.5547 10.1992 10.5547C10.2812 10.5547 10.3633 10.582 10.418 10.6367L11.3477 11.5664C11.4023 11.6211 11.457 11.7031 11.457 11.8125C11.457 11.8945 11.4023 11.9766 11.3477 12.0586C10.1445 13.125 8.55859 13.7812 6.80859 13.7812C3.0625 13.7812 0.0273438 10.7734 0.0273438 7.02734C0 3.28125 3.0625 0.21875 6.80859 0.21875C8.85938 0.21875 10.7188 1.14844 11.9492 2.625L11.8398 0.355469C11.8398 0.355469 11.8398 0.355469 11.8398 0.328125C11.8398 0.164062 12.0039 0 12.168 0H13.4805Z" fill="currentColor"/>
+                  </svg>
+                  <span>{{ activatingSpotId === spot.id ? 'Публикация...' : 'Опубликовать повторно' }}</span>
+                </button>
+              </template>
+              <template v-else>
+                <button
+                  type="button"
+                  class="parking-card__button parking-card__button--edit"
+                  @click="handleEdit(spot)"
+                >
+                  <svg width="16" height="15" viewBox="0 0 16 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M10.9922 2.37891L13.4531 4.83984C13.5625 4.94922 13.5625 5.11328 13.4531 5.22266L7.49219 11.1836L4.94922 11.457C4.62109 11.5117 4.32031 11.2109 4.375 10.8828L4.64844 8.33984L10.6094 2.37891C10.7188 2.26953 10.8828 2.26953 10.9922 2.37891ZM15.4219 1.75C15.832 2.16016 15.832 2.84375 15.4219 3.25391L14.4648 4.21094C14.3555 4.32031 14.1914 4.32031 14.082 4.21094L11.6211 1.75C11.5117 1.64062 11.5117 1.47656 11.6211 1.36719L12.5781 0.410156C12.9883 0 13.6719 0 14.082 0.410156L15.4219 1.75ZM10.5 9.57031C10.5 9.46094 10.5273 9.37891 10.582 9.32422L11.6758 8.23047C11.8945 8.03906 12.25 8.17578 12.25 8.47656V12.7695C12.25 13.5078 11.6484 14.082 10.9375 14.082H1.3125C0.574219 14.082 0 13.5078 0 12.7695V3.14453C0 2.43359 0.574219 1.83203 1.3125 1.83203H9.10547C9.40625 1.83203 9.54297 2.1875 9.35156 2.40625L8.25781 3.5C8.20312 3.55469 8.12109 3.58203 8.01172 3.58203H1.75V12.332H10.5V9.57031Z" fill="#374151"/>
+                  </svg>
+                  <span>Редактировать</span>
+                </button>
+                <button
+                  type="button"
+                  class="parking-card__button parking-card__button--hide"
+                  @click="handleHide(spot.id)"
+                >
+                  <svg width="18" height="14" viewBox="0 0 18 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M8.75 10.9102C8.96875 10.9102 9.21484 10.9102 9.46094 10.8555L10.8555 11.9492C10.1719 12.1133 9.46094 12.2227 8.75 12.2227C5.38672 12.2227 2.43359 10.2812 0.957031 7.38281C0.902344 7.27344 0.875 7.13672 0.875 6.97266C0.875 6.83594 0.902344 6.69922 0.957031 6.58984C1.23047 6.04297 1.58594 5.55078 1.96875 5.05859L4.83984 7.27344C4.97656 9.32422 6.67188 10.9102 8.75 10.9102ZM17.3086 12.5234C17.418 12.6055 17.4727 12.7148 17.4727 12.8516C17.4727 12.9609 17.4453 13.043 17.3906 13.125L16.8711 13.8086C16.7891 13.918 16.6523 13.9727 16.5156 13.9727C16.4062 13.9727 16.3242 13.9453 16.2422 13.8906L0.164062 1.44922C0.0546875 1.36719 0 1.25781 0 1.12109C0 1.01172 0.0273438 0.929688 0.0820312 0.847656L0.628906 0.164062C0.683594 0.0546875 0.820312 0 0.957031 0C1.06641 0 1.14844 0.0273438 1.23047 0.0820312L4.70312 2.76172C5.90625 2.10547 7.27344 1.75 8.75 1.72266C12.0859 1.72266 15.0391 3.69141 16.5156 6.58984C16.5703 6.69922 16.5977 6.83594 16.5977 7C16.5977 7.13672 16.5703 7.27344 16.5156 7.38281C15.9688 8.44922 15.2031 9.40625 14.3008 10.1719L17.3086 12.5234ZM12.3047 8.64062C12.5234 8.12109 12.6875 7.57422 12.6875 6.97266C12.6875 4.8125 10.9102 3.03516 8.75 3.03516C7.79297 3.0625 6.91797 3.39062 6.23438 3.96484L8.25781 5.49609C8.28516 5.41406 8.28516 5.33203 8.3125 5.22266C8.28516 4.94922 8.20312 4.67578 8.03906 4.45703C8.28516 4.40234 8.53125 4.34766 8.77734 4.34766C10.1992 4.34766 11.375 5.52344 11.375 6.94531C11.375 6.97266 11.375 6.97266 11.375 6.97266C11.3477 7.27344 11.3203 7.54688 11.2109 7.79297L12.3047 8.64062Z" fill="#DC2626"/>
+                  </svg>
+                  <span>Скрыть</span>
+                </button>
+              </template>
             </div>
           </div>
         </article>
@@ -544,6 +555,34 @@ const getSpotImages = (spot: MySpot): string[] => {
 
 .parking-card__button--hide:hover {
   background: #DBEAFE;
+}
+
+.parking-card__button--activate {
+  flex: 1;
+  min-width: 0;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #2563EB;
+  color: #ffffff;
+  border: none;
+}
+.parking-card__button--activate:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+.parking-card__button--activate:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.parking-card__button--activate svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.parking-card__status--inactive .parking-card__status-dot {
+  background-color: #9CA3AF !important;
 }
 
 /* Empty state */

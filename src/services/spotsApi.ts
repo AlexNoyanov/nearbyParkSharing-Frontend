@@ -72,6 +72,7 @@ export interface MySpot {
   createdAt?: string
   updatedAt?: string
   // Optional backend flags / status fields (for archive/hide logic)
+  active?: boolean // Swagger: «Активно ли объявление (снято ли с публикации)»
   status?: string
   archived?: boolean
   isArchived?: boolean
@@ -154,9 +155,12 @@ export const spotsApi = {
       console.log('[SpotsAPI] Spots count:', Array.isArray(result) ? result.length : 'not an array')
       console.log('[SpotsAPI] Response:', result)
       
-      // API might return array directly or wrapped in an object
-      const spots = Array.isArray(result) ? result : (result.spots || result.data || [])
-      return spots
+      // API might return array directly or wrapped in an object (spots / data / content)
+      const raw = Array.isArray(result)
+        ? result
+        : (result.spots ?? result.data ?? result.content ?? [])
+      // Сохраняем все поля с бэка, включая active, без перезаписи
+      return raw.map((s: Record<string, unknown>) => ({ ...s, active: s.active })) as MySpot[]
     } catch (error) {
       console.error('[SpotsAPI] Get my spots error:', error)
       throw error
@@ -410,24 +414,23 @@ export const spotsApi = {
   },
 
   /**
-   * Archive (unpublish) a parking spot
+   * Снять место с публикации (архивировать).
    * POST /api/v1/spots/{id}/archive
-   *
-   * @param id - Spot ID to archive
-   * @param cancelUpcomingBookings - If true, cancel upcoming bookings; if false, wait for them to complete
+   * Переводит место в архив (active=false). Доступно только владельцу.
+   * Тело: cancelBlockingBookings=false — снять с публикации, бронирования не меняются.
+   *       cancelBlockingBookings=true — отменяются предстоящие (WAITING_CONFIRMATION, WAITING_START);
+   *       при активном бронировании (ACTIVE) бэкенд вернёт 409.
+   * @see https://test-app-iuwehfvnlw23275vb.koalanearby.com/parkshare/swagger-ui/index.html#/Spots/archive
    */
-  async archiveSpot(id: string, cancelUpcomingBookings: boolean = false): Promise<void> {
-    // Some backends expect this flag as a query param rather than JSON body.
-    // To be maximally compatible with the Swagger method `/api/v1/spots/{id}/archive`,
-    // we pass it as a query parameter and do NOT send a JSON body.
-    const API_URL = `${API_BASE_URL}/api/v1/spots/${id}/archive${
-      cancelUpcomingBookings ? '?cancelUpcomingBookings=true' : ''
-    }`
+  async archiveSpot(id: string, cancelBlockingBookings: boolean = false): Promise<void> {
+    const API_URL = `${API_BASE_URL}/api/v1/spots/${id}/archive`
+    const requestBody = { cancelBlockingBookings }
 
     console.log('[SpotsAPI] ===== ARCHIVE SPOT =====')
     console.log('[SpotsAPI] Spot ID:', id)
-    console.log('[SpotsAPI] Cancel upcoming bookings:', cancelUpcomingBookings)
+    console.log('[SpotsAPI] cancelBlockingBookings:', cancelBlockingBookings)
     console.log('[SpotsAPI] API Endpoint:', API_URL)
+    console.log('[SpotsAPI] Request body:', JSON.stringify(requestBody))
 
     // Get authentication token
     const token = localStorage.getItem('auth_token')
@@ -439,10 +442,11 @@ export const spotsApi = {
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           'Accept': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        // No body: backend Swagger `/api/v1/spots/{id}/archive` typically does not require one.
+        body: JSON.stringify(requestBody),
         mode: 'cors',
         credentials: 'omit',
       })
@@ -481,6 +485,12 @@ export const spotsApi = {
           localStorage.removeItem('auth_token')
           throw new Error('Authentication failed. Please login again.')
         }
+        if (response.status === 409) {
+          throw new Error(
+            errorMessage ||
+              'Нельзя снять с публикации: есть активное бронирование. Дождитесь завершения или выберите «Ждать завершения бронирований».'
+          )
+        }
 
         const error = new Error(errorMessage)
         ;(error as any).status = response.status
@@ -492,6 +502,77 @@ export const spotsApi = {
       console.log('[SpotsAPI] ✓ Spot archived successfully')
     } catch (error) {
       console.error('[SpotsAPI] Archive spot error:', error)
+      throw error
+    }
+  },
+
+  /**
+   * Вернуть место из архива (опубликовать повторно).
+   * POST /api/v1/spots/{id}/activate
+   * Делает объявление снова активным (active=true).
+   * @see https://test-app-iuwehfvnlw23275vb.koalanearby.com/parkshare/swagger-ui/index.html#/Spots/activate
+   */
+  async activateSpot(id: string): Promise<void> {
+    const API_URL = `${API_BASE_URL}/api/v1/spots/${id}/activate`
+
+    console.log('[SpotsAPI] ===== ACTIVATE SPOT =====')
+    console.log('[SpotsAPI] Spot ID:', id)
+    console.log('[SpotsAPI] API Endpoint:', API_URL)
+
+    const token = localStorage.getItem('auth_token')
+    if (!token) {
+      throw new Error('Authentication token not found. Please login first.')
+    }
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        mode: 'cors',
+        credentials: 'omit',
+      })
+
+      console.log('[SpotsAPI] Response status:', response.status)
+      console.log('[SpotsAPI] Response ok:', response.ok)
+
+      if (!response.ok) {
+        let errorMessage = `HTTP error! status: ${response.status}`
+        let errorBody = null
+        try {
+          const contentType = response.headers.get('content-type')
+          if (contentType && contentType.includes('application/json')) {
+            errorBody = await response.json()
+            errorMessage = errorBody.message || errorBody.error || errorMessage
+          } else {
+            const errorText = await response.text()
+            if (errorText) {
+              try {
+                errorBody = JSON.parse(errorText)
+                errorMessage = errorBody.message || errorBody.error || errorMessage
+              } catch {
+                errorMessage = errorText || errorMessage
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[SpotsAPI] Could not read error response:', e)
+        }
+        if (response.status === 401) {
+          localStorage.removeItem('auth_token')
+          throw new Error('Authentication failed. Please login again.')
+        }
+        const error = new Error(errorMessage)
+        ;(error as any).status = response.status
+        ;(error as any).body = errorBody
+        console.error('[SpotsAPI] ✗ Activate spot failed:', errorMessage)
+        throw error
+      }
+      console.log('[SpotsAPI] ✓ Spot activated successfully')
+    } catch (error) {
+      console.error('[SpotsAPI] Activate spot error:', error)
       throw error
     }
   },

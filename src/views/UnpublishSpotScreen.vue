@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { spotsApi } from '../services/spotsApi'
 
 const props = defineProps<{
   spotId: string
@@ -14,30 +13,11 @@ const emit = defineEmits<{
 
 // Radio selection: cancel upcoming or wait for completion
 const selectedAction = ref<'cancel' | 'wait'>('cancel')
-const isLoading = ref(false)
-const error = ref<string | null>(null)
 
-const handleConfirm = async () => {
-  if (isLoading.value) return
-  
-  isLoading.value = true
-  error.value = null
-  
-  try {
-    const cancelUpcomingBookings = selectedAction.value === 'cancel'
-    console.log('[UnpublishSpotScreen] Archiving spot:', props.spotId, 'cancel upcoming:', cancelUpcomingBookings)
-    
-    await spotsApi.archiveSpot(props.spotId, cancelUpcomingBookings)
-    
-    console.log('[UnpublishSpotScreen] ✓ Spot archived successfully')
-    
-    // Emit confirm event for parent component to handle navigation
-    emit('confirm', cancelUpcomingBookings)
-  } catch (err: any) {
-    console.error('[UnpublishSpotScreen] ✗ Failed to archive spot:', err)
-    error.value = err?.message || 'Не удалось снять место с публикации. Попробуйте еще раз.'
-    isLoading.value = false
-  }
+const handleConfirm = () => {
+  const cancelUpcomingBookings = selectedAction.value === 'cancel'
+  console.log('[UnpublishSpotScreen] Confirm unpublish, spotId:', props.spotId, 'cancelBlockingBookings:', cancelUpcomingBookings)
+  emit('confirm', cancelUpcomingBookings)
 }
 
 const handleCancel = () => {
@@ -199,21 +179,16 @@ const handleBack = () => {
 
     <!-- Footer -->
     <footer class="unpublish-screen__footer">
-      <div v-if="error" class="unpublish-screen__error">
-        {{ error }}
-      </div>
       <button
         type="button"
         class="unpublish-screen__confirm-button"
-        :disabled="isLoading"
         @click="handleConfirm"
       >
-        {{ isLoading ? 'Снятие с публикации...' : 'Снять с публикации' }}
+        Снять с публикации
       </button>
       <button
         type="button"
         class="unpublish-screen__cancel-button"
-        :disabled="isLoading"
         @click="handleCancel"
       >
         Отмена
