@@ -1,5 +1,7 @@
 // API service for parking spots
 
+import { getTestZaharikToken, PREVIEW_AS_ZAHARIK_KEY } from './authApi'
+
 const PROD_API_BASE_URL = 'https://test-app-iuwehfvnlw23275vb.koalanearby.com/parkshare'
 // In dev, use Vite proxy to avoid backend CORS (see vite.config.ts)
 const API_BASE_URL = import.meta.env.DEV ? '/parkshare' : PROD_API_BASE_URL
@@ -77,6 +79,37 @@ export interface MySpot {
   archived?: boolean
   isArchived?: boolean
   isHidden?: boolean
+}
+
+export type RentType = 'HOURLY' | 'DAILY' | 'MONTHLY'
+
+export interface SpotSearchItemResponse {
+  id: string
+  address: string
+  latitude: number
+  longitude: number
+  price: number
+  rentType: RentType
+}
+
+export interface SearchSpotsParams {
+  /** Поиск по центру и радиусу (м) */
+  centerLat?: number
+  centerLng?: number
+  radiusMeters?: number
+  /** Поиск по bbox */
+  minLat?: number
+  maxLat?: number
+  minLng?: number
+  maxLng?: number
+  /** Только доступные сейчас */
+  availableNow?: boolean
+  rentType?: RentType
+  date?: string
+  timeFrom?: string
+  timeTo?: string
+  dateFrom?: string
+  dateTo?: string
 }
 
 export const spotsApi = {
@@ -244,6 +277,75 @@ export const spotsApi = {
       return result
     } catch (error) {
       console.error('[SpotsAPI] Get spot by ID error:', error)
+      throw error
+    }
+  },
+
+  /**
+   * Поиск мест по карте (координаты + радиус или bbox).
+   * GET /api/v1/spots/search с query-параметрами.
+   */
+  async searchSpots(params: SearchSpotsParams): Promise<SpotSearchItemResponse[]> {
+    const API_URL = `${API_BASE_URL}/api/v1/spots/search`
+    const token =
+      localStorage.getItem('auth_token') ??
+      (localStorage.getItem(PREVIEW_AS_ZAHARIK_KEY) ? getTestZaharikToken() : null)
+    if (!token) {
+      throw new Error('Authentication token not found. Please login first.')
+    }
+    const q = new URLSearchParams()
+    if (params.centerLat != null) q.set('centerLat', String(params.centerLat))
+    if (params.centerLng != null) q.set('centerLng', String(params.centerLng))
+    if (params.radiusMeters != null) q.set('radiusMeters', String(params.radiusMeters))
+    if (params.minLat != null) q.set('minLat', String(params.minLat))
+    if (params.maxLat != null) q.set('maxLat', String(params.maxLat))
+    if (params.minLng != null) q.set('minLng', String(params.minLng))
+    if (params.maxLng != null) q.set('maxLng', String(params.maxLng))
+    if (params.availableNow === true) q.set('availableNow', 'true')
+    if (params.rentType) q.set('rentType', params.rentType)
+    if (params.date) q.set('date', params.date)
+    if (params.timeFrom) q.set('timeFrom', params.timeFrom)
+    if (params.timeTo) q.set('timeTo', params.timeTo)
+    if (params.dateFrom) q.set('dateFrom', params.dateFrom)
+    if (params.dateTo) q.set('dateTo', params.dateTo)
+    const url = `${API_URL}?${q.toString()}`
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        mode: 'cors',
+        credentials: 'omit',
+      })
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem('auth_token')
+          throw new Error('Authentication failed. Please login again.')
+        }
+        const text = await response.text()
+        let msg = text
+        try {
+          const j = JSON.parse(text)
+          msg = j.message || j.error || text
+        } catch {
+          // use text
+        }
+        throw new Error(msg || `HTTP ${response.status}`)
+      }
+      const data = await response.json()
+      const list = Array.isArray(data) ? data : (data.content ?? data.spots ?? data.data ?? [])
+      return list.map((item: Record<string, unknown>) => ({
+        id: String(item.id),
+        address: String(item.address ?? ''),
+        latitude: Number(item.latitude ?? item.lat),
+        longitude: Number(item.longitude ?? item.lng),
+        price: Number(item.price ?? item.pricePerHour ?? 0),
+        rentType: (item.rentType as RentType) || 'HOURLY',
+      }))
+    } catch (error) {
+      console.error('[SpotsAPI] searchSpots error:', error)
       throw error
     }
   },
