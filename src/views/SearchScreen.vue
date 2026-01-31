@@ -78,6 +78,8 @@ let loadSpotsTimeout: number | null = null
 // Spots from API
 const apiSpots = ref<Location[]>([])
 const isLoadingSpots = ref(false)
+// Загрузка карты и первоначальных мест (Яндекс.Карты API + первый запрос мест)
+const isMapLoading = ref(true)
 
 // Convert API spot to Location
 const spotToLocation = (spot: SpotSearchItemResponse): Location => {
@@ -418,6 +420,7 @@ onMounted(async () => {
 
   setTimeout(async () => {
     try {
+      isMapLoading.value = true
       // Load Yandex Maps API
       await loadYandexMaps()
 
@@ -455,6 +458,8 @@ onMounted(async () => {
       }
     } catch (error) {
       console.error('Failed to load Yandex Maps:', error)
+    } finally {
+      isMapLoading.value = false
     }
   }, 0)
 })
@@ -596,10 +601,12 @@ const handleFilterTouchEnd = () => {
     <div class="search-screen__map-area">
       <div ref="mapContainer" class="search-screen__map-container"></div>
 
-      <!-- Loading -->
-      <div v-if="isLoadingSpots" class="search-screen__loading">
-        <div class="search-screen__spinner"></div>
-        <span>Загрузка...</span>
+      <!-- Loader: пока загружаются карта и места -->
+      <div v-if="isMapLoading || isLoadingSpots" class="search-screen__loading-overlay">
+        <div class="search-screen__loading">
+          <div class="search-screen__spinner"></div>
+          <span>{{ isMapLoading ? 'Загрузка карты...' : 'Загрузка мест...' }}</span>
+        </div>
       </div>
     </div>
 
@@ -1002,28 +1009,45 @@ const handleFilterTouchEnd = () => {
   max-height: none !important;
 }
 
-.search-screen__loading {
+.search-screen__loading-overlay {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: white;
-  padding: 16px 24px;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  inset: 0;
+  z-index: 1002;
   display: flex;
   align-items: center;
-  gap: 12px;
-  z-index: 1002;
+  justify-content: center;
+  background: rgba(248, 250, 252, 0.95);
+}
+
+.search-screen__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 32px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+}
+
+.search-screen__loading span {
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
 }
 
 .search-screen__spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid #e5e7eb;
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e5e7eb;
   border-top-color: #2563EB;
   border-radius: 50%;
-  animation: spin 0.6s linear infinite;
+  animation: search-screen-spin 0.8s linear infinite;
+}
+
+@keyframes search-screen-spin {
+  to { transform: rotate(360deg); }
 }
 
 @keyframes spin {
@@ -1031,7 +1055,7 @@ const handleFilterTouchEnd = () => {
 }
 
 .search-screen__filter-button-container {
-  position: absolute;
+  position: fixed;
   bottom: 0;
   left: 0;
   right: 0;

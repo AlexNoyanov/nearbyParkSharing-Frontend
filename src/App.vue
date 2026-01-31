@@ -253,6 +253,7 @@ const isNavVisible = computed(() =>
   stage.value !== 'geo-confirmation' &&
   stage.value !== 'map-selection' &&
   stage.value !== 'rent-map' &&
+  stage.value !== 'search' &&
   stage.value !== 'owner-cancelled-booking' &&
   stage.value !== 'rent-success' &&
   stage.value !== 'car-selection' &&
@@ -2571,7 +2572,8 @@ onMounted(async () => {
   box-sizing: border-box;
 }
 
-.app__content:has(.chat) {
+.app__content:has(.chat),
+.app__content:has(.search-screen) {
   padding-bottom: 0;
 }
 
