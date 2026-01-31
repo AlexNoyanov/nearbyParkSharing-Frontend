@@ -1,5 +1,8 @@
 /// <reference types="vite/client" />
 
+declare module 'sockjs-client'
+declare module '@stomp/stompjs'
+
 interface ImportMetaEnv {
   readonly VITE_FIREBASE_API_KEY: string
   readonly VITE_FIREBASE_AUTH_DOMAIN: string

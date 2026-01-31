@@ -225,8 +225,9 @@ const searchAddress = async () => {
   if (!searchQuery.value.trim() || !map) return
 
   // If there are suggestions, select the first one
-  if (searchSuggestions.value.length > 0) {
-    selectSuggestion(searchSuggestions.value[0])
+  const firstSuggestion = searchSuggestions.value[0]
+  if (firstSuggestion) {
+    selectSuggestion(firstSuggestion)
     return
   }
 
@@ -249,8 +250,9 @@ const searchAddress = async () => {
     
     // Fallback to Nominatim if Yandex fails
     const results = await nominatimSearch(searchQuery.value, 1)
-    if (results.length > 0) {
-      map.setCenter(results[0].coords, 15, {
+    const firstResult = results[0]
+    if (firstResult) {
+      map.setCenter(firstResult.coords, 15, {
         duration: 500,
       })
       setTimeout(() => {
@@ -441,7 +443,7 @@ onMounted(async () => {
         // Markers will be added automatically by watch(filteredLocations)
 
         // Listen for map movement end (when user stops dragging/zooming)
-        map.events.add('actionend', (e: any) => {
+        map.events.add('actionend', () => {
           const newZoom = map.getZoom()
           if (newZoom !== currentZoom.value) {
             currentZoom.value = newZoom
@@ -519,13 +521,15 @@ const resetFilters = () => {
 // Touch handling
 const handleFilterTouchStart = (e: TouchEvent) => {
   isDragging.value = true
-  dragStartY.value = e.touches[0].clientY
+  const t = e.touches[0]
+  dragStartY.value = t?.clientY ?? 0
   dragStartHeight.value = filterSheetHeight.value
 }
 
 const handleFilterTouchMove = (e: TouchEvent) => {
   if (!isDragging.value) return
-  const deltaY = dragStartY.value - e.touches[0].clientY
+  const t = e.touches[0]
+  const deltaY = t ? dragStartY.value - t.clientY : 0
   const newHeight = Math.max(0, Math.min(window.innerHeight * 0.8, dragStartHeight.value + deltaY))
   filterSheetHeight.value = newHeight
 }
@@ -542,23 +546,6 @@ const handleFilterTouchEnd = () => {
   }
 }
 
-// Map location to ParkingSpot
-const mapLocationToParkingSpot = (location: Location): ParkingSpot => {
-  return {
-    id: location.id,
-    name: location.address.split(',')[0] || 'Парковка',
-    address: location.address,
-    distance: 'рядом',
-    pricePerHour: location.price,
-    rating: 4.7,
-    reviews: 0,
-    availableSpots: 1,
-    description: 'Описание будет доступно на экране деталей.',
-    features: [
-      { id: 'search', label: 'Доступно сейчас', icon: '🟢' },
-    ],
-  }
-}
 </script>
 
 <template>

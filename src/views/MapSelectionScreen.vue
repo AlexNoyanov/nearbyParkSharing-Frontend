@@ -217,8 +217,9 @@ const searchAddress = async () => {
   if (!searchQuery.value.trim() || !map) return
 
   // If there are suggestions, use the first one
-  if (searchSuggestions.value.length > 0) {
-    selectSuggestion(searchSuggestions.value[0])
+  const firstSuggestion = searchSuggestions.value[0]
+  if (firstSuggestion) {
+    selectSuggestion(firstSuggestion)
     return
   }
 
@@ -250,9 +251,10 @@ const searchAddress = async () => {
 
     // Fallback to Nominatim if Yandex fails
     const results = await nominatimSearch(searchQuery.value, 1)
-    if (results.length > 0) {
+    const firstResult = results[0]
+    if (firstResult) {
       // Move map to found location
-      map.setCenter(results[0].coords, 15)
+      map.setCenter(firstResult.coords, 15)
 
       // Remove existing marker
       if (marker) {
@@ -260,13 +262,13 @@ const searchAddress = async () => {
       }
 
       // Add marker at found location
-      marker = new window.ymaps.Placemark(results[0].coords)
+      marker = new window.ymaps.Placemark(firstResult.coords)
       map.geoObjects.add(marker)
 
-      selectedAddress.value = results[0].address
-      selectedLatitude.value = results[0].coords[0]
-      selectedLongitude.value = results[0].coords[1]
-      searchQuery.value = results[0].address
+      selectedAddress.value = firstResult.address
+      selectedLatitude.value = firstResult.coords[0]
+      selectedLongitude.value = firstResult.coords[1]
+      searchQuery.value = firstResult.address
     }
   } catch (error) {
     console.error('[MapSelection] Search failed:', error)

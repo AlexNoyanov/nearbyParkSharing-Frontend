@@ -666,8 +666,8 @@ const loadProfileData = async () => {
         const russianPlatePattern = /^([А-ЯA-Z][0-9]{3}[А-ЯA-Z]{2})([0-9]{1,3})$/
         const match = car.licensePlate.match(russianPlatePattern)
         if (match) {
-          number = match[1] // А000АА
-          region = match[2] // 777
+          number = match[1] ?? number // А000АА
+          region = match[2] ?? '' // 777
         }
         
         return {
@@ -675,7 +675,7 @@ const loadProfileData = async () => {
           brand: car.brand,
           model: car.model || '',
           number: number,
-          region: region,
+          region: region ?? '',
           color: car.color,
           isForeign: !match, // Если не соответствует российскому формату, считаем иностранным
         }
@@ -684,10 +684,10 @@ const loadProfileData = async () => {
       // Set primary car (first one or previously selected)
       if (userCar.value && userCars.value.find(c => c.id === userCar.value?.id)) {
         // Keep current selection if it still exists
-        userCar.value = userCars.value.find(c => c.id === userCar.value?.id) || null
+        userCar.value = userCars.value.find(c => c.id === userCar.value?.id) ?? null
       } else if (userCars.value.length > 0) {
         // Use first car as primary
-        userCar.value = userCars.value[0]
+        userCar.value = userCars.value[0] ?? null
       }
       
       console.log('[App] ✓ Cars loaded and set:', userCars.value.length, 'cars, primary:', userCar.value?.brand)
@@ -1764,8 +1764,8 @@ const handleSelectDates = async (location: { id: string; address: string; lat: n
               const russianPlatePattern = /^([А-ЯA-Z][0-9]{3}[А-ЯA-Z]{2})([0-9]{1,3})$/
               const match = licensePlate.match(russianPlatePattern)
               if (match) {
-                number = match[1]
-                region = match[2]
+                number = match[1] ?? number
+                region = match[2] ?? ''
               }
             }
             
@@ -1774,13 +1774,13 @@ const handleSelectDates = async (location: { id: string; address: string; lat: n
               brand: car.brand || '',
               model: car.model || '',
               number: number,
-              region: region,
+              region: region ?? '',
               color: car.color,
               isForeign: !(licensePlate && licensePlate.match(/^([А-ЯA-Z][0-9]{3}[А-ЯA-Z]{2})([0-9]{1,3})$/)),
             }
           })
           if (userCars.value && userCars.value.length > 0) {
-            userCar.value = userCars.value[0]
+            userCar.value = userCars.value[0] ?? null
           }
         } else {
           // Если машин нет, убеждаемся что userCars - это массив
@@ -1892,8 +1892,8 @@ const handleSaveCar = async (car: { brand: string; model: string; number: string
     const russianPlatePattern = /^([А-ЯA-Z][0-9]{3}[А-ЯA-Z]{2})([0-9]{1,3})$/
     const match = createdCar.licensePlate.match(russianPlatePattern)
     if (match) {
-      number = match[1]
-      region = match[2]
+      number = match[1] ?? number
+      region = match[2] ?? ''
     }
     
     const carWithId = {
@@ -1901,7 +1901,7 @@ const handleSaveCar = async (car: { brand: string; model: string; number: string
       brand: createdCar.brand,
       model: createdCar.model || '',
       number: number,
-      region: region,
+      region: region ?? '',
       color: createdCar.color,
       isForeign: !match,
     }
@@ -1988,8 +1988,8 @@ watch(stage, async (newStage) => {
             const russianPlatePattern = /^([А-ЯA-Z][0-9]{3}[А-ЯA-Z]{2})([0-9]{1,3})$/
             const match = car.licensePlate.match(russianPlatePattern)
             if (match) {
-              number = match[1] // А000АА
-              region = match[2] // 777
+              number = match[1] ?? number // А000АА
+              region = match[2] ?? '' // 777
             }
             
             return {
@@ -1997,7 +1997,7 @@ watch(stage, async (newStage) => {
               brand: car.brand,
               model: car.model || '',
               number: number,
-              region: region,
+              region: region ?? '',
               color: car.color,
               isForeign: !match, // Если не соответствует российскому формату, считаем иностранным
             }
@@ -2006,10 +2006,10 @@ watch(stage, async (newStage) => {
           // Set primary car (first one or previously selected)
           if (userCar.value && userCars.value.find(c => c.id === userCar.value?.id)) {
             // Keep current selection if it still exists
-            userCar.value = userCars.value.find(c => c.id === userCar.value?.id) || null
+            userCar.value = userCars.value.find(c => c.id === userCar.value?.id) ?? null
           } else if (userCars.value.length > 0) {
             // Use first car as primary
-            userCar.value = userCars.value[0]
+            userCar.value = userCars.value[0] ?? null
           }
           
           console.log('[App] ✓ Cars loaded for booking:', userCars.value.length, 'cars')
@@ -2298,11 +2298,11 @@ onMounted(async () => {
           :location="selectedLocation"
           @back="() => { 
             // Если пришли с экрана поиска, возвращаемся туда, иначе на rent-map
-            if (previousStage.value === 'search') {
-              stage.value = 'search'
-              previousStage.value = null
+            if (previousStage === 'search') {
+              stage = 'search'
+              previousStage = null
             } else {
-              stage.value = 'rent-map'
+              stage = 'rent-map'
             }
           }"
           @select-dates="handleSelectDates"

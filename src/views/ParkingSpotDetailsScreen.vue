@@ -92,7 +92,9 @@ onBeforeUnmount(() => {
 })
 
 const copyAddress = () => {
-  navigator.clipboard.writeText(props.location.address)
+  if (props.location) {
+    navigator.clipboard.writeText(props.location.address)
+  }
 }
 
 const handleGalleryScroll = () => {

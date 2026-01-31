@@ -1,5 +1,5 @@
 // Polyfill for Node.js 'global' variable (required by sockjs-client)
-if (typeof global === 'undefined') {
+if (typeof window !== 'undefined' && !(window as any).global) {
   (window as any).global = window;
 }
 

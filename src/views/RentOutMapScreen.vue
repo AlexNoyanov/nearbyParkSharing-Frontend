@@ -282,8 +282,9 @@ const selectSuggestion = (suggestion: { address: string; coords: [number, number
 const searchAddress = async () => {
   if (!searchQuery.value.trim() || !map) return
 
-  if (searchSuggestions.value.length > 0) {
-    selectSuggestion(searchSuggestions.value[0])
+  const firstSuggestion = searchSuggestions.value[0]
+  if (firstSuggestion) {
+    selectSuggestion(firstSuggestion)
     return
   }
 
@@ -306,8 +307,9 @@ const searchAddress = async () => {
     
     // Fallback to Nominatim if Yandex fails
     const results = await nominatimSearch(searchQuery.value, 1)
-    if (results.length > 0) {
-      map.setCenter(results[0].coords, 15, {
+    const firstResult = results[0]
+    if (firstResult) {
+      map.setCenter(firstResult.coords, 15, {
         duration: 500,
       })
       setTimeout(() => {
@@ -401,7 +403,7 @@ onMounted(() => {
         }
 
         // Listen for map movement end (when user stops dragging/zooming)
-        map.events.add('actionend', (e: any) => {
+        map.events.add('actionend', () => {
           const newZoom = map.getZoom()
           if (newZoom !== currentZoom.value) {
             currentZoom.value = newZoom

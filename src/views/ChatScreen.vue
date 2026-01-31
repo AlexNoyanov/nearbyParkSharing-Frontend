@@ -120,7 +120,8 @@ const handleBack = () => {
 
 // Convert API message to UI message
 const convertApiMessageToUI = (apiMessage: ChatMessage | WebSocketMessage, currentUserId?: string): Message => {
-  const isFromCurrentUser = apiMessage.senderUserId === currentUserId || apiMessage.senderId === currentUserId
+  const senderId = 'senderId' in apiMessage ? apiMessage.senderId : (apiMessage as ChatMessage).senderUserId
+  const isFromCurrentUser = senderId === currentUserId
   const time = new Date(apiMessage.createdAt).toLocaleTimeString('ru-RU', {
     hour: '2-digit',
     minute: '2-digit',

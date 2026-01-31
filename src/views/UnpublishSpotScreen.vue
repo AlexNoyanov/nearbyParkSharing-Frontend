@@ -43,13 +43,6 @@ const formatCurrentTime = (): string => {
   return `Сейчас - ${hours}:${minutes}`
 }
 
-// Get renter full name
-const getRenterName = (renter?: { firstName?: string; lastName?: string }): string => {
-  if (!renter) return 'Неизвестно'
-  const parts = [renter.firstName, renter.lastName].filter(Boolean)
-  return parts.length > 0 ? parts.join(' ') : 'Неизвестно'
-}
-
 // Get car info string
 const getCarInfo = (car?: { brand?: string; model?: string; licensePlate?: string }): string => {
   if (!car) return ''

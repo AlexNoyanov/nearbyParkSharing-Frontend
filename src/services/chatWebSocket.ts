@@ -1,7 +1,7 @@
 // WebSocket service for real-time chat messaging using STOMP over SockJS
 
 import SockJS from 'sockjs-client'
-import { Client, type Message, type StompSubscription } from '@stomp/stompjs'
+import { Client } from '@stomp/stompjs'
 
 // ============================================================================
 // Types
@@ -28,8 +28,8 @@ export type ErrorHandler = (error: Error) => void
 // ============================================================================
 
 class ChatWebSocketService {
-  private client: Client | null = null
-  private subscriptions: Map<string, StompSubscription> = new Map()
+  private client: InstanceType<typeof Client> | null = null
+  private subscriptions: Map<string, ReturnType<InstanceType<typeof Client>['subscribe']>> = new Map()
   private status: WebSocketStatus = 'disconnected'
   private statusHandlers: Set<StatusChangeHandler> = new Set()
   private errorHandlers: Set<ErrorHandler> = new Set()
@@ -97,7 +97,7 @@ class ChatWebSocketService {
           connectHeaders: {
             Authorization: `Bearer ${token}`,
           },
-          debug: (str) => {
+          debug: (str: string) => {
             if (import.meta.env.DEV) {
               console.log('[ChatWebSocket] STOMP:', str)
             }
@@ -105,21 +105,21 @@ class ChatWebSocketService {
           reconnectDelay: this.reconnectDelay,
           heartbeatIncoming: 4000,
           heartbeatOutgoing: 4000,
-          onConnect: (frame) => {
+          onConnect: (frame: { headers?: Record<string, string> }) => {
             console.log('[ChatWebSocket] ✓ Connected successfully')
             console.log('[ChatWebSocket] Frame:', frame)
             this.setStatus('connected')
             this.reconnectAttempts = 0
             resolve()
           },
-          onStompError: (frame) => {
+          onStompError: (frame: { headers?: Record<string, string> }) => {
             console.error('[ChatWebSocket] ✗ STOMP error:', frame)
             this.setStatus('error')
-            const error = new Error(frame.headers['message'] || 'STOMP connection error')
+            const error = new Error(frame.headers?.['message'] || 'STOMP connection error')
             this.notifyError(error)
             reject(error)
           },
-          onWebSocketError: (event) => {
+          onWebSocketError: (event: Event) => {
             console.error('[ChatWebSocket] ✗ WebSocket error:', event)
             this.setStatus('error')
             const error = new Error('WebSocket connection error')
@@ -203,7 +203,7 @@ class ChatWebSocketService {
     console.log(`[ChatWebSocket] Destination: ${destination}`)
 
     try {
-      const subscription = this.client.subscribe(destination, (message: Message) => {
+      const subscription = this.client.subscribe(destination, (message: { body: string }) => {
         try {
           const data: WebSocketMessage = JSON.parse(message.body)
           console.log(`[ChatWebSocket] ✓ Message received for chat ${chatId}:`, data)
