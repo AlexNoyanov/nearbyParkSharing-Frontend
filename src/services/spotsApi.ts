@@ -516,6 +516,47 @@ export const spotsApi = {
   },
 
   /**
+   * Предпросмотр снятия с публикации: активные и предстоящие бронирования.
+   * GET /api/v1/spots/{id}/archive/preview
+   */
+  async getArchivePreview(id: string): Promise<{ activeCount: number; upcomingCount: number }> {
+    const API_URL = `${API_BASE_URL}/api/v1/spots/${id}/archive/preview`
+    const token = localStorage.getItem('auth_token')
+    if (!token) {
+      throw new Error('Authentication token not found. Please login first.')
+    }
+    const response = await fetch(API_URL, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      mode: 'cors',
+      credentials: 'omit',
+    })
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('auth_token')
+        throw new Error('Authentication failed. Please login again.')
+      }
+      const text = await response.text()
+      let msg = text
+      try {
+        const j = JSON.parse(text)
+        msg = j.message || j.error || text
+      } catch {
+        // use text
+      }
+      throw new Error(msg || `HTTP ${response.status}`)
+    }
+    const data = await response.json()
+    return {
+      activeCount: Number(data.activeCount ?? 0),
+      upcomingCount: Number(data.upcomingCount ?? 0),
+    }
+  },
+
+  /**
    * Снять место с публикации (архивировать).
    * POST /api/v1/spots/{id}/archive
    * Переводит место в архив (active=false). Доступно только владельцу.
