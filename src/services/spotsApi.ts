@@ -4,27 +4,15 @@ const PROD_API_BASE_URL = 'https://test-app-iuwehfvnlw23275vb.koalanearby.com/pa
 // In dev, use Vite proxy to avoid backend CORS (see vite.config.ts)
 const API_BASE_URL = import.meta.env.DEV ? '/parkshare' : PROD_API_BASE_URL
 
-// ============================================================================
-// Types
-// ============================================================================
-
-// Frontend uses SCHEDULED, Backend uses CUSTOM
-export type FrontendScheduleType = 'ALWAYS' | 'SCHEDULED'
-export type BackendScheduleType = 'ALWAYS' | 'CUSTOM'
-
-export type VehicleType = 'CAR' | 'SUV' | 'VAN' | 'TRUCK' | 'MOTORCYCLE'
-
-export type RentType = 'HOURLY' | 'DAILY' | 'MONTHLY'
-
 export interface CreateSpotRequest {
   address: string
   latitude: number
   longitude: number
-  vehicleType: VehicleType
+  vehicleType: 'CAR' | 'VAN' | 'TRUCK'
   pricePerHour?: number
   pricePerDay?: number
   pricePerMonth?: number
-  scheduleType: FrontendScheduleType
+  scheduleType: 'ALWAYS' | 'SCHEDULED'
   availableFrom?: string // HH:mm format
   availableTo?: string // HH:mm format
   availableDays?: number[] // 1-7 (Monday-Sunday)
@@ -50,31 +38,7 @@ export interface CreateSpotResponse {
   address: string
   latitude: number
   longitude: number
-  vehicleType: VehicleType
-  pricePerHour?: number
-  pricePerDay?: number
-  pricePerMonth?: number
-  scheduleType: FrontendScheduleType
-  availableFrom?: string
-  availableTo?: string
-  availableDays?: number[]
-  covered?: boolean
-  hasSecurity?: boolean
-  hasEvCharging?: boolean
-  openSpace?: boolean
-  inYard?: boolean
-  privateTerritory?: boolean
-  hasCctv?: boolean
-  description?: string
-  accessGuide?: string
-  photos?: string[]
-  hourlyEnabled: boolean
-  dailyEnabled: boolean
-  monthlyEnabled: boolean
-  availableDateFrom?: string
-  availableDateTo?: string
-  createdAt?: string
-  updatedAt?: string
+  // ... other fields from API response
 }
 
 export interface MySpot {
@@ -82,11 +46,11 @@ export interface MySpot {
   address: string
   latitude: number
   longitude: number
-  vehicleType: VehicleType
+  vehicleType: 'CAR' | 'VAN' | 'TRUCK'
   pricePerHour?: number
   pricePerDay?: number
   pricePerMonth?: number
-  scheduleType: FrontendScheduleType
+  scheduleType: 'ALWAYS' | 'SCHEDULED'
   availableFrom?: string
   availableTo?: string
   availableDays?: number[]
@@ -108,166 +72,11 @@ export interface MySpot {
   createdAt?: string
   updatedAt?: string
   // Optional backend flags / status fields (for archive/hide logic)
+  active?: boolean // Swagger: «Активно ли объявление (снято ли с публикации)»
   status?: string
   archived?: boolean
   isArchived?: boolean
   isHidden?: boolean
-  active?: boolean // Backend sets active=false when archived
-}
-
-export interface ArchivePreviewResponse {
-  spotId: string
-  activeCount: number
-  upcomingCount: number
-  active: SpotBookingItem[]
-  upcoming: SpotBookingItem[]
-}
-
-export interface PersonShort {
-  id: string
-  firstName?: string
-  lastName?: string
-  username?: string
-}
-
-export interface CarShort {
-  id: string
-  licensePlate?: string
-  brand?: string
-  model?: string
-}
-
-export interface SpotBookingItem {
-  bookingId: string
-  status: string
-  rentType?: string
-  startAt: string
-  endAt: string
-  renter?: PersonShort
-  car?: CarShort
-}
-
-// ============================================================================
-// Schedule Type Mapping (Frontend ↔ Backend)
-// ============================================================================
-
-function toBackendScheduleType(frontendType: FrontendScheduleType): BackendScheduleType {
-  return frontendType === 'SCHEDULED' ? 'CUSTOM' : frontendType
-}
-
-function toFrontendScheduleType(backendType: BackendScheduleType | string): FrontendScheduleType {
-  return backendType === 'CUSTOM' ? 'SCHEDULED' : (backendType as FrontendScheduleType)
-}
-
-function mapSpotToBackend(data: CreateSpotRequest): Record<string, unknown> {
-  return {
-    ...data,
-    scheduleType: toBackendScheduleType(data.scheduleType),
-  }
-}
-
-function mapSpotFromBackend<T extends { scheduleType?: string }>(data: T): T & { scheduleType: FrontendScheduleType } {
-  return {
-    ...data,
-    scheduleType: toFrontendScheduleType(data.scheduleType || 'ALWAYS'),
-  }
-}
-
-// ============================================================================
-// Helper: Handle API errors
-// ============================================================================
-
-async function handleApiError(response: Response, context: string): Promise<never> {
-  let errorMessage = `HTTP error! status: ${response.status}`
-  let errorBody = null
-
-  try {
-    const contentType = response.headers.get('content-type')
-    if (contentType && contentType.includes('application/json')) {
-      errorBody = await response.json()
-      console.log(`[SpotsAPI] ${context} error body:`, errorBody)
-      errorMessage = errorBody.message || errorBody.error || errorMessage
-    } else {
-      const errorText = await response.text()
-      console.log(`[SpotsAPI] ${context} error text:`, errorText)
-      if (errorText) {
-        try {
-          errorBody = JSON.parse(errorText)
-          errorMessage = errorBody.message || errorBody.error || errorMessage
-        } catch {
-          errorMessage = errorText || errorMessage
-        }
-      }
-    }
-  } catch (e) {
-    console.warn(`[SpotsAPI] Could not read error response:`, e)
-  }
-
-  if (response.status === 401) {
-    localStorage.removeItem('auth_token')
-    throw new Error('Authentication failed. Please login again.')
-  }
-
-  const error = new Error(errorMessage)
-  ;(error as any).status = response.status
-  ;(error as any).body = errorBody
-  console.error(`[SpotsAPI] ✗ ${context} failed:`, errorMessage)
-  throw error
-}
-
-function getAuthToken(): string {
-  const token = localStorage.getItem('auth_token')
-  if (!token) {
-    throw new Error('Authentication token not found. Please login first.')
-  }
-  return token
-}
-
-// ============================================================================
-// API Methods
-// ============================================================================
-
-export interface SpotSearchParams {
-  /**
-   * If true -> "available right now" mode (server may force HOURLY and interval now..now+2h).
-   */
-  availableNow?: boolean
-
-  /**
-   * Required only if availableNow is not set or false.
-   * If availableNow=true, rentType is optional (backend will handle it).
-   */
-  rentType?: RentType
-
-  // HOURLY only
-  date?: string // YYYY-MM-DD
-  timeFrom?: string // HH:mm
-  timeTo?: string // HH:mm
-
-  // DAILY/MONTHLY only
-  dateFrom?: string // YYYY-MM-DD
-  dateTo?: string // YYYY-MM-DD
-
-  // bbox
-  minLat?: number
-  minLng?: number
-  maxLat?: number
-  maxLng?: number
-
-  // radius
-  centerLat?: number
-  centerLng?: number
-  radiusMeters?: number
-}
-
-export interface SpotSearchItemResponse {
-  id: string
-  address: string
-  latitude: number
-  longitude: number
-  rentType: RentType
-  price: number
-  photos?: string[]
 }
 
 export const spotsApi = {
@@ -277,12 +86,16 @@ export const spotsApi = {
    */
   async getMySpots(): Promise<MySpot[]> {
     const API_URL = `${API_BASE_URL}/api/v1/spots/my`
-
+    
     console.log('[SpotsAPI] ===== GET MY SPOTS =====')
     console.log('[SpotsAPI] API Endpoint:', API_URL)
-
-    const token = getAuthToken()
-
+    
+    // Get authentication token
+    const token = localStorage.getItem('auth_token')
+    if (!token) {
+      throw new Error('Authentication token not found. Please login first.')
+    }
+    
     try {
       const response = await fetch(API_URL, {
         method: 'GET',
@@ -294,22 +107,60 @@ export const spotsApi = {
         mode: 'cors',
         credentials: 'omit',
       })
-
+      
       console.log('[SpotsAPI] Response status:', response.status)
-
+      console.log('[SpotsAPI] Response ok:', response.ok)
+      
       if (!response.ok) {
-        await handleApiError(response, 'Get my spots')
+        // Try to read error message from response
+        let errorMessage = `HTTP error! status: ${response.status}`
+        let errorBody = null
+        
+        try {
+          const contentType = response.headers.get('content-type')
+          if (contentType && contentType.includes('application/json')) {
+            errorBody = await response.json()
+            console.log('[SpotsAPI] Error response body:', errorBody)
+            errorMessage = errorBody.message || errorBody.error || errorMessage
+          } else {
+            const errorText = await response.text()
+            console.log('[SpotsAPI] Error response text:', errorText)
+            if (errorText) {
+              try {
+                errorBody = JSON.parse(errorText)
+                errorMessage = errorBody.message || errorBody.error || errorMessage
+              } catch {
+                errorMessage = errorText || errorMessage
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[SpotsAPI] Could not read error response:', e)
+        }
+        
+        if (response.status === 401) {
+          localStorage.removeItem('auth_token')
+          throw new Error('Authentication failed. Please login again.')
+        }
+        
+        const error = new Error(errorMessage)
+        ;(error as any).status = response.status
+        ;(error as any).body = errorBody
+        console.error('[SpotsAPI] ✗ Get my spots failed:', errorMessage)
+        throw error
       }
-
+      
       const result = await response.json()
       console.log('[SpotsAPI] ✓ My spots retrieved successfully')
       console.log('[SpotsAPI] Spots count:', Array.isArray(result) ? result.length : 'not an array')
-
-      // API might return array directly or wrapped in an object
-      const spots = Array.isArray(result) ? result : (result.spots || result.data || [])
-
-      // Map scheduleType from backend to frontend
-      return spots.map((spot: any) => mapSpotFromBackend(spot))
+      console.log('[SpotsAPI] Response:', result)
+      
+      // API might return array directly or wrapped in an object (spots / data / content)
+      const raw = Array.isArray(result)
+        ? result
+        : (result.spots ?? result.data ?? result.content ?? [])
+      // Сохраняем все поля с бэка, включая active, без перезаписи
+      return raw.map((s: Record<string, unknown>) => ({ ...s, active: s.active })) as MySpot[]
     } catch (error) {
       console.error('[SpotsAPI] Get my spots error:', error)
       throw error
@@ -322,13 +173,17 @@ export const spotsApi = {
    */
   async getSpotById(id: string): Promise<MySpot> {
     const API_URL = `${API_BASE_URL}/api/v1/spots/${id}`
-
+    
     console.log('[SpotsAPI] ===== GET SPOT BY ID =====')
     console.log('[SpotsAPI] Spot ID:', id)
     console.log('[SpotsAPI] API Endpoint:', API_URL)
-
-    const token = getAuthToken()
-
+    
+    // Get authentication token
+    const token = localStorage.getItem('auth_token')
+    if (!token) {
+      throw new Error('Authentication token not found. Please login first.')
+    }
+    
     try {
       const response = await fetch(API_URL, {
         method: 'GET',
@@ -340,18 +195,53 @@ export const spotsApi = {
         mode: 'cors',
         credentials: 'omit',
       })
-
+      
       console.log('[SpotsAPI] Response status:', response.status)
-
+      console.log('[SpotsAPI] Response ok:', response.ok)
+      
       if (!response.ok) {
-        await handleApiError(response, 'Get spot by ID')
+        // Try to read error message from response
+        let errorMessage = `HTTP error! status: ${response.status}`
+        let errorBody = null
+        
+        try {
+          const contentType = response.headers.get('content-type')
+          if (contentType && contentType.includes('application/json')) {
+            errorBody = await response.json()
+            console.log('[SpotsAPI] Error response body:', errorBody)
+            errorMessage = errorBody.message || errorBody.error || errorMessage
+          } else {
+            const errorText = await response.text()
+            console.log('[SpotsAPI] Error response text:', errorText)
+            if (errorText) {
+              try {
+                errorBody = JSON.parse(errorText)
+                errorMessage = errorBody.message || errorBody.error || errorMessage
+              } catch {
+                errorMessage = errorText || errorMessage
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[SpotsAPI] Could not read error response:', e)
+        }
+        
+        if (response.status === 401) {
+          localStorage.removeItem('auth_token')
+          throw new Error('Authentication failed. Please login again.')
+        }
+        
+        const error = new Error(errorMessage)
+        ;(error as any).status = response.status
+        ;(error as any).body = errorBody
+        console.error('[SpotsAPI] ✗ Get spot by ID failed:', errorMessage)
+        throw error
       }
-
+      
       const result = await response.json()
       console.log('[SpotsAPI] ✓ Spot retrieved successfully')
-
-      // Map scheduleType from backend to frontend
-      return mapSpotFromBackend(result)
+      console.log('[SpotsAPI] Response:', result)
+      return result
     } catch (error) {
       console.error('[SpotsAPI] Get spot by ID error:', error)
       throw error
@@ -364,16 +254,17 @@ export const spotsApi = {
    */
   async createSpot(data: CreateSpotRequest): Promise<CreateSpotResponse> {
     const API_URL = `${API_BASE_URL}/api/v1/spots`
-
+    
     console.log('[SpotsAPI] ===== CREATE SPOT =====')
     console.log('[SpotsAPI] API Endpoint:', API_URL)
-
-    const token = getAuthToken()
-
-    // Map scheduleType to backend format
-    const backendData = mapSpotToBackend(data)
-    console.log('[SpotsAPI] Request data (mapped):', JSON.stringify(backendData, null, 2))
-
+    console.log('[SpotsAPI] Request data:', JSON.stringify(data, null, 2))
+    
+    // Get authentication token
+    const token = localStorage.getItem('auth_token')
+    if (!token) {
+      throw new Error('Authentication token not found. Please login first.')
+    }
+    
     try {
       const response = await fetch(API_URL, {
         method: 'POST',
@@ -382,22 +273,57 @@ export const spotsApi = {
           'Accept': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify(backendData),
+        body: JSON.stringify(data),
         mode: 'cors',
         credentials: 'omit',
       })
-
+      
       console.log('[SpotsAPI] Response status:', response.status)
-
+      console.log('[SpotsAPI] Response ok:', response.ok)
+      
       if (!response.ok) {
-        await handleApiError(response, 'Create spot')
+        // Try to read error message from response
+        let errorMessage = `HTTP error! status: ${response.status}`
+        let errorBody = null
+        
+        try {
+          const contentType = response.headers.get('content-type')
+          if (contentType && contentType.includes('application/json')) {
+            errorBody = await response.json()
+            console.log('[SpotsAPI] Error response body:', errorBody)
+            errorMessage = errorBody.message || errorBody.error || errorMessage
+          } else {
+            const errorText = await response.text()
+            console.log('[SpotsAPI] Error response text:', errorText)
+            if (errorText) {
+              try {
+                errorBody = JSON.parse(errorText)
+                errorMessage = errorBody.message || errorBody.error || errorMessage
+              } catch {
+                errorMessage = errorText || errorMessage
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[SpotsAPI] Could not read error response:', e)
+        }
+        
+        if (response.status === 401) {
+          localStorage.removeItem('auth_token')
+          throw new Error('Authentication failed. Please login again.')
+        }
+        
+        const error = new Error(errorMessage)
+        ;(error as any).status = response.status
+        ;(error as any).body = errorBody
+        console.error('[SpotsAPI] ✗ Create spot failed:', errorMessage)
+        throw error
       }
-
+      
       const result = await response.json()
       console.log('[SpotsAPI] ✓ Spot created successfully')
-
-      // Map scheduleType back to frontend format
-      return mapSpotFromBackend(result)
+      console.log('[SpotsAPI] Response:', result)
+      return result
     } catch (error) {
       console.error('[SpotsAPI] Create spot error:', error)
       throw error
@@ -414,12 +340,13 @@ export const spotsApi = {
     console.log('[SpotsAPI] ===== UPDATE SPOT =====')
     console.log('[SpotsAPI] Spot ID:', id)
     console.log('[SpotsAPI] API Endpoint:', API_URL)
+    console.log('[SpotsAPI] Request data:', JSON.stringify(data, null, 2))
 
-    const token = getAuthToken()
-
-    // Map scheduleType to backend format
-    const backendData = mapSpotToBackend(data)
-    console.log('[SpotsAPI] Request data (mapped):', JSON.stringify(backendData, null, 2))
+    // Get authentication token
+    const token = localStorage.getItem('auth_token')
+    if (!token) {
+      throw new Error('Authentication token not found. Please login first.')
+    }
 
     try {
       const response = await fetch(API_URL, {
@@ -429,216 +356,7 @@ export const spotsApi = {
           'Accept': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify(backendData),
-        mode: 'cors',
-        credentials: 'omit',
-      })
-
-      console.log('[SpotsAPI] Response status:', response.status)
-
-      if (!response.ok) {
-        await handleApiError(response, 'Update spot')
-      }
-
-      const result = await response.json()
-      console.log('[SpotsAPI] ✓ Spot updated successfully')
-
-      // Map scheduleType back to frontend format
-      return mapSpotFromBackend(result)
-    } catch (error) {
-      console.error('[SpotsAPI] Update spot error:', error)
-      throw error
-    }
-  },
-
-  /**
-   * Archive (unpublish) a parking spot
-   * POST /api/v1/spots/{id}/archive
-   *
-   * @param id - Spot ID to archive
-   * @param cancelBlockingBookings - If true, cancel blocking bookings; if false, wait for them to complete
-   * @param cancelReason - Optional reason for cancellation
-   */
-  async archiveSpot(id: string, cancelBlockingBookings: boolean = false, cancelReason?: string): Promise<void> {
-    const API_URL = `${API_BASE_URL}/api/v1/spots/${id}/archive`
-
-    console.log('[SpotsAPI] ===== ARCHIVE SPOT =====')
-    console.log('[SpotsAPI] Spot ID:', id)
-    console.log('[SpotsAPI] Cancel blocking bookings:', cancelBlockingBookings)
-    console.log('[SpotsAPI] Cancel reason:', cancelReason)
-    console.log('[SpotsAPI] API Endpoint:', API_URL)
-
-    const token = getAuthToken()
-
-    // Build request body according to Swagger spec
-    const requestBody: { cancelBlockingBookings?: boolean; cancelReason?: string } = {}
-    if (cancelBlockingBookings) {
-      requestBody.cancelBlockingBookings = true
-    }
-    if (cancelReason) {
-      requestBody.cancelReason = cancelReason
-    }
-
-    try {
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: Object.keys(requestBody).length > 0 ? JSON.stringify(requestBody) : undefined,
-        mode: 'cors',
-        credentials: 'omit',
-      })
-
-      console.log('[SpotsAPI] Response status:', response.status)
-
-      if (!response.ok) {
-        await handleApiError(response, 'Archive spot')
-      }
-
-      console.log('[SpotsAPI] ✓ Spot archived successfully')
-    } catch (error) {
-      console.error('[SpotsAPI] Archive spot error:', error)
-      throw error
-    }
-  },
-
-  /**
-   * Activate (restore from archive) a parking spot
-   * POST /api/v1/spots/{id}/activate
-   *
-   * @param id - Spot ID to activate
-   */
-  async activateSpot(id: string): Promise<void> {
-    const API_URL = `${API_BASE_URL}/api/v1/spots/${id}/activate`
-
-    console.log('[SpotsAPI] ===== ACTIVATE SPOT =====')
-    console.log('[SpotsAPI] Spot ID:', id)
-    console.log('[SpotsAPI] API Endpoint:', API_URL)
-
-    const token = getAuthToken()
-
-    try {
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        mode: 'cors',
-        credentials: 'omit',
-      })
-
-      console.log('[SpotsAPI] Response status:', response.status)
-
-      if (!response.ok) {
-        await handleApiError(response, 'Activate spot')
-      }
-
-      console.log('[SpotsAPI] ✓ Spot activated successfully')
-    } catch (error) {
-      console.error('[SpotsAPI] Activate spot error:', error)
-      throw error
-    }
-  },
-
-  /**
-   * Get archive preview - shows bookings that would be affected
-   * GET /api/v1/spots/{id}/archive/preview
-   *
-   * @param id - Spot ID to preview archive impact
-   */
-  async getArchivePreview(id: string): Promise<ArchivePreviewResponse> {
-    const API_URL = `${API_BASE_URL}/api/v1/spots/${id}/archive/preview`
-
-    console.log('[SpotsAPI] ===== GET ARCHIVE PREVIEW =====')
-    console.log('[SpotsAPI] Spot ID:', id)
-    console.log('[SpotsAPI] API Endpoint:', API_URL)
-
-    const token = getAuthToken()
-
-    try {
-      const response = await fetch(API_URL, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        mode: 'cors',
-        credentials: 'omit',
-      })
-
-      console.log('[SpotsAPI] Response status:', response.status)
-
-      if (!response.ok) {
-        await handleApiError(response, 'Get archive preview')
-      }
-
-      const result = await response.json()
-      console.log('[SpotsAPI] ✓ Archive preview retrieved successfully')
-      console.log('[SpotsAPI] Active bookings:', result.activeCount)
-      console.log('[SpotsAPI] Upcoming bookings:', result.upcomingCount)
-
-      return result
-    } catch (error) {
-      console.error('[SpotsAPI] Get archive preview error:', error)
-      throw error
-    }
-  },
-
-  /**
-   * Search for parking spots
-   * GET /api/v1/spots/search
-   *
-   * Swagger: /parkshare/swagger-ui/index.html#/Spots/search
-   */
-  async searchSpots(params: SpotSearchParams): Promise<SpotSearchItemResponse[]> {
-    const query = new URLSearchParams()
-
-    // rentType обязателен только если не используется availableNow
-    // Если availableNow=true, то rentType не передаем (бэкенд сам разрулит)
-    if (params.rentType) {
-      query.set('rentType', params.rentType)
-    }
-
-    if (typeof params.availableNow === 'boolean') {
-      query.set('availableNow', String(params.availableNow))
-    }
-
-    if (params.date) query.set('date', params.date)
-    if (params.timeFrom) query.set('timeFrom', params.timeFrom)
-    if (params.timeTo) query.set('timeTo', params.timeTo)
-
-    if (params.dateFrom) query.set('dateFrom', params.dateFrom)
-    if (params.dateTo) query.set('dateTo', params.dateTo)
-
-    if (typeof params.minLat === 'number') query.set('minLat', String(params.minLat))
-    if (typeof params.minLng === 'number') query.set('minLng', String(params.minLng))
-    if (typeof params.maxLat === 'number') query.set('maxLat', String(params.maxLat))
-    if (typeof params.maxLng === 'number') query.set('maxLng', String(params.maxLng))
-
-    if (typeof params.centerLat === 'number') query.set('centerLat', String(params.centerLat))
-    if (typeof params.centerLng === 'number') query.set('centerLng', String(params.centerLng))
-    if (typeof params.radiusMeters === 'number') query.set('radiusMeters', String(params.radiusMeters))
-
-    const API_URL = `${API_BASE_URL}/api/v1/spots/search?${query.toString()}`
-
-    console.log('[SpotsAPI] ===== SEARCH SPOTS =====')
-    console.log('[SpotsAPI] API Endpoint:', API_URL)
-    console.log('[SpotsAPI] Params:', params)
-
-    // Token might be optional for this endpoint; send if present.
-    const token = localStorage.getItem('auth_token')
-
-    try {
-      const response = await fetch(API_URL, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
+        body: JSON.stringify(data),
         mode: 'cors',
         credentials: 'omit',
       })
@@ -647,6 +365,7 @@ export const spotsApi = {
       console.log('[SpotsAPI] Response ok:', response.ok)
 
       if (!response.ok) {
+        // Try to read error message from response
         let errorMessage = `HTTP error! status: ${response.status}`
         let errorBody = null
 
@@ -672,20 +391,188 @@ export const spotsApi = {
           console.warn('[SpotsAPI] Could not read error response:', e)
         }
 
+        if (response.status === 401) {
+          localStorage.removeItem('auth_token')
+          throw new Error('Authentication failed. Please login again.')
+        }
+
         const error = new Error(errorMessage)
         ;(error as any).status = response.status
         ;(error as any).body = errorBody
-        console.error('[SpotsAPI] ✗ Search spots failed:', errorMessage)
+        console.error('[SpotsAPI] ✗ Update spot failed:', errorMessage)
         throw error
       }
 
       const result = await response.json()
-      console.log('[SpotsAPI] ✓ Search spots success')
+      console.log('[SpotsAPI] ✓ Spot updated successfully')
       console.log('[SpotsAPI] Response:', result)
-
-      return Array.isArray(result) ? result : (result?.data ?? result?.spots ?? [])
+      return result
     } catch (error) {
-      console.error('[SpotsAPI] Search spots error:', error)
+      console.error('[SpotsAPI] Update spot error:', error)
+      throw error
+    }
+  },
+
+  /**
+   * Снять место с публикации (архивировать).
+   * POST /api/v1/spots/{id}/archive
+   * Переводит место в архив (active=false). Доступно только владельцу.
+   * Тело: cancelBlockingBookings=false — снять с публикации, бронирования не меняются.
+   *       cancelBlockingBookings=true — отменяются предстоящие (WAITING_CONFIRMATION, WAITING_START);
+   *       при активном бронировании (ACTIVE) бэкенд вернёт 409.
+   * @see https://test-app-iuwehfvnlw23275vb.koalanearby.com/parkshare/swagger-ui/index.html#/Spots/archive
+   */
+  async archiveSpot(id: string, cancelBlockingBookings: boolean = false): Promise<void> {
+    const API_URL = `${API_BASE_URL}/api/v1/spots/${id}/archive`
+    const requestBody = { cancelBlockingBookings }
+
+    console.log('[SpotsAPI] ===== ARCHIVE SPOT =====')
+    console.log('[SpotsAPI] Spot ID:', id)
+    console.log('[SpotsAPI] cancelBlockingBookings:', cancelBlockingBookings)
+    console.log('[SpotsAPI] API Endpoint:', API_URL)
+    console.log('[SpotsAPI] Request body:', JSON.stringify(requestBody))
+
+    // Get authentication token
+    const token = localStorage.getItem('auth_token')
+    if (!token) {
+      throw new Error('Authentication token not found. Please login first.')
+    }
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(requestBody),
+        mode: 'cors',
+        credentials: 'omit',
+      })
+
+      console.log('[SpotsAPI] Response status:', response.status)
+      console.log('[SpotsAPI] Response ok:', response.ok)
+
+      if (!response.ok) {
+        // Try to read error message from response
+        let errorMessage = `HTTP error! status: ${response.status}`
+        let errorBody = null
+
+        try {
+          const contentType = response.headers.get('content-type')
+          if (contentType && contentType.includes('application/json')) {
+            errorBody = await response.json()
+            console.log('[SpotsAPI] Error response body:', errorBody)
+            errorMessage = errorBody.message || errorBody.error || errorMessage
+          } else {
+            const errorText = await response.text()
+            console.log('[SpotsAPI] Error response text:', errorText)
+            if (errorText) {
+              try {
+                errorBody = JSON.parse(errorText)
+                errorMessage = errorBody.message || errorBody.error || errorMessage
+              } catch {
+                errorMessage = errorText || errorMessage
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[SpotsAPI] Could not read error response:', e)
+        }
+
+        if (response.status === 401) {
+          localStorage.removeItem('auth_token')
+          throw new Error('Authentication failed. Please login again.')
+        }
+        if (response.status === 409) {
+          throw new Error(
+            errorMessage ||
+              'Нельзя снять с публикации: есть активное бронирование. Дождитесь завершения или выберите «Ждать завершения бронирований».'
+          )
+        }
+
+        const error = new Error(errorMessage)
+        ;(error as any).status = response.status
+        ;(error as any).body = errorBody
+        console.error('[SpotsAPI] ✗ Archive spot failed:', errorMessage)
+        throw error
+      }
+
+      console.log('[SpotsAPI] ✓ Spot archived successfully')
+    } catch (error) {
+      console.error('[SpotsAPI] Archive spot error:', error)
+      throw error
+    }
+  },
+
+  /**
+   * Вернуть место из архива (опубликовать повторно).
+   * POST /api/v1/spots/{id}/activate
+   * Делает объявление снова активным (active=true).
+   * @see https://test-app-iuwehfvnlw23275vb.koalanearby.com/parkshare/swagger-ui/index.html#/Spots/activate
+   */
+  async activateSpot(id: string): Promise<void> {
+    const API_URL = `${API_BASE_URL}/api/v1/spots/${id}/activate`
+
+    console.log('[SpotsAPI] ===== ACTIVATE SPOT =====')
+    console.log('[SpotsAPI] Spot ID:', id)
+    console.log('[SpotsAPI] API Endpoint:', API_URL)
+
+    const token = localStorage.getItem('auth_token')
+    if (!token) {
+      throw new Error('Authentication token not found. Please login first.')
+    }
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        mode: 'cors',
+        credentials: 'omit',
+      })
+
+      console.log('[SpotsAPI] Response status:', response.status)
+      console.log('[SpotsAPI] Response ok:', response.ok)
+
+      if (!response.ok) {
+        let errorMessage = `HTTP error! status: ${response.status}`
+        let errorBody = null
+        try {
+          const contentType = response.headers.get('content-type')
+          if (contentType && contentType.includes('application/json')) {
+            errorBody = await response.json()
+            errorMessage = errorBody.message || errorBody.error || errorMessage
+          } else {
+            const errorText = await response.text()
+            if (errorText) {
+              try {
+                errorBody = JSON.parse(errorText)
+                errorMessage = errorBody.message || errorBody.error || errorMessage
+              } catch {
+                errorMessage = errorText || errorMessage
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[SpotsAPI] Could not read error response:', e)
+        }
+        if (response.status === 401) {
+          localStorage.removeItem('auth_token')
+          throw new Error('Authentication failed. Please login again.')
+        }
+        const error = new Error(errorMessage)
+        ;(error as any).status = response.status
+        ;(error as any).body = errorBody
+        console.error('[SpotsAPI] ✗ Activate spot failed:', errorMessage)
+        throw error
+      }
+      console.log('[SpotsAPI] ✓ Spot activated successfully')
+    } catch (error) {
+      console.error('[SpotsAPI] Activate spot error:', error)
       throw error
     }
   },
