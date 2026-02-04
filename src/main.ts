@@ -1,3 +1,8 @@
+// Polyfill for Node.js 'global' variable (required by sockjs-client)
+if (typeof window !== 'undefined' && !(window as any).global) {
+  (window as any).global = window;
+}
+
 import { createApp } from "vue";
 import "./style.css";
 import App from "./App.vue";

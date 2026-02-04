@@ -35,6 +35,8 @@ import type { User } from './services/mockAuth'
 import { featureToggles, type FeatureKey } from './services/featureToggles'
 import { authApi, getTestZaharikToken, PREVIEW_AS_ZAHARIK_KEY, PREVIEW_ZAHARIK_USER } from './services/authApi'
 import { spotsApi } from './services/spotsApi'
+import { carsApi } from './services/carsApi'
+import { bookingsApi, type CreateBookingRequest } from './services/bookingsApi'
 import chatIconSvg from './assets/icons/bottom-nav-chat.svg?raw'
 import homeIconSvg from './assets/icons/bottom-nav-home.svg?raw'
 import plusIconSvg from './assets/icons/bottom-nav-plus.svg?raw'
@@ -126,7 +128,7 @@ const isRegistrationFlow = ref<boolean>(false)
 const selectedAddress = ref<string>('')
 const selectedLatitude = ref<number | null>(null)
 const selectedLongitude = ref<number | null>(null)
-const selectedLocation = ref<{ id: string; address: string; lat: number; lng: number; priceHour: string; priceDay: string; priceMonth: string; availability: 'hourly' | 'daily' | 'monthly' } | null>(null)
+const selectedLocation = ref<{ id: string; address: string; lat: number; lng: number; priceHour: string; priceDay: string; priceMonth: string } | null>(null)
 const fullScreenMapLocation = ref<{ lat: number; lng: number; address?: string } | null>(null)
 const userCar = ref<{ id: string; brand: string; model: string; number: string; region?: string; color?: string; isForeign: boolean } | null>(null)
 const userCars = ref<Array<{ id: string; brand: string; model: string; number: string; region?: string; color?: string; isForeign: boolean }>>([])
@@ -255,6 +257,8 @@ const isNavVisible = computed(() =>
   stage.value !== 'geo-confirmation' &&
   stage.value !== 'map-selection' &&
   stage.value !== 'rent-map' &&
+  stage.value !== 'rent' &&
+  stage.value !== 'search' &&
   stage.value !== 'owner-cancelled-booking' &&
   stage.value !== 'rent-success' &&
   stage.value !== 'car-selection' &&
@@ -591,6 +595,86 @@ const goToGeoConfirmationContinue = async () => {
 }
 
 
+// Load user data and cars for profile
+const loadProfileData = async () => {
+  const token = localStorage.getItem('auth_token')
+  if (!token) {
+    console.log('[App] No auth token, skipping profile data load')
+    return
+  }
+
+  try {
+    // Load current user data
+    console.log('[App] Loading user data for profile...')
+    const userData = await authApi.getCurrentUser()
+    
+    // Update currentUser with latest data
+    if (userData) {
+      currentUser.value = {
+        id: userData.id,
+        name: userData.firstName || userData.username || currentUser.value?.name || 'Пользователь',
+        phone: userData.phoneNumber || currentUser.value?.phone || '',
+      }
+      userName.value = currentUser.value.name
+      console.log('[App] ✓ User data loaded for profile:', currentUser.value.name)
+    }
+
+    // Load user cars
+    console.log('[App] Loading cars for profile...')
+    const cars = await carsApi.getMyCars()
+    console.log('[App] Cars loaded:', cars.length)
+    
+    if (cars && cars.length > 0) {
+      // Map API cars to frontend format
+      userCars.value = cars.map(car => {
+        // Парсим licensePlate: для российских номеров формат А000АА777 (номер + регион)
+        let number = car.licensePlate
+        let region: string | undefined = undefined
+        
+        // Проверяем, является ли номер российским (формат: буква + 3 цифры + 2 буквы + 1-3 цифры региона)
+        const russianPlatePattern = /^([А-ЯA-Z][0-9]{3}[А-ЯA-Z]{2})([0-9]{1,3})$/
+        const match = car.licensePlate.match(russianPlatePattern)
+        if (match) {
+          number = match[1] ?? number // А000АА
+          region = match[2] ?? '' // 777
+        }
+        
+        return {
+          id: car.id,
+          brand: car.brand,
+          model: car.model || '',
+          number: number,
+          region: region ?? '',
+          color: car.color,
+          isForeign: !match, // Если не соответствует российскому формату, считаем иностранным
+        }
+      })
+      
+      // Set primary car (first one or previously selected)
+      if (userCar.value && userCars.value.find(c => c.id === userCar.value?.id)) {
+        // Keep current selection if it still exists
+        userCar.value = userCars.value.find(c => c.id === userCar.value?.id) ?? null
+      } else if (userCars.value.length > 0) {
+        // Use first car as primary
+        userCar.value = userCars.value[0] ?? null
+      }
+      
+      console.log('[App] ✓ Cars loaded and set:', userCars.value.length, 'cars, primary:', userCar.value?.brand)
+    } else {
+      // No cars found
+      userCars.value = []
+      userCar.value = null
+      console.log('[App] No cars found')
+    }
+  } catch (error: any) {
+    console.error('[App] Failed to load profile data:', error)
+    // Don't show error to user, just log it
+    if (error?.message?.includes('401') || error?.message?.includes('Authentication failed')) {
+      console.warn('[App] User is not authorized (401), token may be invalid')
+    }
+  }
+}
+
 const handleNavSelect = async (value: string) => {
   if (value === 'home' || value === 'search') {
     const featureKey = value as FeatureKey
@@ -609,6 +693,7 @@ const handleNavSelect = async (value: string) => {
     await checkFeatureAndNavigate(value as Stage, featureKey)
     if (stage.value === value) {
       navSelection.value = value as typeof navSelection.value
+      // Note: loadProfileData is called in watch(stage) when stage === 'profile'
     }
   }
 
@@ -639,10 +724,26 @@ const extendBooking = () => {
 }
 
 const openSearchFromHome = async () => {
-  // "Найти парковку" теперь открывает экран сдачи места
-  await checkFeatureAndNavigate('rent-map', 'rent')
-  if (stage.value === 'rent-map') {
-    navSelection.value = 'rent'
+  // "Найти парковку" открывает экран поиска парковок
+  console.log('[App] openSearchFromHome called')
+  
+  // Очищаем кеш для 'search' чтобы получить актуальное значение
+  featureStates.value['search'] = null
+  featureToggles.clearCache()
+  
+  console.log('[App] Checking search feature toggle...')
+  const enabled = await isFeatureEnabled('search')
+  console.log('[App] Search feature enabled:', enabled)
+  console.log('[App] Feature state after check:', featureStates.value['search'])
+  
+  if (enabled) {
+    stage.value = 'search'
+    navSelection.value = 'search'
+    console.log('[App] ✓ Navigated to search screen')
+  } else {
+    placeholderMessage.value = featureToggles.getPlaceholderMessage('search')
+    stage.value = 'placeholder' as Stage
+    console.warn('[App] ✗ Search feature is disabled, showing placeholder')
   }
 }
 
@@ -681,10 +782,91 @@ const handleGoToMySpots = async () => {
   navSelection.value = 'rent' // Keep rent tab active since we're coming from rent flow
 }
 
-const handleUnpublishSpot = (spotId: string) => {
+const handleUnpublishSpot = async (spotId: string) => {
   console.log('[App] Opening unpublish screen for spot:', spotId)
-  selectedSpotIdForUnpublish.value = spotId
-  stage.value = 'unpublish-spot'
+  
+  // Check if there are active/upcoming bookings before showing preview
+  try {
+    const preview = await spotsApi.getArchivePreview(spotId)
+    const hasBookings = (preview.activeCount > 0) || (preview.upcomingCount > 0)
+    
+    if (!hasBookings) {
+      // No bookings, archive directly without showing preview
+      console.log('[App] No bookings found, archiving directly')
+      await spotsApi.archiveSpot(spotId, false)
+      
+      // Show loading screen
+      loadingMessage.value = 'Снятие с публикации'
+      loadingSubtitle.value = ''
+      stage.value = 'loading'
+      
+      // After 1.5 seconds, navigate to my-spots and refresh
+      setTimeout(async () => {
+        stage.value = 'my-spots'
+        navSelection.value = 'rent'
+        await nextTick()
+        // Add a small delay to ensure backend has updated the data
+        await new Promise(resolve => setTimeout(resolve, 300))
+        if (mySpotsScreenRef.value && typeof (mySpotsScreenRef.value as any).refresh === 'function') {
+          console.log('[App] Refreshing spots list after archiving spot:', spotId)
+          await (mySpotsScreenRef.value as any).refresh()
+        }
+      }, 1500)
+      return
+    }
+    
+    // Has bookings, show preview screen
+    selectedSpotIdForUnpublish.value = spotId
+    stage.value = 'unpublish-spot'
+  } catch (err: any) {
+    console.error('[App] Failed to check preview, showing screen anyway:', err)
+    // On error, show preview screen anyway
+    selectedSpotIdForUnpublish.value = spotId
+    stage.value = 'unpublish-spot'
+  }
+}
+
+const handleActivateSpot = async (spotId: string) => {
+  console.log('[App] Activating spot:', spotId)
+  
+  // Show loading screen
+  loadingMessage.value = 'Публикация места'
+  loadingSubtitle.value = ''
+  stage.value = 'loading'
+  
+  try {
+    await spotsApi.activateSpot(spotId)
+    console.log('[App] ✓ Spot activated successfully')
+    
+    // After 1.5 seconds, navigate to my-spots and refresh
+    setTimeout(async () => {
+      stage.value = 'my-spots'
+      navSelection.value = 'rent'
+      await nextTick()
+      // Add a small delay to ensure backend has updated the data
+      await new Promise(resolve => setTimeout(resolve, 300))
+      if (mySpotsScreenRef.value && typeof (mySpotsScreenRef.value as any).refresh === 'function') {
+        console.log('[App] Refreshing spots list after activating spot:', spotId)
+        await (mySpotsScreenRef.value as any).refresh()
+      }
+    }, 1500)
+  } catch (error: any) {
+    console.error('[App] ✗ Failed to activate spot:', error)
+    
+    // Show error message
+    loadingMessage.value = 'Ошибка'
+    loadingSubtitle.value = error?.message || 'Не удалось опубликовать место'
+    
+    // After 2 seconds, go back to my-spots
+    setTimeout(async () => {
+      stage.value = 'my-spots'
+      navSelection.value = 'rent'
+      await nextTick()
+      if (mySpotsScreenRef.value && typeof (mySpotsScreenRef.value as any).refresh === 'function') {
+        (mySpotsScreenRef.value as any).refresh()
+      }
+    }, 2000)
+  }
 }
 
 const handleUnpublishSpotConfirm = async (cancelUpcomingBookings: boolean) => {
@@ -703,15 +885,21 @@ const handleUnpublishSpotConfirm = async (cancelUpcomingBookings: boolean) => {
 
     console.log('[App] ✓ Spot unpublished successfully')
 
+    // Clear the selected spot ID immediately
+    const archivedSpotId = selectedSpotIdForUnpublish.value
+    selectedSpotIdForUnpublish.value = null
+
     // After 1.5 seconds, navigate to my-spots and refresh the list
     setTimeout(async () => {
-      selectedSpotIdForUnpublish.value = null
       stage.value = 'my-spots'
       navSelection.value = 'rent'
       // Wait for component to mount, then refresh the spots list
       await nextTick()
+      // Add a small delay to ensure backend has updated the data
+      await new Promise(resolve => setTimeout(resolve, 300))
       if (mySpotsScreenRef.value && typeof (mySpotsScreenRef.value as any).refresh === 'function') {
-        (mySpotsScreenRef.value as any).refresh()
+        console.log('[App] Refreshing spots list after archiving spot:', archivedSpotId)
+        await (mySpotsScreenRef.value as any).refresh()
       }
     }, 1500)
   } catch (error: any) {
@@ -848,12 +1036,14 @@ const handleOpenChatFromList = (booking: Booking) => {
     price: '₽1 600', // TODO: Calculate actual price
     status: getStatusText(booking.status)
   }
+  selectedChatBookingId.value = booking.id
   
   stage.value = 'chat'
 }
 
 const selectedChatName = ref<string | undefined>(undefined)
 const selectedChatBooking = ref<{ address?: string; date?: string; time?: string; price?: string; status?: string } | undefined>(undefined)
+const selectedChatBookingId = ref<string | undefined>(undefined) // Booking ID для получения chatId
 const previousStageBeforeChat = ref<Stage | null>(null) // Сохраняем экран, с которого открыли чат
 
 const handleOwnerRequestConfirm = () => {
@@ -892,6 +1082,7 @@ const handleOwnerBookingConfirmedChat = () => {
     price: '₽160',
     status: 'Подтверждено',
   }
+  selectedChatBookingId.value = selectedOwnerRequest.value.id // OwnerRequest.id is the bookingId
   stage.value = 'chat'
 }
 
@@ -919,6 +1110,7 @@ const handleOwnerCompletedBookingChat = () => {
     price: '₽160',
     status: 'Завершено',
   }
+  selectedChatBookingId.value = selectedOwnerRequest.value.id // OwnerRequest.id is the bookingId
   stage.value = 'chat'
 }
 
@@ -926,6 +1118,7 @@ const handleChatBack = () => {
   // Очищаем данные чата перед возвратом
   selectedChatName.value = undefined
   selectedChatBooking.value = undefined
+  selectedChatBookingId.value = undefined
   
   // Если открыто из страницы "Мои брони", возвращаемся на неё
   // Иначе возвращаемся на страницу "Мои чаты"
@@ -1439,36 +1632,80 @@ const handleBook = async (bookingData: {
   if (!selectedLocation.value || !userCar.value || !selectedPaymentCard.value) {
     return
   }
-  
+
   // Показываем экран загрузки с текстом "Направляем запрос на оплату"
   loadingMessage.value = 'Направляем запрос'
   loadingSubtitle.value = 'на оплату'
   stage.value = 'loading'
-  
-  // Через 2 секунды меняем текст на "Оплата успешна"
-  setTimeout(() => {
-    loadingMessage.value = 'Оплата успешна'
-    loadingSubtitle.value = ''
-  }, 2000)
-  
-  // Через 3 секунды переходим на главный экран, создаем бронирование и увеличиваем счетчик
-  setTimeout(() => {
-    const newBooking: Booking = {
-      id: Date.now().toString(),
-      address: bookingData.address,
-      startDate: bookingData.startDate,
-      endDate: bookingData.endDate,
-      startTime: bookingData.startTime,
-      endTime: bookingData.endTime,
-      rentalType: bookingData.rentalType,
-      createdAt: new Date(),
-      status: 'awaiting'
+
+  try {
+    // Преобразуем тип аренды в формат API (UPPERCASE)
+    const rentType = bookingData.rentalType.toUpperCase() as 'HOURLY' | 'DAILY' | 'MONTHLY'
+
+    // Формируем запрос на создание бронирования
+    const createBookingRequest: CreateBookingRequest = {
+      spotId: selectedLocation.value.id,
+      carId: userCar.value.id,
+      rentType: rentType,
     }
-    bookings.value.push(newBooking)
-    bookingsCount.value = bookings.value.length
-    stage.value = 'home'
-    navSelection.value = 'home'
-  }, 3000)
+
+    // Для почасовой аренды - используем date, timeFrom, timeTo
+    if (rentType === 'HOURLY') {
+      createBookingRequest.date = bookingData.startDate
+      createBookingRequest.timeFrom = bookingData.startTime
+      createBookingRequest.timeTo = bookingData.endTime
+    }
+    // Для посуточной/помесячной аренды - используем dateFrom, dateTo
+    else {
+      createBookingRequest.dateFrom = bookingData.startDate
+      createBookingRequest.dateTo = bookingData.endDate
+    }
+
+    console.log('[App] Creating booking with request:', createBookingRequest)
+
+    // Вызываем API для создания бронирования
+    const createdBooking = await bookingsApi.createBooking(createBookingRequest)
+
+    console.log('[App] Booking created successfully:', createdBooking)
+
+    // Через 1 секунду меняем текст на "Оплата успешна"
+    setTimeout(() => {
+      loadingMessage.value = 'Оплата успешна'
+      loadingSubtitle.value = ''
+    }, 1000)
+
+    // Через 2 секунды переходим на главный экран
+    setTimeout(() => {
+      // Добавляем созданное бронирование в список
+      const newBooking: Booking = {
+        id: createdBooking.id,
+        address: bookingData.address,
+        startDate: bookingData.startDate,
+        endDate: bookingData.endDate,
+        startTime: bookingData.startTime,
+        endTime: bookingData.endTime,
+        rentalType: bookingData.rentalType,
+        createdAt: new Date(createdBooking.createdAt),
+        status: createdBooking.status === 'WAITING_CONFIRMATION' ? 'awaiting' : 'confirmed',
+        parkingSpotId: createdBooking.spot.id
+      }
+      bookings.value.push(newBooking)
+      bookingsCount.value = bookings.value.length
+      stage.value = 'home'
+      navSelection.value = 'home'
+    }, 2000)
+  } catch (error: any) {
+    console.error('[App] Failed to create booking:', error)
+
+    // Показываем сообщение об ошибке
+    loadingMessage.value = 'Ошибка'
+    loadingSubtitle.value = error?.message || 'Не удалось создать бронирование'
+
+    // Через 2 секунды возвращаемся на экран бронирования
+    setTimeout(() => {
+      stage.value = 'rent-booking-dates'
+    }, 2000)
+  }
 }
 
 const handleBookingConfirmation = () => {
@@ -1493,6 +1730,120 @@ const handleCloseFullScreenMap = () => {
   fullScreenMapLocation.value = null
 }
 
+// Handle selecting dates for booking
+const handleSelectDates = async (location: { id: string; address: string; lat: number; lng: number; priceHour: string; priceDay: string; priceMonth: string } | null) => {
+  try {
+    // Используем location из параметра события (из prop компонента)
+    if (!location) {
+      console.error('[App] Location is null from event')
+      // Fallback: попробуем использовать selectedLocation.value
+      if (!selectedLocation.value) {
+        console.error('[App] selectedLocation.value is also null')
+        return
+      }
+      location = selectedLocation.value
+    }
+    
+    // Обновляем selectedLocation на случай, если он был очищен
+    selectedLocation.value = location
+    
+    // Загружаем машины перед переходом на экран бронирования, если они еще не загружены
+    if ((!userCars.value || userCars.value.length === 0) && currentUser.value) {
+      try {
+        console.log('[App] Loading cars before booking screen...')
+        const cars = await carsApi.getMyCars()
+        if (cars && Array.isArray(cars) && cars.length > 0) {
+          userCars.value = cars.map(car => {
+            // Парсим licensePlate: для российских номеров формат А000АА777 (номер + регион)
+            const licensePlate = car.licensePlate || ''
+            let number = licensePlate
+            let region: string | undefined = undefined
+            
+            if (licensePlate) {
+              const russianPlatePattern = /^([А-ЯA-Z][0-9]{3}[А-ЯA-Z]{2})([0-9]{1,3})$/
+              const match = licensePlate.match(russianPlatePattern)
+              if (match) {
+                number = match[1] ?? number
+                region = match[2] ?? ''
+              }
+            }
+            
+            return {
+              id: car.id || '',
+              brand: car.brand || '',
+              model: car.model || '',
+              number: number,
+              region: region ?? '',
+              color: car.color,
+              isForeign: !(licensePlate && licensePlate.match(/^([А-ЯA-Z][0-9]{3}[А-ЯA-Z]{2})([0-9]{1,3})$/)),
+            }
+          })
+          if (userCars.value && userCars.value.length > 0) {
+            userCar.value = userCars.value[0] ?? null
+          }
+        } else {
+          // Если машин нет, убеждаемся что userCars - это массив
+          if (!userCars.value) {
+            userCars.value = []
+          }
+        }
+      } catch (error) {
+        console.error('[App] Failed to load cars:', error)
+        // В случае ошибки убеждаемся что userCars - это массив
+        if (!userCars.value) {
+          userCars.value = []
+        }
+      }
+    }
+    stage.value = 'rent-booking-dates'
+  } catch (error) {
+    console.error('[App] Error in select-dates handler:', error)
+  }
+}
+
+// Handle selecting a location from the map - fetch full details
+const handleSelectMapLocation = async (location: { id: string; address: string; lat: number; lng: number; price: string; rentType: string }) => {
+  try {
+    console.log('[App] Fetching full spot details for:', location.id)
+    // Сохраняем текущий экран для правильного возврата назад
+    if (stage.value === 'search') {
+      previousStage.value = 'search'
+    }
+    const fullSpot = await spotsApi.getSpotById(location.id)
+    console.log('[App] Full spot details:', fullSpot)
+
+    selectedLocation.value = {
+      id: fullSpot.id,
+      address: fullSpot.address,
+      lat: fullSpot.latitude,
+      lng: fullSpot.longitude,
+      priceHour: fullSpot.pricePerHour ? `${fullSpot.pricePerHour}₽/ч` : '—',
+      priceDay: fullSpot.pricePerDay ? `${fullSpot.pricePerDay}₽/день` : '—',
+      priceMonth: fullSpot.pricePerMonth ? `${fullSpot.pricePerMonth}₽/мес` : '—',
+    }
+    console.log('[App] Setting stage to rent-map-details, selectedLocation:', selectedLocation.value)
+    stage.value = 'rent-map-details'
+    console.log('[App] Stage set to:', stage.value, 'selectedLocation:', selectedLocation.value)
+  } catch (error) {
+    console.error('[App] Failed to fetch spot details:', error)
+    // Сохраняем текущий экран для правильного возврата назад
+    if (stage.value === 'search') {
+      previousStage.value = 'search'
+    }
+    // Fallback: use the basic info we have
+    selectedLocation.value = {
+      id: location.id,
+      address: location.address,
+      lat: location.lat,
+      lng: location.lng,
+      priceHour: location.rentType === 'HOURLY' ? location.price : '—',
+      priceDay: location.rentType === 'DAILY' ? location.price : '—',
+      priceMonth: location.rentType === 'MONTHLY' ? location.price : '—',
+    }
+    stage.value = 'rent-map-details'
+  }
+}
+
 const handleLogout = () => {
   // Clear user data
   currentUser.value = null
@@ -1513,33 +1864,79 @@ const handleLogout = () => {
   navSelection.value = 'home'
 }
 
-const handleSaveCar = (car: { brand: string; model: string; number: string; region?: string; color?: string; isForeign: boolean }) => {
-  const carWithId = { ...car, id: Date.now().toString() }
-  if (!userCars.value) {
-    userCars.value = []
-  }
-  userCars.value.push(carWithId)
-  userCar.value = carWithId
-  selectedCarId.value = carWithId.id
-  
-  // Сначала проверяем, был ли сохранен предыдущий экран (например, из профиля)
-  const prevStage = previousStage.value
-  if (prevStage) {
-    // Если есть сохраненный экран, возвращаемся на него
-    stage.value = prevStage
-    previousStage.value = null
-    return
-  }
-  
-  // Если пришли с экрана выбора, возвращаемся туда, иначе проверяем количество
-  if (addCarSource.value === 'selection') {
-    stage.value = 'car-selection'
-  } else if (userCars.value.length === 1) {
-    // Если это первый автомобиль и пришли с бронирования, возвращаемся к бронированию
-    stage.value = 'rent-booking-dates'
-  } else {
-    // Если не первый и пришли с бронирования, идем к выбору
-    stage.value = 'car-selection'
+const handleSaveCar = async (car: { brand: string; model: string; number: string; region?: string; color?: string; isForeign: boolean }) => {
+  try {
+    // Формируем licensePlate: для российских номеров добавляем регион
+    let licensePlate = car.number
+    if (!car.isForeign && car.region) {
+      // Для российских номеров формат: А000АА777 (номер + регион)
+      licensePlate = `${car.number}${car.region}`
+    }
+
+    // Вызываем API для создания машины
+    console.log('[App] Creating car via API:', { licensePlate, brand: car.brand, model: car.model, color: car.color })
+    const createdCar = await carsApi.createCar({
+      licensePlate: licensePlate,
+      brand: car.brand,
+      model: car.model,
+      color: car.color,
+    })
+
+    console.log('[App] Car created successfully:', createdCar)
+
+    // Преобразуем ответ API в формат фронтенда
+    // Парсим licensePlate обратно на номер и регион
+    let number = createdCar.licensePlate
+    let region: string | undefined = car.region
+    
+    const russianPlatePattern = /^([А-ЯA-Z][0-9]{3}[А-ЯA-Z]{2})([0-9]{1,3})$/
+    const match = createdCar.licensePlate.match(russianPlatePattern)
+    if (match) {
+      number = match[1] ?? number
+      region = match[2] ?? ''
+    }
+    
+    const carWithId = {
+      id: createdCar.id, // Используем UUID из API
+      brand: createdCar.brand,
+      model: createdCar.model || '',
+      number: number,
+      region: region ?? '',
+      color: createdCar.color,
+      isForeign: !match,
+    }
+
+    // Добавляем машину в список
+    if (!userCars.value) {
+      userCars.value = []
+    }
+    userCars.value.push(carWithId)
+    userCar.value = carWithId
+    selectedCarId.value = carWithId.id
+
+    // Сначала проверяем, был ли сохранен предыдущий экран (например, из профиля)
+    const prevStage = previousStage.value
+    if (prevStage) {
+      // Если есть сохраненный экран, возвращаемся на него
+      stage.value = prevStage
+      previousStage.value = null
+      return
+    }
+
+    // Если пришли с экрана выбора, возвращаемся туда, иначе проверяем количество
+    if (addCarSource.value === 'selection') {
+      stage.value = 'car-selection'
+    } else if (userCars.value.length === 1) {
+      // Если это первый автомобиль и пришли с бронирования, возвращаемся к бронированию
+      stage.value = 'rent-booking-dates'
+    } else {
+      // Если не первый и пришли с бронирования, идем к выбору
+      stage.value = 'car-selection'
+    }
+  } catch (error) {
+    console.error('[App] Failed to create car:', error)
+    // Показываем ошибку пользователю (можно добавить toast/alert)
+    alert(error instanceof Error ? error.message : 'Не удалось сохранить автомобиль')
   }
 }
 
@@ -1562,6 +1959,65 @@ watch(stage, async (newStage) => {
     if (!enabled) {
       placeholderMessage.value = featureToggles.getPlaceholderMessage(featureKey)
       stage.value = 'placeholder'
+    }
+  }
+  
+  // Load profile data when profile stage is opened
+  if (newStage === 'profile') {
+    await loadProfileData()
+  }
+  
+  // Load cars when booking dates screen is opened (if not already loaded)
+  if (newStage === 'rent-booking-dates') {
+    // Если машины еще не загружены, загружаем их
+    if ((!userCars.value || userCars.value.length === 0) && currentUser.value) {
+      try {
+        console.log('[App] Loading cars for booking screen...')
+        const cars = await carsApi.getMyCars()
+        console.log('[App] Cars loaded for booking:', cars.length)
+        
+        if (cars && cars.length > 0) {
+          // Map API cars to frontend format
+          userCars.value = cars.map(car => {
+            // Парсим licensePlate: для российских номеров формат А000АА777 (номер + регион)
+            // Для иностранных номеров - просто номер
+            let number = car.licensePlate
+            let region: string | undefined = undefined
+            
+            // Проверяем, является ли номер российским (формат: буква + 3 цифры + 2 буквы + 1-3 цифры региона)
+            const russianPlatePattern = /^([А-ЯA-Z][0-9]{3}[А-ЯA-Z]{2})([0-9]{1,3})$/
+            const match = car.licensePlate.match(russianPlatePattern)
+            if (match) {
+              number = match[1] ?? number // А000АА
+              region = match[2] ?? '' // 777
+            }
+            
+            return {
+              id: car.id,
+              brand: car.brand,
+              model: car.model || '',
+              number: number,
+              region: region ?? '',
+              color: car.color,
+              isForeign: !match, // Если не соответствует российскому формату, считаем иностранным
+            }
+          })
+          
+          // Set primary car (first one or previously selected)
+          if (userCar.value && userCars.value.find(c => c.id === userCar.value?.id)) {
+            // Keep current selection if it still exists
+            userCar.value = userCars.value.find(c => c.id === userCar.value?.id) ?? null
+          } else if (userCars.value.length > 0) {
+            // Use first car as primary
+            userCar.value = userCars.value[0] ?? null
+          }
+          
+          console.log('[App] ✓ Cars loaded for booking:', userCars.value.length, 'cars')
+        }
+      } catch (error) {
+        console.error('[App] Failed to load cars for booking:', error)
+        // Don't block user, just log error
+      }
     }
   }
 }, { immediate: true })
@@ -1732,6 +2188,7 @@ onMounted(async () => {
           v-else-if="stage === 'search'"
           @back="goHome"
           @open-details="handleOpenDetails"
+          @select-location="handleSelectMapLocation"
         />
 
         <ParkingDetailsScreen
@@ -1793,14 +2250,22 @@ onMounted(async () => {
         <RentOutMapScreen
           v-else-if="stage === 'rent-map'"
           @back="goHome"
-          @select-location="(location) => { selectedLocation = location; stage = 'rent-map-details'; }"
+          @select-location="handleSelectMapLocation"
         />
         
         <ParkingSpotDetailsScreen
           v-else-if="stage === 'rent-map-details' && selectedLocation"
           :location="selectedLocation"
-          @back="() => stage = 'rent-map'"
-          @select-dates="() => { if (selectedLocation) { stage = 'rent-booking-dates'; } }"
+          @back="() => { 
+            // Если пришли с экрана поиска, возвращаемся туда, иначе на rent-map
+            if (previousStage === 'search') {
+              stage = 'search'
+              previousStage = null
+            } else {
+              stage = 'rent-map'
+            }
+          }"
+          @select-dates="handleSelectDates"
           @open-full-map="handleOpenFullScreenMap"
         />
         
@@ -1948,6 +2413,7 @@ onMounted(async () => {
           @edit-spot="handleEditSpot"
           @add-spot="openRentFromHome"
           @hide-spot="handleUnpublishSpot"
+          @activate-spot="handleActivateSpot"
         />
 
         <UnpublishSpotScreen
@@ -2031,6 +2497,7 @@ onMounted(async () => {
           v-else-if="stage === 'chat' && featureStates['chat'] !== false"
           :contact-name="selectedChatName"
           :booking="selectedChatBooking"
+          :booking-id="selectedChatBookingId"
           @back="handleChatBack"
         />
 
@@ -2076,7 +2543,9 @@ onMounted(async () => {
   box-sizing: border-box;
 }
 
-.app__content:has(.chat) {
+.app__content:has(.chat),
+.app__content:has(.search-screen),
+.app__content:has(.rent-out) {
   padding-bottom: 0;
 }
 

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { chatsApi, type ChatMessage } from '../services/chatsApi'
+import { chatWebSocket, type WebSocketMessage } from '../services/chatWebSocket'
 
 type Participant = 'host' | 'guest'
 
@@ -22,6 +24,7 @@ type BookingData = {
 const props = defineProps<{
   contactName?: string
   booking?: BookingData
+  bookingId?: string
   systemMessage?: string
 }>()
 
@@ -90,6 +93,10 @@ const isChatDisabled = computed(() => {
 })
 
 const conversation = ref<Message[]>([])
+const chatId = ref<string | null>(null)
+const isLoading = ref(false)
+const isConnecting = ref(false)
+const wsStatus = ref<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected')
 
 const composerValue = ref('')
 const isSubmitting = ref(false)
@@ -111,38 +118,102 @@ const handleBack = () => {
   emit('back')
 }
 
+// Convert API message to UI message
+const convertApiMessageToUI = (apiMessage: ChatMessage | WebSocketMessage, currentUserId?: string): Message => {
+  const senderId = 'senderId' in apiMessage ? apiMessage.senderId : (apiMessage as ChatMessage).senderUserId
+  const isFromCurrentUser = senderId === currentUserId
+  const time = new Date(apiMessage.createdAt).toLocaleTimeString('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  
+  return {
+    id: apiMessage.id,
+    from: isFromCurrentUser ? 'host' : 'guest',
+    text: apiMessage.text,
+    time,
+    delivered: isFromCurrentUser, // Assume delivered if from current user
+  }
+}
+
+// Get current user ID from token (simplified - you might need to decode JWT)
+const getCurrentUserId = (): string | undefined => {
+  // TODO: Extract user ID from JWT token or store it separately
+  // For now, we'll use a placeholder
+  return undefined
+}
+
 const sendMessage = async () => {
   const text = composerValue.value.trim()
-  if (!text) {
+  if (!text || !chatId.value) {
+    return
+  }
+
+  if (isSubmitting.value) {
     return
   }
 
   isSubmitting.value = true
+  const messageText = text
   composerValue.value = ''
 
-  conversation.value.push({
-    id: `m-${conversation.value.length + 1}`,
+  // Optimistically add message to UI
+  const tempId = `temp-${Date.now()}`
+  const optimisticMessage: Message = {
+    id: tempId,
     from: 'host',
-    text,
+    text: messageText,
     time: new Intl.DateTimeFormat('ru-RU', {
       hour: '2-digit',
       minute: '2-digit',
     }).format(new Date()),
     delivered: false,
-  })
-
+  }
+  conversation.value.push(optimisticMessage)
   await scrollToBottom()
 
-  window.setTimeout(() => {
-    const lastIndex = conversation.value.length - 1
-    if (lastIndex >= 0) {
-      const last = conversation.value[lastIndex]
-      if (last) {
-        last.delivered = true
+  try {
+    // Try to send via WebSocket first
+    if (wsStatus.value === 'connected' && chatId.value) {
+      try {
+        chatWebSocket.sendMessage(chatId.value, messageText)
+        // Mark as delivered after a short delay
+        setTimeout(() => {
+          const msg = conversation.value.find(m => m.id === tempId)
+          if (msg) {
+            msg.delivered = true
+          }
+        }, 500)
+        isSubmitting.value = false
+        return
+      } catch (wsError) {
+        console.warn('[ChatScreen] WebSocket send failed, falling back to REST:', wsError)
       }
     }
+
+    // Fallback to REST API
+    const sentMessage = await chatsApi.sendMessage(chatId.value, messageText)
+    
+    // Replace optimistic message with real one
+    const msgIndex = conversation.value.findIndex(m => m.id === tempId)
+    if (msgIndex >= 0) {
+      const currentUserId = getCurrentUserId()
+      conversation.value[msgIndex] = convertApiMessageToUI(sentMessage, currentUserId)
+    }
+    
+    await scrollToBottom()
+  } catch (error) {
+    console.error('[ChatScreen] Failed to send message:', error)
+    // Remove optimistic message on error
+    const msgIndex = conversation.value.findIndex(m => m.id === tempId)
+    if (msgIndex >= 0) {
+      conversation.value.splice(msgIndex, 1)
+    }
+    // Restore text
+    composerValue.value = messageText
+  } finally {
     isSubmitting.value = false
-  }, 900)
+  }
 }
 
 const handleSubmit = (event: Event) => {
@@ -179,12 +250,118 @@ const addSystemMessage = (text: string) => {
 // Отслеживаем изменение статуса бронирования на 'active' - баннер показывается автоматически через isActive
 // Убрали добавление текстового сообщения, так как теперь используется зеленый баннер
 
+// Load chat messages from API
+const loadChatMessages = async (chatIdValue: string) => {
+  try {
+    isLoading.value = true
+    const result = await chatsApi.getChatMessages(chatIdValue, { page: 0, size: 50 })
+    
+    const currentUserId = getCurrentUserId()
+    conversation.value = result.content
+      .map(msg => convertApiMessageToUI(msg, currentUserId))
+      .reverse() // Reverse to show oldest first
+    
+    await scrollToBottom()
+  } catch (error) {
+    console.error('[ChatScreen] Failed to load messages:', error)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// Handle incoming WebSocket message
+const handleWebSocketMessage = (wsMessage: WebSocketMessage) => {
+  console.log('[ChatScreen] Received WebSocket message:', wsMessage)
+  
+  // Check if message already exists (avoid duplicates)
+  const existingMessage = conversation.value.find(m => m.id === wsMessage.id)
+  if (existingMessage) {
+    console.log('[ChatScreen] Message already exists, skipping')
+    return
+  }
+  
+  const currentUserId = getCurrentUserId()
+  const uiMessage = convertApiMessageToUI(wsMessage, currentUserId)
+  conversation.value.push(uiMessage)
+  scrollToBottom()
+}
+
+// Connect to WebSocket and subscribe to chat
+const connectWebSocket = async () => {
+  if (!chatId.value) {
+    console.warn('[ChatScreen] Cannot connect WebSocket: chatId is null')
+    return
+  }
+
+  try {
+    isConnecting.value = true
+    
+    // Subscribe to status changes
+    chatWebSocket.onStatusChange((status) => {
+      wsStatus.value = status
+      console.log('[ChatScreen] WebSocket status changed:', status)
+    })
+
+    // Connect if not already connected
+    if (chatWebSocket.getStatus() !== 'connected') {
+      await chatWebSocket.connect()
+    }
+
+    // Subscribe to chat messages
+    chatWebSocket.subscribeToChat(chatId.value, handleWebSocketMessage)
+    
+    console.log('[ChatScreen] ✓ WebSocket connected and subscribed')
+  } catch (error) {
+    console.error('[ChatScreen] Failed to connect WebSocket:', error)
+  } finally {
+    isConnecting.value = false
+  }
+}
+
+// Initialize chat: get chatId from bookingId, load messages, connect WebSocket
+const initializeChat = async () => {
+  if (!props.bookingId) {
+    console.warn('[ChatScreen] No bookingId provided, skipping chat initialization')
+    return
+  }
+
+  try {
+    isLoading.value = true
+    
+    // Get chat info by booking ID
+    const chatInfo = await chatsApi.getChatByBooking(props.bookingId)
+    chatId.value = chatInfo.chatId
+    
+    console.log('[ChatScreen] Chat initialized:', chatId.value)
+    
+    // Load existing messages
+    await loadChatMessages(chatId.value)
+    
+    // Connect to WebSocket
+    await connectWebSocket()
+    
+    // Add system message if provided
+    if (props.systemMessage) {
+      addSystemMessage(props.systemMessage)
+    }
+  } catch (error) {
+    console.error('[ChatScreen] Failed to initialize chat:', error)
+  } finally {
+    isLoading.value = false
+  }
+}
+
 onMounted(async () => {
   await scrollToBottom()
 
-  // Добавляем системное сообщение, если оно передано через props
-  if (props.systemMessage) {
-    addSystemMessage(props.systemMessage)
+  // Initialize chat if bookingId is provided
+  if (props.bookingId) {
+    await initializeChat()
+  } else {
+    // Fallback: add system message if provided (for backward compatibility)
+    if (props.systemMessage) {
+      addSystemMessage(props.systemMessage)
+    }
   }
 
   const telegram = window.Telegram?.WebApp
@@ -196,6 +373,16 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  // Unsubscribe from chat WebSocket
+  if (chatId.value) {
+    try {
+      chatWebSocket.unsubscribeFromChat(chatId.value)
+      console.log('[ChatScreen] Unsubscribed from chat WebSocket')
+    } catch (error) {
+      console.warn('[ChatScreen] Error unsubscribing from WebSocket:', error)
+    }
+  }
+
   const telegram = window.Telegram?.WebApp
   if (telegram) {
     telegram.BackButton.offClick(handleTelegramBack)

@@ -10,7 +10,6 @@ type Location = {
   priceHour: string
   priceDay: string
   priceMonth: string
-  availability: 'hourly' | 'daily' | 'monthly'
 }
 
 const props = defineProps<{

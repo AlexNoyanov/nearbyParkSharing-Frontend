@@ -125,9 +125,12 @@ export const featureToggles = {
    * @returns Promise<boolean> - True if feature is enabled, false otherwise
    */
   async isEnabled(featureKey: FeatureKey): Promise<boolean> {
+    console.log(`[Feature Toggle] Checking feature: ${featureKey}`)
+    
     // In test mode, skip network requests and use default states
     if (testMode.isEnabled()) {
       const defaultEnabled = defaultFeatureStates[featureKey]
+      console.log(`[Feature Toggle] Test mode: using default state for ${featureKey}:`, defaultEnabled)
       // Cache the default state
       featureToggleCache.set(featureKey, {
         enabled: defaultEnabled,
@@ -139,11 +142,15 @@ export const featureToggles = {
     // Check cache first
     const cached = featureToggleCache.get(featureKey)
     if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      console.log(`[Feature Toggle] Using cached value for ${featureKey}:`, cached.enabled)
       return cached.enabled
     }
 
+    const apiUrl = `https://noyanov.com/Apps/ParkShare/config.php?feature=${featureKey}`
+    console.log(`[Feature Toggle] Fetching from API: ${apiUrl}`)
+
     try {
-      const response = await fetch(`https://noyanov.com/Apps/ParkShare/config.php?feature=${featureKey}`, {
+      const response = await fetch(apiUrl, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -152,12 +159,31 @@ export const featureToggles = {
         signal: AbortSignal.timeout(3000), // 3 second timeout
       })
 
+      console.log(`[Feature Toggle] Response status for ${featureKey}:`, response.status)
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
       const data: FeatureToggleResponse = await response.json()
-      const enabled = data.enabled ?? defaultFeatureStates[featureKey]
+      console.log(`[Feature Toggle] API response for ${featureKey}:`, data)
+      
+      // Special handling for critical features: if server says disabled but default is enabled,
+      // use default to ensure core functionality works
+      const serverEnabled = data.enabled ?? defaultFeatureStates[featureKey]
+      const defaultEnabled = defaultFeatureStates[featureKey]
+      
+      // For critical features like 'search', prefer default if server disabled it
+      // This ensures search works even if server config is incorrect
+      const criticalFeatures: FeatureKey[] = ['search', 'home', 'login']
+      let enabled = serverEnabled
+      
+      if (!serverEnabled && defaultEnabled && criticalFeatures.includes(featureKey)) {
+        console.warn(`[Feature Toggle] Server disabled ${featureKey} but default is enabled. Using default (enabled) for critical feature.`)
+        enabled = true
+      }
+      
+      console.log(`[Feature Toggle] Final enabled state for ${featureKey}:`, enabled)
 
       // Cache the result
       featureToggleCache.set(featureKey, {
@@ -171,6 +197,7 @@ export const featureToggles = {
       
       // Use default state on error
       const defaultEnabled = defaultFeatureStates[featureKey]
+      console.log(`[Feature Toggle] Using default state for ${featureKey} due to error:`, defaultEnabled)
       
       // Cache the default state (with shorter cache)
       featureToggleCache.set(featureKey, {

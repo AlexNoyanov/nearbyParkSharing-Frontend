@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
+import { loadYandexMaps } from '../services/yandexMaps'
 import parkingLotImage from '../assets/images/parkinglot.jpg'
 
 type Location = {
@@ -12,16 +11,20 @@ type Location = {
   priceHour: string
   priceDay: string
   priceMonth: string
-  availability: 'hourly' | 'daily' | 'monthly'
 }
 
 const props = defineProps<{
-  location: Location
+  location: Location | null
 }>()
+
+// Проверка наличия location
+if (!props.location) {
+  console.error('[ParkingSpotDetailsScreen] Location prop is null or undefined')
+}
 
 const emit = defineEmits<{
   (e: 'back'): void
-  (e: 'select-dates'): void
+  (e: 'select-dates', location: Location): void
   (e: 'open-full-map'): void
 }>()
 
@@ -30,81 +33,68 @@ const galleryContainer = ref<HTMLElement | null>(null)
 
 const photos = [parkingLotImage, parkingLotImage, parkingLotImage]
 const currentPhotoIndex = ref(0)
-let map: L.Map | null = null
+let map: any = null
 
-// Fix Leaflet default icon issue
-delete (L.Icon.Default.prototype as any)._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-})
-
-// Create custom marker icon with white location pin inside a circle
-const createLocationIcon = () => {
-  const svgIcon = `<svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="22" cy="22" r="22" fill="#EF4444"/>
-    <g transform="translate(16.5, 14.5)">
-      <path d="M4.70312 13.7266C0.710938 7.98438 0 7.38281 0 5.25C0 2.35156 2.32422 0 5.25 0C8.14844 0 10.5 2.35156 10.5 5.25C10.5 7.38281 9.76172 7.98438 5.76953 13.7266C5.52344 14.1094 4.94922 14.1094 4.70312 13.7266ZM5.25 7.4375C6.45312 7.4375 7.4375 6.48047 7.4375 5.25C7.4375 4.04688 6.45312 3.0625 5.25 3.0625C4.01953 3.0625 3.0625 4.04688 3.0625 5.25C3.0625 6.48047 4.01953 7.4375 5.25 7.4375Z" fill="white"/>
-    </g>
-  </svg>`
+onMounted(async () => {
+  if (!props.location) {
+    console.error('[ParkingSpotDetailsScreen] Location is null in onMounted')
+    return
+  }
   
-  // Encode SVG for data URL
-  const encodedSvg = encodeURIComponent(svgIcon)
-  const iconUrl = `data:image/svg+xml;charset=utf-8,${encodedSvg}`
-  
-  return L.icon({
-    iconUrl: iconUrl,
-    iconSize: [44, 44],
-    iconAnchor: [22, 22],
-    popupAnchor: [0, -22],
-  })
-}
+  setTimeout(async () => {
+    try {
+      await loadYandexMaps()
 
-onMounted(() => {
-  setTimeout(() => {
-    if (mapContainer.value) {
-      // Initialize map centered on location coordinates
-      map = L.map(mapContainer.value, {
-        zoomControl: false,
-        attributionControl: false,
-        dragging: false,
-        touchZoom: false,
-        doubleClickZoom: false,
-        scrollWheelZoom: false,
-        boxZoom: false,
-        keyboard: false,
-      }).setView([props.location.lat, props.location.lng], 15)
+      if (mapContainer.value && window.ymaps && props.location) {
+        // Create Yandex Map (non-interactive)
+        map = new window.ymaps.Map(mapContainer.value, {
+          center: [props.location.lat, props.location.lng],
+          zoom: 15,
+          controls: [],
+        })
 
-      // Add OpenStreetMap tiles
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '',
-        maxZoom: 19,
-      }).addTo(map)
+        // Disable all interactions
+        map.behaviors.disable(['drag', 'scrollZoom', 'dblClickZoom', 'multiTouch'])
 
-      // Add marker at location
-      const locationIcon = createLocationIcon()
-      L.marker([props.location.lat, props.location.lng], {
-        icon: locationIcon,
-      }).addTo(map)
+        // Create custom red marker with white location pin
+        const placemark = new window.ymaps.Placemark(
+          [props.location.lat, props.location.lng],
+          {},
+          {
+            iconLayout: 'default#imageWithContent',
+            iconImageHref: '',
+            iconImageSize: [44, 44],
+            iconImageOffset: [-22, -44],
+            iconContentLayout: window.ymaps.templateLayoutFactory.createClass(
+              `<svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="22" cy="22" r="22" fill="#EF4444"/>
+                <g transform="translate(16.5, 14.5)">
+                  <path d="M4.70312 13.7266C0.710938 7.98438 0 7.38281 0 5.25C0 2.35156 2.32422 0 5.25 0C8.14844 0 10.5 2.35156 10.5 5.25C10.5 7.38281 9.76172 7.98438 5.76953 13.7266C5.52344 14.1094 4.94922 14.1094 4.70312 13.7266ZM5.25 7.4375C6.45312 7.4375 7.4375 6.48047 7.4375 5.25C7.4375 4.04688 6.45312 3.0625 5.25 3.0625C4.01953 3.0625 3.0625 4.04688 3.0625 5.25C3.0625 6.48047 4.01953 7.4375 5.25 7.4375Z" fill="white"/>
+                </g>
+              </svg>`
+            ),
+          }
+        )
 
-      // Invalidate map size to ensure proper rendering
-      setTimeout(() => {
-        map?.invalidateSize()
-      }, 100)
+        map.geoObjects.add(placemark)
+      }
+    } catch (error) {
+      console.error('Failed to load Yandex Maps:', error)
     }
   }, 100)
 })
 
 onBeforeUnmount(() => {
   if (map) {
-    map.remove()
+    map.destroy()
     map = null
   }
 })
 
 const copyAddress = () => {
-  navigator.clipboard.writeText(props.location.address)
+  if (props.location) {
+    navigator.clipboard.writeText(props.location.address)
+  }
 }
 
 const handleGalleryScroll = () => {
@@ -117,7 +107,7 @@ const handleGalleryScroll = () => {
 </script>
 
 <template>
-  <section class="parking-details">
+  <section v-if="location" class="parking-details">
     <!-- Header -->
     <header class="parking-details__header">
       <button type="button" class="parking-details__back" @click="emit('back')" aria-label="Назад">
@@ -180,15 +170,15 @@ const handleGalleryScroll = () => {
       <div class="parking-details__section parking-details__rates">
         <h3 class="parking-details__rates-title">Тарифы</h3>
         <div class="parking-details__rates-list">
-          <div class="parking-details__rate-item">
+          <div v-if="location.priceHour !== '—'" class="parking-details__rate-item">
             <div class="parking-details__rate-price">{{ location.priceHour.replace('₽/ч', '').trim() }} ₽</div>
             <div class="parking-details__rate-label">за час</div>
           </div>
-          <div class="parking-details__rate-item">
+          <div v-if="location.priceDay !== '—'" class="parking-details__rate-item">
             <div class="parking-details__rate-price parking-details__rate-price--green">{{ location.priceDay.replace('₽/день', '').trim() }} ₽</div>
             <div class="parking-details__rate-label">за день</div>
           </div>
-          <div class="parking-details__rate-item">
+          <div v-if="location.priceMonth !== '—'" class="parking-details__rate-item">
             <div class="parking-details__rate-price parking-details__rate-price--purple">{{ location.priceMonth.replace('₽/мес', '').trim() }} ₽</div>
             <div class="parking-details__rate-label">за месяц</div>
           </div>
@@ -275,7 +265,7 @@ const handleGalleryScroll = () => {
 
     <!-- Footer Button -->
     <footer class="parking-details__footer">
-      <button type="button" class="parking-details__primary-button" @click="emit('select-dates')">
+      <button type="button" class="parking-details__primary-button" @click="emit('select-dates', location)">
         Выбрать даты бронирования
       </button>
     </footer>

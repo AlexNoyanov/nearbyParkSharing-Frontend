@@ -22,6 +22,10 @@ export default defineConfig({
       },
     },
   ],
+  define: {
+    // Polyfill for Node.js 'global' variable used by sockjs-client
+    global: 'globalThis',
+  },
   server: {
     /**
      * Dev-only proxy to bypass backend CORS during local development.

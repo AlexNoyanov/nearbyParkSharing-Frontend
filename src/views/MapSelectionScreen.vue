@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
+import { loadYandexMaps, getYandexSuggestions, geocodeYandexAddress } from '../services/yandexMaps'
+import { searchAddress as nominatimSearch } from '../services/nominatimGeocoder'
 
 const emit = defineEmits<{
   (e: 'back'): void
@@ -13,94 +13,192 @@ const selectedAddress = ref('')
 const selectedLatitude = ref<number | null>(null)
 const selectedLongitude = ref<number | null>(null)
 const mapContainer = ref<HTMLElement | null>(null)
-let map: L.Map | null = null
-let marker: L.Marker | null = null
+let map: any = null
+let marker: any = null
 let isLoadingAddress = ref(false)
 
-// Fix Leaflet default icon issue
-delete (L.Icon.Default.prototype as any)._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-})
+// Search suggestions state
+const isSearching = ref(false)
+const searchSuggestions = ref<Array<{ address: string; coords: [number, number] }>>([])
+const showSuggestions = ref(false)
+let suggestTimeout: number | null = null
 
-onMounted(() => {
-  // Use nextTick to ensure DOM is fully rendered
-  setTimeout(() => {
-    if (mapContainer.value) {
-      // Initialize map centered on Moscow
-      map = L.map(mapContainer.value, {
-        zoomControl: false, // We'll use custom controls
-        attributionControl: false, // Remove attribution control
-      }).setView([55.7558, 37.6173], 13)
+onMounted(async () => {
+  setTimeout(async () => {
+    try {
+      await loadYandexMaps()
 
-      // Add OpenStreetMap tiles
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '', // Empty attribution
-        maxZoom: 19,
-      }).addTo(map)
+      if (mapContainer.value && window.ymaps) {
+        // Create Yandex Map
+        map = new window.ymaps.Map(mapContainer.value, {
+          center: [55.7558, 37.6173],
+          zoom: 13,
+          controls: [],
+        })
 
-      // Invalidate map size to ensure proper rendering
-      setTimeout(() => {
-        map?.invalidateSize()
-      }, 100)
+        // Add click handler to map
+        map.events.add('click', async (e: any) => {
+          const coords = e.get('coords')
+          const lat = coords[0]
+          const lng = coords[1]
 
-      // Add click handler to map
-      map.on('click', async (e: L.LeafletMouseEvent) => {
-        const { lat, lng } = e.latlng
-        
-        // Save coordinates
-        selectedLatitude.value = lat
-        selectedLongitude.value = lng
-        
-        // Remove existing marker
-        if (marker) {
-          map?.removeLayer(marker)
-        }
+          // Save coordinates
+          selectedLatitude.value = lat
+          selectedLongitude.value = lng
 
-        // Add new marker at clicked location
-        marker = L.marker([lat, lng]).addTo(map!)
+          // Remove existing marker
+          if (marker) {
+            map.geoObjects.remove(marker)
+          }
 
-        // Get address from coordinates (reverse geocoding)
-        await getAddressFromCoordinates(lat, lng)
-      })
+          // Add new marker at clicked location
+          marker = new window.ymaps.Placemark([lat, lng])
+          map.geoObjects.add(marker)
 
-      // Don't request geolocation automatically - user can use the button
-      // This prevents the permission popup on page load
+          // Get address from coordinates (reverse geocoding)
+          await getAddressFromCoordinates(lat, lng)
+        })
+      }
+    } catch (error) {
+      console.error('Failed to load Yandex Maps:', error)
     }
   }, 100)
 })
 
 onBeforeUnmount(() => {
+  if (suggestTimeout) {
+    clearTimeout(suggestTimeout)
+  }
   if (map) {
-    map.remove()
+    if (marker) {
+      map.geoObjects.remove(marker)
+    }
+    map.destroy()
     map = null
   }
+  marker = null
 })
 
-// Reverse geocoding using Nominatim (free OpenStreetMap service)
+// Get search suggestions using Yandex Suggest API
+const getSuggestions = async () => {
+  if (!searchQuery.value.trim() || searchQuery.value.length < 2) {
+    searchSuggestions.value = []
+    showSuggestions.value = false
+    return
+  }
+
+  isSearching.value = true
+
+  try {
+    // Use Yandex Suggest
+    const suggestions = await getYandexSuggestions(searchQuery.value, 5)
+
+    if (suggestions.length === 0) {
+      searchSuggestions.value = []
+      showSuggestions.value = false
+      console.log('[MapSelection] No suggestions found, user can search directly')
+    } else {
+      searchSuggestions.value = suggestions.map(s => ({
+        address: s.address,
+        coords: s.coords,
+      }))
+      showSuggestions.value = true
+      console.log('[MapSelection] Yandex suggestions:', suggestions.length)
+    }
+  } catch (error) {
+    console.error('[MapSelection] Failed to get Yandex suggestions, falling back to Nominatim:', error)
+    // Fallback to Nominatim if Yandex fails
+    try {
+      const suggestions = await nominatimSearch(searchQuery.value, 5)
+      if (suggestions.length > 0) {
+        searchSuggestions.value = suggestions
+        showSuggestions.value = true
+      } else {
+        searchSuggestions.value = []
+        showSuggestions.value = false
+      }
+    } catch (nominatimError) {
+      console.error('[MapSelection] Nominatim fallback also failed:', nominatimError)
+      searchSuggestions.value = []
+      showSuggestions.value = false
+    }
+  } finally {
+    isSearching.value = false
+  }
+}
+
+// Debounced suggestions
+const getSuggestionsDebounced = () => {
+  if (suggestTimeout) {
+    clearTimeout(suggestTimeout)
+  }
+
+  suggestTimeout = window.setTimeout(() => {
+    getSuggestions()
+  }, 800)
+}
+
+// Handle input change
+const handleSearchInput = () => {
+  getSuggestionsDebounced()
+}
+
+// Select a suggestion
+const selectSuggestion = (suggestion: { address: string; coords: [number, number] }) => {
+  console.log('[MapSelection] Suggestion selected:', suggestion)
+
+  if (!map) {
+    console.error('[MapSelection] Map not initialized')
+    return
+  }
+
+  showSuggestions.value = false
+  searchSuggestions.value = []
+  searchQuery.value = suggestion.address
+
+  console.log('[MapSelection] Setting map center to:', suggestion.coords)
+  map.setCenter(suggestion.coords, 15)
+
+  // Remove existing marker
+  if (marker) {
+    map.geoObjects.remove(marker)
+  }
+
+  // Add marker at found location
+  marker = new window.ymaps.Placemark(suggestion.coords)
+  map.geoObjects.add(marker)
+
+  selectedAddress.value = suggestion.address
+  selectedLatitude.value = suggestion.coords[0]
+  selectedLongitude.value = suggestion.coords[1]
+
+  console.log('[MapSelection] Selection complete:', {
+    address: selectedAddress.value,
+    lat: selectedLatitude.value,
+    lng: selectedLongitude.value
+  })
+}
+
+// Close suggestions when clicking outside
+const handleClickOutside = () => {
+  showSuggestions.value = false
+}
+
+// Reverse geocoding using Yandex Geocoder
 const getAddressFromCoordinates = async (lat: number, lng: number) => {
   isLoadingAddress.value = true
   try {
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-      {
-        headers: {
-          'User-Agent': 'ParkShareApp/1.0' // Required by Nominatim
-        }
-      }
-    )
-    
-    if (!response.ok) {
-      throw new Error('Failed to get address')
+    if (!window.ymaps) {
+      throw new Error('Yandex Maps not loaded')
     }
 
-    const data = await response.json()
-    
-    if (data && data.display_name) {
-      selectedAddress.value = data.display_name
-      searchQuery.value = data.display_name
+    const geocoder = await window.ymaps.geocode([lat, lng])
+    const firstGeoObject = geocoder.geoObjects.get(0)
+
+    if (firstGeoObject) {
+      const address = firstGeoObject.getAddressLine()
+      selectedAddress.value = address
+      searchQuery.value = address
     } else {
       selectedAddress.value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`
       searchQuery.value = selectedAddress.value
@@ -118,45 +216,64 @@ const getAddressFromCoordinates = async (lat: number, lng: number) => {
 const searchAddress = async () => {
   if (!searchQuery.value.trim() || !map) return
 
-  isLoadingAddress.value = true
+  // If there are suggestions, use the first one
+  const firstSuggestion = searchSuggestions.value[0]
+  if (firstSuggestion) {
+    selectSuggestion(firstSuggestion)
+    return
+  }
+
+  isSearching.value = true
+  showSuggestions.value = false
+
   try {
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery.value)}&limit=1`,
-      {
-        headers: {
-          'User-Agent': 'ParkShareApp/1.0'
-        }
-      }
-    )
-
-    if (!response.ok) {
-      throw new Error('Failed to search address')
-    }
-
-    const data = await response.json()
-    
-    if (data && data.length > 0) {
-      const { lat, lon, display_name } = data[0]
-      const latitude = parseFloat(lat)
-      const longitude = parseFloat(lon)
-
+    // Use Yandex Geocoder
+    const result = await geocodeYandexAddress(searchQuery.value)
+    if (result) {
       // Move map to found location
-      map.setView([latitude, longitude], 15)
+      map.setCenter(result.coords, 15)
 
       // Remove existing marker
       if (marker) {
-        map.removeLayer(marker)
+        map.geoObjects.remove(marker)
       }
 
       // Add marker at found location
-      marker = L.marker([latitude, longitude]).addTo(map)
-      
-      selectedAddress.value = display_name
+      marker = new window.ymaps.Placemark(result.coords)
+      map.geoObjects.add(marker)
+
+      selectedAddress.value = result.address
+      selectedLatitude.value = result.coords[0]
+      selectedLongitude.value = result.coords[1]
+      searchQuery.value = result.address
+      return
+    }
+
+    // Fallback to Nominatim if Yandex fails
+    const results = await nominatimSearch(searchQuery.value, 1)
+    const firstResult = results[0]
+    if (firstResult) {
+      // Move map to found location
+      map.setCenter(firstResult.coords, 15)
+
+      // Remove existing marker
+      if (marker) {
+        map.geoObjects.remove(marker)
+      }
+
+      // Add marker at found location
+      marker = new window.ymaps.Placemark(firstResult.coords)
+      map.geoObjects.add(marker)
+
+      selectedAddress.value = firstResult.address
+      selectedLatitude.value = firstResult.coords[0]
+      selectedLongitude.value = firstResult.coords[1]
+      searchQuery.value = firstResult.address
     }
   } catch (error) {
-    console.error('Error searching address:', error)
+    console.error('[MapSelection] Search failed:', error)
   } finally {
-    isLoadingAddress.value = false
+    isSearching.value = false
   }
 }
 
@@ -164,16 +281,25 @@ const searchAddress = async () => {
 const handleSearchKeydown = (e: KeyboardEvent) => {
   if (e.key === 'Enter') {
     searchAddress()
+  } else if (e.key === 'Escape') {
+    showSuggestions.value = false
+    searchSuggestions.value = []
   }
 }
 
 // Zoom controls
 const zoomIn = () => {
-  map?.zoomIn()
+  if (map) {
+    const currentZoom = map.getZoom()
+    map.setZoom(currentZoom + 1)
+  }
 }
 
 const zoomOut = () => {
-  map?.zoomOut()
+  if (map) {
+    const currentZoom = map.getZoom()
+    map.setZoom(currentZoom - 1)
+  }
 }
 
 // Get current location
@@ -182,14 +308,21 @@ const getCurrentLocation = () => {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords
-        map?.setView([latitude, longitude], 15)
-        
-        if (marker) {
-          map?.removeLayer(marker)
+
+        if (map && window.ymaps) {
+          map.setCenter([latitude, longitude], 15)
+
+          if (marker) {
+            map.geoObjects.remove(marker)
+          }
+
+          marker = new window.ymaps.Placemark([latitude, longitude])
+          map.geoObjects.add(marker)
+
+          selectedLatitude.value = latitude
+          selectedLongitude.value = longitude
+          getAddressFromCoordinates(latitude, longitude)
         }
-        
-        marker = L.marker([latitude, longitude]).addTo(map!)
-        getAddressFromCoordinates(latitude, longitude)
       },
       () => {
         alert('Не удалось получить ваше местоположение')
@@ -219,14 +352,35 @@ const handleSelectAddress = () => {
           type="text"
           class="map-selection__search"
           placeholder="Поиск по адресу..."
+          @input="handleSearchInput"
           @keydown="handleSearchKeydown"
         />
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" class="map-selection__search-icon">
+        <svg v-if="!isSearching" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" class="map-selection__search-icon">
           <path d="M7.33333 12.6667C10.2789 12.6667 12.6667 10.2789 12.6667 7.33333C12.6667 4.38781 10.2789 2 7.33333 2C4.38781 2 2 4.38781 2 7.33333C2 10.2789 4.38781 12.6667 7.33333 12.6667Z" stroke="#374151" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M14 14L11.1 11.1" stroke="#374151" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
+        <div v-else class="map-selection__search-spinner"></div>
+
+        <!-- Suggestions dropdown -->
+        <div v-if="showSuggestions" class="map-selection__suggestions">
+          <div
+            v-for="(suggestion, index) in searchSuggestions"
+            :key="index"
+            class="map-selection__suggestion-item"
+            @click.stop="selectSuggestion(suggestion)"
+            @mousedown.stop
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" class="map-selection__suggestion-icon">
+              <path d="M8 0C3.58 0 0 3.58 0 8C0 12.42 8 16 8 16C8 16 16 12.42 16 8C16 3.58 12.42 0 8 0ZM8 10C6.9 10 6 9.1 6 8C6 6.9 6.9 6 8 6C9.1 6 10 6.9 10 8C10 9.1 9.1 10 8 10Z" fill="#9CA3AF"/>
+            </svg>
+            <span class="map-selection__suggestion-text">{{ suggestion.address }}</span>
+          </div>
+        </div>
       </div>
     </header>
+
+    <!-- Overlay to close suggestions -->
+    <div v-if="showSuggestions" class="map-selection__overlay" @click="handleClickOutside"></div>
 
     <div class="map-selection__map-area">
       <div ref="mapContainer" class="map-selection__map-container"></div>
@@ -285,7 +439,8 @@ const handleSelectAddress = () => {
   display: flex;
   align-items: center;
   gap: 12px;
-  z-index: 1000;
+  z-index: 2001;
+  position: relative;
 }
 
 .map-selection__back {
@@ -340,6 +495,79 @@ const handleSelectAddress = () => {
   position: absolute;
   right: 12px;
   pointer-events: none;
+}
+
+.map-selection__search-spinner {
+  position: absolute;
+  right: 12px;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #d1d5db;
+  border-top-color: #374151;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.map-selection__suggestions {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 2000;
+}
+
+.map-selection__suggestion-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.map-selection__suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.map-selection__suggestion-item:hover {
+  background-color: #f9fafb;
+}
+
+.map-selection__suggestion-item:active {
+  background-color: #f3f4f6;
+}
+
+.map-selection__suggestion-icon {
+  flex-shrink: 0;
+}
+
+.map-selection__suggestion-text {
+  flex: 1;
+  font-family: Inter, sans-serif;
+  font-size: 14px;
+  color: #1f2937;
+  line-height: 1.5;
+}
+
+.map-selection__overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1999;
 }
 
 .map-selection__map-area {
