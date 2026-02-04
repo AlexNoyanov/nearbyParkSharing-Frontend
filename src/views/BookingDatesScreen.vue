@@ -32,6 +32,8 @@ const emit = defineEmits<{
   (e: 'add-car'): void
   (e: 'change-car'): void
   (e: 'change-payment-card'): void
+  (e: 'open-terms'): void
+  (e: 'open-privacy'): void
 }>()
 
 const rentalType = ref<'hourly' | 'daily' | 'monthly'>('hourly')
@@ -41,9 +43,11 @@ const startDate = ref(today)
 const endDate = ref(today)
 const startTime = ref('10:00')
 const endTime = ref('12:00')
+const termsAccepted = ref(false)
+
 
 const canBook = computed(() => {
-  return !!(props.userCar && props.paymentCard)
+  return !!(props.userCar && props.paymentCard && termsAccepted.value)
 })
 
 // Вычисляем продолжительность на основе дат и времени
@@ -460,6 +464,23 @@ onMounted(() => {
           <div class="booking-dates__change-icon">+</div>
           <span>Выбрать карту</span>
         </button>
+      </div>
+
+      <!-- Terms and Privacy -->
+      <div class="booking-dates__terms">
+        <label class="booking-dates__terms-label">
+          <input
+            v-model="termsAccepted"
+            type="checkbox"
+            class="booking-dates__terms-checkbox"
+          />
+          <span class="booking-dates__terms-text">
+            Я согласен с
+            <button type="button" class="booking-dates__terms-link" @click="emit('open-terms')">Условиями использования</button>
+            и
+            <button type="button" class="booking-dates__terms-link" @click="emit('open-privacy')">Политикой конфиденциальности</button>
+          </span>
+        </label>
       </div>
     </div>
 
@@ -881,6 +902,51 @@ onMounted(() => {
 
 .booking-dates__book-button--disabled:active {
   background: #9CA3AF;
+}
+
+.booking-dates__terms {
+  margin-top: 16px;
+  padding: 0 2px;
+}
+
+.booking-dates__terms-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.booking-dates__terms-checkbox {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: #3B60F4;
+  cursor: pointer;
+}
+
+.booking-dates__terms-text {
+  font-family: Inter, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #6B7280;
+}
+
+.booking-dates__terms-link {
+  color: #2563EB;
+  text-decoration: none;
+}
+
+.booking-dates__terms-link:hover {
+  text-decoration: underline;
+}
+
+button.booking-dates__terms-link {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
 }
 
 .booking-dates__card-selected {

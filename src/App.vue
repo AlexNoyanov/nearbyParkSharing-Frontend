@@ -59,6 +59,8 @@ import ProfileScreen from './views/ProfileScreen.vue'
 import ChangePhoneScreen from './views/ChangePhoneScreen.vue'
 import HelpSupportScreen from './views/HelpSupportScreen.vue'
 import UnpublishSpotScreen from './views/UnpublishSpotScreen.vue'
+import TermsOfUseScreen from './views/TermsOfUseScreen.vue'
+import PrivacyPolicyScreen from './views/PrivacyPolicyScreen.vue'
 
 type Stage =
   | 'onboarding1'
@@ -107,8 +109,10 @@ type Stage =
   | 'help-support'
   | 'my-spots'
   | 'unpublish-spot'
+  | 'terms-of-use'
+  | 'privacy-policy'
 
-const stage = ref<Stage>('onboarding1')
+const stage = ref<Stage>('loading')
 const selectedParking = ref<ParkingSpot | null>(null)
 const showCancelModal = ref(false)
 const showExtendModal = ref(false)
@@ -272,7 +276,9 @@ const isNavVisible = computed(() =>
       stage.value !== 'rental-completion' &&
       stage.value !== 'booking-extended' &&
       stage.value !== 'my-spots' &&
-      stage.value !== 'unpublish-spot'
+      stage.value !== 'unpublish-spot' &&
+      stage.value !== 'terms-of-use' &&
+      stage.value !== 'privacy-policy'
     )
 
 const ensureParkingSelected = () => {
@@ -302,63 +308,36 @@ const goToOnboarding2 = async () => {
   await checkFeatureAndNavigate('onboarding2', 'onboarding2')
 }
 
-const handleOnboarding2Start = async () => {
-  // Get Telegram initData - with fallback for dev mode
+const goToOnboardingFinal = async () => {
+  await checkFeatureAndNavigate('onboarding-final', 'onboarding-final')
+}
+
+// Shared auth logic: same as "Начать использовать" button. Returns true if user has token, false otherwise.
+const runStartupAuth = async (): Promise<boolean> => {
   const getInitData = (): string => {
-    // Primary: Get from Telegram WebApp
     if (window.Telegram?.WebApp?.initData) {
       const initData = window.Telegram.WebApp.initData
-      if (initData && initData.trim().length > 0) {
-        return initData
-      }
+      if (initData && initData.trim().length > 0) return initData
     }
-    
-    // Fallback: Use dev fallback only in dev mode
     if (import.meta.env.DEV) {
       console.warn('[App] DEV MODE: Using fallback initData for local testing')
       return 'auth_date=1768317980&query_id=AAHdF6IQAAAAAN0XohDhrOrc&user=%7B%22id%22%3A111222333%2C%22first_name%22%3A%22Test%22%2C%22last_name%22%3A%22User%22%2C%22username%22%3A%22Alexander%22%2C%22language_code%22%3A%22en%22%7D&hash=77794dcb2dd54b35f40010f1dcede46444340c01530bfd17849802cd6295c527'
     }
-    
     return ''
   }
 
-  try {
-    const initData = getInitData()
-    
-    if (!initData || initData.trim().length === 0) {
-      console.error('[App] No initData available')
-      // If no initData, go to registration
-      await goToRegistration()
-      return
-    }
+  const initData = getInitData()
+  if (!initData || initData.trim().length === 0) {
+    console.log('[App] runStartupAuth: no initData')
+    return false
+  }
 
-    console.log('[App] ===== ONBOARDING2 START - LOGIN ATTEMPT =====')
-    console.log('[App] Calling authApi.login() with initData from OnboardingScreen2')
-    console.log('[App] InitData length:', initData.length)
-    console.log('[App] InitData preview:', initData.substring(0, 100) + '...')
-    
+  try {
     const loginResponse = await authApi.login(initData)
-    
-    console.log('[App] ===== LOGIN RESPONSE RECEIVED =====')
-    console.log('[App] Full login response:', JSON.stringify(loginResponse, null, 2))
-    console.log('[App] Response status:', loginResponse.status)
-    console.log('[App] Has token:', !!loginResponse.token)
-    console.log('[App] Has user:', !!loginResponse.user)
-    
-    // If login successful (status === 'OK' with token)
-    // According to Swagger: status: "OK" means user is authenticated
     if (loginResponse.status === 'OK') {
-      console.log('[App] ✓ Login successful - status is OK')
-      
-      // Save token if available
       if (loginResponse.token) {
         localStorage.setItem('auth_token', loginResponse.token)
-        console.log('[App] ✓ Token saved to localStorage')
-      } else {
-        console.warn('[App] ⚠ Warning: Login status is OK but no token received')
       }
-      
-      // Create user object if available
       if (loginResponse.user) {
         currentUser.value = {
           id: loginResponse.user.id,
@@ -366,65 +345,34 @@ const handleOnboarding2Start = async () => {
           phone: loginResponse.user.phone,
         }
         userName.value = loginResponse.user.name
-        console.log('[App] ✓ User object created:', currentUser.value)
-      } else {
-        console.warn('[App] ⚠ Warning: Login status is OK but no user data received')
-        // Try to get user from API if we have token
-        if (loginResponse.token) {
-          try {
-            const userData = await authApi.getCurrentUser()
-            currentUser.value = {
-              id: userData.id,
-              name: userData.firstName || userData.username || 'User',
-              phone: userData.phoneNumber,
-            }
-            userName.value = userData.firstName || userData.username || 'User'
-            console.log('[App] ✓ User data fetched from /api/v1/users/me')
-          } catch (e) {
-            console.warn('[App] Could not fetch user data:', e)
+      } else if (loginResponse.token) {
+        try {
+          const userData = await authApi.getCurrentUser()
+          currentUser.value = {
+            id: userData.id,
+            name: userData.firstName || userData.username || 'User',
+            phone: userData.phoneNumber,
           }
+          userName.value = userData.firstName || userData.username || 'User'
+        } catch (_e) {
+          /* ignore */
         }
       }
-      
-      // Always go to home if status is OK (user is authenticated)
-      console.log('[App] → Navigating to home screen')
-      await goHome()
-      return
+      return true
     }
-    
-    // If status is NEED_PHONE, user needs to register/verify phone
-    if (loginResponse.status === 'NEED_PHONE') {
-      console.log('[App] → User needs phone verification, going to registration')
-      await goToRegistration()
-      return
-    }
-    
-    // Default: go to registration for any other status
-    console.warn('[App] ⚠ Unknown login status:', loginResponse.status, '- going to registration')
-    await goToRegistration()
-    
-  } catch (error: any) {
-    console.error('[App] ===== LOGIN ERROR =====')
-    console.error('[App] Error object:', error)
-    console.error('[App] Error message:', error?.message)
-    console.error('[App] Error status:', error?.status)
-    
-    // Check if it's a 401 error (invalid initData signature)
-    // The error message from authApi.login will contain status code
-    const errorMessage = error?.message || ''
-    const errorString = String(errorMessage).toLowerCase()
-    const errorStatus = error?.status || 0
-    
-    if (errorStatus === 401 || errorString.includes('401') || errorString.includes('невалидная initdata') || errorString.includes('invalid initdata')) {
-      console.log('[App] → 401 error - invalid initData signature, going to registration')
-      await goToRegistration()
-      return
-    }
-    
-    // For other errors, also go to registration
-    console.log('[App] → Error during login, going to registration')
-    await goToRegistration()
+    return false
+  } catch (_error) {
+    return false
   }
+}
+
+const handleOnboarding2Start = async () => {
+  const hasToken = await runStartupAuth()
+  if (hasToken) {
+    await goHome()
+    return
+  }
+  await goToOnboardingFinal()
 }
 
 const goToLogin = async () => {
@@ -1293,6 +1241,36 @@ const handleHelpSupportBack = () => {
   }
 }
 
+const handleOpenTermsOfUse = () => {
+  previousStage.value = 'rent-booking-dates'
+  stage.value = 'terms-of-use'
+}
+
+const handleTermsOfUseBack = () => {
+  const prevStage = previousStage.value
+  if (prevStage) {
+    stage.value = prevStage
+    previousStage.value = null
+  } else {
+    stage.value = 'rent-booking-dates'
+  }
+}
+
+const handleOpenPrivacyPolicy = () => {
+  previousStage.value = 'rent-booking-dates'
+  stage.value = 'privacy-policy'
+}
+
+const handlePrivacyPolicyBack = () => {
+  const prevStage = previousStage.value
+  if (prevStage) {
+    stage.value = prevStage
+    previousStage.value = null
+  } else {
+    stage.value = 'rent-booking-dates'
+  }
+}
+
 const handleChangePhoneBack = () => {
   const prevStage = previousStage.value
   if (prevStage) {
@@ -1599,96 +1577,56 @@ watch(stage, async (newStage) => {
   }
 })
 
-// Get Telegram initData helper
-const getInitData = (): string => {
-  if (window.Telegram?.WebApp?.initData) {
-    return window.Telegram.WebApp.initData
-  }
-  return ''
-}
-
 onMounted(async () => {
-  // Set userName immediately (synchronous)
-  userName.value = window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name
-  
-  // Check authentication on app startup
-  try {
-    const initData = getInitData()
-    if (initData) {
-      const loginResponse = await authApi.login(initData)
-      
-      if (loginResponse.status === 'OK' && loginResponse.token && loginResponse.user) {
-        // User is authenticated
-        if (loginResponse.token) {
-          localStorage.setItem('auth_token', loginResponse.token)
-        }
-        
-        const user: User = {
-          id: loginResponse.user.id,
-          name: loginResponse.user.name,
-          phone: loginResponse.user.phone,
-        }
-        
-        // Use handleAuthSuccess to initialize user data
-        currentUser.value = user
-        userName.value = user.name
-        
-        // Initialize user data (bookings, requests) via handleAuthSuccess logic
-        // But skip navigation part since we handle it separately here
-        if (user.phone === '+79990001122') {
-          ownerRequests.value = [
-            {
-              id: 'owner-req-1',
-              address: 'Москва, Тверская, 15',
-              startDate: '2025-12-15',
-              endDate: '2025-12-15',
-              startTime: '10:00',
-              endTime: '14:00',
-              renterName: 'Михаил',
-              status: 'awaiting',
-            },
-          ]
-          bookings.value = []
-          bookingsCount.value = 0
-        } else {
-          ownerRequests.value = []
-          bookings.value = []
-          bookingsCount.value = 0
-        }
-        
-        // Navigate to home if authenticated
-        const onboarding1Enabled = await isFeatureEnabled('onboarding1')
-        if (onboarding1Enabled) {
-          stage.value = 'home'
-          navSelection.value = 'home'
-        } else {
-          placeholderMessage.value = featureToggles.getPlaceholderMessage('onboarding1')
-          stage.value = 'placeholder'
-        }
-        return
-      } else if (loginResponse.status === 'NEED_PHONE') {
-        // User needs phone verification - continue to onboarding/login flow
-        console.log('[App] User needs phone verification')
-      }
+  // Same action as "Начать использовать" button: run authentication first
+  loadingMessage.value = 'Проверка входа...'
+  loadingSubtitle.value = ''
+
+  const hasToken = await runStartupAuth()
+
+  if (hasToken && currentUser.value) {
+    const user = currentUser.value
+    if (user.phone === '+79990001122') {
+      ownerRequests.value = [
+        {
+          id: 'owner-req-1',
+          address: 'Москва, Тверская, 15',
+          startDate: '2025-12-15',
+          endDate: '2025-12-15',
+          startTime: '10:00',
+          endTime: '14:00',
+          renterName: 'Михаил',
+          status: 'awaiting',
+        },
+      ]
+      bookings.value = []
+      bookingsCount.value = 0
     } else {
-      // No Telegram initData - continue to normal flow
-      console.log('[App] No Telegram initData available')
+      ownerRequests.value = []
+      bookings.value = []
+      bookingsCount.value = 0
     }
-  } catch (error) {
-    console.error('[App] Error checking authentication:', error)
-    // Continue to normal flow on error
+    const onboarding1Enabled = await isFeatureEnabled('onboarding1')
+    if (onboarding1Enabled) {
+      stage.value = 'home'
+      navSelection.value = 'home'
+    } else {
+      placeholderMessage.value = featureToggles.getPlaceholderMessage('onboarding1')
+      stage.value = 'placeholder'
+    }
+    return
   }
-  
-  // Check feature toggle asynchronously after component has rendered
+
+  // No token: run onboarding scenario (onboarding1 → onboarding2 → …)
+  stage.value = 'onboarding1'
   try {
-  const onboarding1Enabled = await isFeatureEnabled('onboarding1')
-  if (!onboarding1Enabled) {
-    placeholderMessage.value = featureToggles.getPlaceholderMessage('onboarding1')
-    stage.value = 'placeholder'
+    const onboarding1Enabled = await isFeatureEnabled('onboarding1')
+    if (!onboarding1Enabled) {
+      placeholderMessage.value = featureToggles.getPlaceholderMessage('onboarding1')
+      stage.value = 'placeholder'
     }
   } catch (error) {
     console.error('Error checking feature toggle:', error)
-    // Keep default stage 'onboarding1' if check fails
   }
 })
 </script>
@@ -1876,6 +1814,18 @@ onMounted(async () => {
           @add-car="handleAddCar"
           @change-car="handleChangeCar"
           @change-payment-card="handleChangePaymentCard"
+          @open-terms="handleOpenTermsOfUse"
+          @open-privacy="handleOpenPrivacyPolicy"
+        />
+
+        <TermsOfUseScreen
+          v-else-if="stage === 'terms-of-use'"
+          @back="handleTermsOfUseBack"
+        />
+
+        <PrivacyPolicyScreen
+          v-else-if="stage === 'privacy-policy'"
+          @back="handlePrivacyPolicyBack"
         />
         
         <AddCarScreen
