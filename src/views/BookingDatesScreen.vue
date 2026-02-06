@@ -177,23 +177,38 @@ watch([startTime, endTime, startDate, endDate], () => {
   }
 })
 
+// Парсинг числа из строки вида "250₽/ч" или "1800₽/день"
+const parsePrice = (str: string): number => {
+  const num = str.replace(/\s/g, '').replace(/[^\d]/g, '')
+  return parseInt(num, 10) || 0
+}
+
 const totalPrice = computed(() => {
+  const start = new Date(`${startDate.value}T${startTime.value}`)
+  const end = new Date(`${endDate.value}T${endTime.value}`)
+  if (end <= start) return '₽0'
+
+  const diffMs = end.getTime() - start.getTime()
+  const totalHours = diffMs / (1000 * 60 * 60)
+
   if (rentalType.value === 'hourly') {
-    const pricePerHour = parseInt(props.location.priceHour.replace('₽/ч', '').trim())
-    // Вычисляем количество часов из продолжительности
-    const start = new Date(`${startDate.value}T${startTime.value}`)
-    const end = new Date(`${endDate.value}T${endTime.value}`)
-    if (end <= start) return `₽0`
-    
-    const diffMs = end.getTime() - start.getTime()
-    const diffHours = Math.ceil(diffMs / (1000 * 60 * 60)) // Округляем вверх до целых часов
+    const pricePerHour = parsePrice(props.location.priceHour)
+    const diffHours = Math.ceil(totalHours)
     const total = pricePerHour * diffHours
     return `₽${total}`
-  } else if (rentalType.value === 'daily') {
-    return props.location.priceDay
-  } else {
-    return props.location.priceMonth
   }
+
+  if (rentalType.value === 'daily') {
+    const pricePerHour = parsePrice(props.location.priceHour)
+    const pricePerDay = parsePrice(props.location.priceDay)
+    const fullDays = Math.floor(totalHours / 24)
+    const remainingHours = totalHours - fullDays * 24
+    const chargeableHours = remainingHours > 0 ? Math.ceil(remainingHours) : 0
+    const total = fullDays * pricePerDay + chargeableHours * pricePerHour
+    return `₽${total}`
+  }
+
+  return props.location.priceMonth
 })
 
 const getRentalTypePrice = (type: 'hourly' | 'daily' | 'monthly') => {
