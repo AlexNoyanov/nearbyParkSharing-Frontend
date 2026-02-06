@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { loadYandexMaps, createParkingPlacemark, createSimpleParkingPlacemark } from '../services/yandexMaps'
+import { MONTHLY_RENT_ENABLED } from '../services/rentConfig'
 import parkingLotImage from '../assets/images/parkinglot.jpg'
 import { spotsApi, type SpotSearchItemResponse, type RentType } from '../services/spotsApi'
 import type { ParkingSpot } from '../data/parkings'
@@ -102,19 +103,24 @@ const spotToLocation = (spot: SpotSearchItemResponse): Location => {
   }
 }
 
-// Get current rentType
+// Get current rentType (с учётом отключения помесячной аренды)
 const getCurrentRentType = (): RentType => {
-  if (hourlyRent.value && !dailyRent.value && !monthlyRent.value) return 'HOURLY'
-  if (monthlyRent.value && !hourlyRent.value && !dailyRent.value) return 'MONTHLY'
-  if (dailyRent.value && !hourlyRent.value && !monthlyRent.value) return 'DAILY'
+  const monthlyAllowed = MONTHLY_RENT_ENABLED
+  if (hourlyRent.value && !dailyRent.value && (!monthlyAllowed || !monthlyRent.value)) return 'HOURLY'
+  if (monthlyAllowed && monthlyRent.value && !hourlyRent.value && !dailyRent.value) return 'MONTHLY'
+  if (dailyRent.value && !hourlyRent.value && (!monthlyAllowed || !monthlyRent.value)) return 'DAILY'
   if (hourlyRent.value) return 'HOURLY'
   if (dailyRent.value) return 'DAILY'
-  if (monthlyRent.value) return 'MONTHLY'
+  if (monthlyAllowed && monthlyRent.value) return 'MONTHLY'
   return 'HOURLY'
 }
 
 // Update rentType when toggles change
 watch([hourlyRent, dailyRent, monthlyRent], () => {
+  // Принудительно выключаем помесячную аренду, если она глобально отключена
+  if (!MONTHLY_RENT_ENABLED && monthlyRent.value) {
+    monthlyRent.value = false
+  }
   rentType.value = getCurrentRentType()
 })
 
@@ -760,7 +766,7 @@ const handleFilterTouchEnd = () => {
 
           <div class="search-screen__filter-section">
             <h3 class="search-screen__filter-section-title">Тип аренды</h3>
-
+      
             <div class="search-screen__availability-item">
               <div class="search-screen__availability-content">
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -788,8 +794,11 @@ const handleFilterTouchEnd = () => {
                 <span class="search-screen__toggle-slider"></span>
               </label>
             </div>
-
-            <div class="search-screen__availability-item">
+      
+            <div
+              v-if="MONTHLY_RENT_ENABLED"
+              class="search-screen__availability-item"
+            >
               <div class="search-screen__availability-content">
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <rect x="3" y="5" width="14" height="12" rx="1" stroke="#2563EB" stroke-width="1.5"/>

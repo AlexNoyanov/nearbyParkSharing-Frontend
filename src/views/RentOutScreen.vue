@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { mediaApi, type MediaUploadResponse } from '../services/mediaApi'
 import { spotsApi, type CreateSpotRequest } from '../services/spotsApi'
+import { MONTHLY_RENT_ENABLED } from '../services/rentConfig'
 
 const props = defineProps<{
   selectedAddress?: string
@@ -455,10 +456,10 @@ const canSubmit = computed(() => {
   // Проверяем, что для каждого активного типа аренды заполнена стоимость
   const hourlyPriceValid = !hourlyRent.value || pricePerHour.value.trim() !== ''
   const dailyPriceValid = !dailyRent.value || pricePerDay.value.trim() !== ''
-  const monthlyPriceValid = !monthlyRent.value || pricePerMonth.value.trim() !== ''
+  const monthlyPriceValid = !MONTHLY_RENT_ENABLED || !monthlyRent.value || pricePerMonth.value.trim() !== ''
   
   // Проверяем, что хотя бы один тип аренды выбран
-  const hasRentType = hourlyRent.value || dailyRent.value || monthlyRent.value
+  const hasRentType = hourlyRent.value || dailyRent.value || (MONTHLY_RENT_ENABLED && monthlyRent.value)
   
   return hasAddress && hasRentType && hourlyPriceValid && dailyPriceValid && monthlyPriceValid
 })
@@ -522,7 +523,7 @@ const handleSubmit = async () => {
       scheduleType,
       hourlyEnabled: hourlyRent.value,
       dailyEnabled: dailyRent.value,
-      monthlyEnabled: monthlyRent.value,
+      monthlyEnabled: MONTHLY_RENT_ENABLED ? monthlyRent.value : false,
       photos: photoUrls,
     }
     
@@ -533,7 +534,7 @@ const handleSubmit = async () => {
     if (dailyRent.value && pricePerDay.value) {
       requestData.pricePerDay = parseFloat(pricePerDay.value) || 0
     }
-    if (monthlyRent.value && pricePerMonth.value) {
+    if (MONTHLY_RENT_ENABLED && monthlyRent.value && pricePerMonth.value) {
       requestData.pricePerMonth = parseFloat(pricePerMonth.value) || 0
     }
     
@@ -551,7 +552,7 @@ const handleSubmit = async () => {
       if (fromDate.value) {
         requestData.availableDateFrom = fromDate.value
       }
-      if (toDate.value && !(hourlyRent.value && !dailyRent.value && !monthlyRent.value)) {
+      if (toDate.value && !(hourlyRent.value && !dailyRent.value && (!MONTHLY_RENT_ENABLED || !monthlyRent.value))) {
         // Only add toDate if not hourly-only (hourly uses single date)
         requestData.availableDateTo = toDate.value
       }
@@ -619,7 +620,7 @@ const handleSubmit = async () => {
     if (dailyRent.value && (!pricePerDay.value || parseFloat(pricePerDay.value) <= 0)) {
       throw new Error('Укажите стоимость посуточной аренды')
     }
-    if (monthlyRent.value && (!pricePerMonth.value || parseFloat(pricePerMonth.value) <= 0)) {
+    if (MONTHLY_RENT_ENABLED && monthlyRent.value && (!pricePerMonth.value || parseFloat(pricePerMonth.value) <= 0)) {
       throw new Error('Укажите стоимость помесячной аренды')
     }
     
@@ -831,7 +832,10 @@ const handleRetry = () => {
               <span class="rent-out__toggle-slider"></span>
             </label>
           </div>
-          <div class="rent-out__availability-item">
+          <div
+            v-if="MONTHLY_RENT_ENABLED"
+            class="rent-out__availability-item"
+          >
             <div class="rent-out__availability-content">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <rect x="3" y="5" width="14" height="12" rx="1" stroke="#2563EB" stroke-width="1.5"/>
@@ -898,7 +902,7 @@ const handleRetry = () => {
               placeholder="₽"
             />
           </div>
-          <div class="rent-out__price-field" v-if="monthlyRent">
+          <div class="rent-out__price-field" v-if="MONTHLY_RENT_ENABLED && monthlyRent">
             <label class="rent-out__price-label">За месяц</label>
             <input
               :value="getPriceDisplayValue(pricePerMonth)"
@@ -936,11 +940,11 @@ const handleRetry = () => {
         </div>
 
         <!-- Правило 1: Показываем полный календарь когда один из тогглов активен и постоянная доступность НЕ активна -->
-        <div v-if="(hourlyRent || dailyRent || monthlyRent) && !permanentAvailability" class="rent-out__period-details">
+        <div v-if="(hourlyRent || dailyRent || (MONTHLY_RENT_ENABLED && monthlyRent)) && !permanentAvailability" class="rent-out__period-details">
           <h3 class="rent-out__subsection-title">Календарный период доступности</h3>
           
           <!-- Для почасовой аренды - одно поле даты, дни недели и время -->
-          <template v-if="hourlyRent && !dailyRent && !monthlyRent">
+          <template v-if="hourlyRent && !dailyRent && (!MONTHLY_RENT_ENABLED || !monthlyRent)">
             <div class="rent-out__date-fields">
               <div class="rent-out__date-field">
                 <label class="rent-out__date-label">Дата</label>
@@ -982,7 +986,7 @@ const handleRetry = () => {
           </template>
 
           <!-- Для помесячной аренды - только даты без времени -->
-          <template v-else-if="monthlyRent">
+          <template v-else-if="MONTHLY_RENT_ENABLED && monthlyRent">
             <div class="rent-out__date-fields">
               <div class="rent-out__date-field">
                 <label class="rent-out__date-label">С даты</label>
@@ -1031,7 +1035,7 @@ const handleRetry = () => {
                 </button>
               </div>
 
-              <div v-if="hourlyRent || (dailyRent && !monthlyRent)" class="rent-out__time-section">
+              <div v-if="hourlyRent || (dailyRent && (!MONTHLY_RENT_ENABLED || !monthlyRent))" class="rent-out__time-section">
                 <h3 class="rent-out__subsection-title">Время доступности</h3>
                 <div class="rent-out__time-fields">
                   <div class="rent-out__time-field">

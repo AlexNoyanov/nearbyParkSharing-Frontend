@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { loadYandexMaps, createParkingPlacemark, createSimpleParkingPlacemark } from '../services/yandexMaps'
+import { MONTHLY_RENT_ENABLED } from '../services/rentConfig'
 import parkingLotImage from '../assets/images/parkinglot.jpg'
 import { spotsApi, type SpotSearchItemResponse } from '../services/spotsApi'
 import { getYandexSuggestions, geocodeYandexAddress } from '../services/yandexMaps'
@@ -99,10 +100,11 @@ const getCurrentRentType = (): 'HOURLY' | 'DAILY' | 'MONTHLY' => {
   console.log('[RentOutMap] getCurrentRentType called:', {
     hourlyRent: hourlyRent.value,
     dailyRent: dailyRent.value,
-    monthlyRent: monthlyRent.value
+    monthlyRent: monthlyRent.value,
+    monthlyEnabled: MONTHLY_RENT_ENABLED,
   })
   if (hourlyRent.value === true) return 'HOURLY'
-  if (monthlyRent.value === true) return 'MONTHLY'
+  if (MONTHLY_RENT_ENABLED && monthlyRent.value === true) return 'MONTHLY'
   // Default to DAILY
   return 'DAILY'
 }
@@ -532,6 +534,11 @@ watch(dailyRent, (isDaily) => {
 })
 
 watch(monthlyRent, (isMonthly) => {
+  if (!MONTHLY_RENT_ENABLED && isMonthly) {
+    // Глобально отключено — сразу сбрасываем
+    monthlyRent.value = false
+    return
+  }
   if (isMonthly) {
     hourlyRent.value = false
     dailyRent.value = false
@@ -797,7 +804,7 @@ watch(monthlyRent, (isMonthly) => {
               <span class="rent-out-map__toggle-slider"></span>
             </label>
           </div>
-
+      
           <div class="rent-out-map__availability-item">
             <div class="rent-out-map__availability-content">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -811,8 +818,11 @@ watch(monthlyRent, (isMonthly) => {
               <span class="rent-out-map__toggle-slider"></span>
             </label>
           </div>
-
-          <div class="rent-out-map__availability-item">
+      
+          <div
+            v-if="MONTHLY_RENT_ENABLED"
+            class="rent-out-map__availability-item"
+          >
             <div class="rent-out-map__availability-content">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <rect x="3" y="5" width="14" height="12" rx="1" stroke="#2563EB" stroke-width="1.5"/>

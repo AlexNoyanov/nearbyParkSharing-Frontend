@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { MONTHLY_RENT_ENABLED } from '../services/rentConfig'
 
 const props = defineProps<{
   request: {
@@ -193,7 +194,10 @@ onMounted(() => {
         </div>
       </article>
 
-      <article class="owner-booking-confirmed__expandable">
+      <article
+        v-if="MONTHLY_RENT_ENABLED"
+        class="owner-booking-confirmed__expandable"
+      >
         <button
           type="button"
           class="owner-booking-confirmed__expandable-header"

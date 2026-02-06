@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import TimePickerScroll from '../components/TimePickerScroll.vue'
+import { MONTHLY_RENT_ENABLED } from '../services/rentConfig'
 
 type Location = {
   id: string
@@ -263,6 +264,7 @@ onMounted(() => {
             </div>
           </button>
           <button
+            v-if="MONTHLY_RENT_ENABLED"
             type="button"
             class="booking-dates__rental-type"
             :class="{ 'booking-dates__rental-type--active': rentalType === 'monthly' }"
@@ -310,7 +312,7 @@ onMounted(() => {
           </template>
 
           <!-- Для помесячной аренды - только даты без времени -->
-          <template v-else-if="rentalType === 'monthly'">
+          <template v-else-if="MONTHLY_RENT_ENABLED && rentalType === 'monthly'">
             <div class="booking-dates__date-fields">
               <div class="booking-dates__date-field">
                 <label class="booking-dates__date-label">С даты</label>
@@ -397,7 +399,7 @@ onMounted(() => {
         <span>Суточный тариф- оплата за полные сутки, даже если вы приедете и уедете ранее</span>
       </div>
 
-      <div v-if="rentalType === 'monthly'" class="booking-dates__info">
+      <div v-if="MONTHLY_RENT_ENABLED && rentalType === 'monthly'" class="booking-dates__info">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M8 0C3.58 0 0 3.58 0 8C0 12.42 3.58 16 8 16C12.42 16 16 12.42 16 8C16 3.58 12.42 0 8 0ZM8 12C7.45 12 7 11.55 7 11C7 10.45 7.45 10 8 10C8.55 10 9 10.45 9 11C9 11.55 8.55 12 8 12ZM9 9H7V4H9V9Z" fill="#16A34A"/>
         </svg>
