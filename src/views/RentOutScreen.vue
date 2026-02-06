@@ -832,10 +832,7 @@ const handleRetry = () => {
               <span class="rent-out__toggle-slider"></span>
             </label>
           </div>
-          <div
-            v-if="MONTHLY_RENT_ENABLED"
-            class="rent-out__availability-item"
-          >
+          <div class="rent-out__availability-item">
             <div class="rent-out__availability-content">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <rect x="3" y="5" width="14" height="12" rx="1" stroke="#2563EB" stroke-width="1.5"/>
@@ -848,7 +845,10 @@ const handleRetry = () => {
               <span class="rent-out__toggle-slider"></span>
             </label>
           </div>
-          <div class="rent-out__availability-item">
+          <div
+            v-if="MONTHLY_RENT_ENABLED"
+            class="rent-out__availability-item"
+          >
             <div class="rent-out__availability-content">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <rect x="3" y="5" width="14" height="12" rx="1" stroke="#2563EB" stroke-width="1.5"/>
