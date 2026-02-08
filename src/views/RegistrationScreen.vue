@@ -77,9 +77,21 @@ const handleInputFocus = (e: Event) => {
   })
 }
 
+// Валидация имени: только буквы (любой язык), пробелы, дефис, апостроф; минимум 2 символа
+const isNameValid = (value: string): boolean => {
+  const trimmed = value.trim()
+  if (trimmed.length < 2) return false
+  return /^[\p{L}\s\-']+$/u.test(trimmed)
+}
+
 const handleSubmit = async () => {
-  if (!name.value.trim()) {
+  const trimmedName = name.value.trim()
+  if (!trimmedName) {
     error.value = 'Введите ваше имя'
+    return
+  }
+  if (!isNameValid(name.value)) {
+    error.value = 'Имя может содержать только буквы, пробелы, дефис или апостроф. Минимум 2 символа.'
     return
   }
 
@@ -98,7 +110,7 @@ const handleSubmit = async () => {
   try {
     // Navigate to call verification
     console.log('[RegistrationScreen] Navigating to call verification with phone:', fullPhone, 'name:', name.value.trim())
-    props.onCallVerification(name.value.trim(), fullPhone)
+    props.onCallVerification(trimmedName, fullPhone)
   } catch (err) {
     console.error('[RegistrationScreen] Error:', err)
     error.value = 'Ошибка. Попробуйте еще раз.'
@@ -175,7 +187,7 @@ const handleSubmit = async () => {
           type="button"
           class="registration-screen__button registration-screen__button--primary"
           @click="handleSubmit"
-          :disabled="isLoading || !name.trim() || !phone || phone.length < 18"
+          :disabled="isLoading || !name.trim() || !isNameValid(name) || !phone || phone.length < 18"
         >
           {{ isLoading ? 'Загрузка...' : 'Зарегистрироваться' }}
         </button>

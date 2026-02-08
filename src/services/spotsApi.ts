@@ -14,7 +14,7 @@ export interface CreateSpotRequest {
   pricePerHour?: number
   pricePerDay?: number
   pricePerMonth?: number
-  scheduleType: 'ALWAYS' | 'SCHEDULED'
+  scheduleType: 'ALWAYS' | 'CUSTOM'
   availableFrom?: string // HH:mm format
   availableTo?: string // HH:mm format
   availableDays?: number[] // 1-7 (Monday-Sunday)
@@ -52,7 +52,7 @@ export interface MySpot {
   pricePerHour?: number
   pricePerDay?: number
   pricePerMonth?: number
-  scheduleType: 'ALWAYS' | 'SCHEDULED'
+  scheduleType: 'ALWAYS' | 'CUSTOM'
   availableFrom?: string
   availableTo?: string
   availableDays?: number[]

@@ -2335,29 +2335,33 @@ onMounted(async () => {
           @confirm="handleBookingConfirmation"
         />
 
-        <RentOutScreen
-          v-else-if="stage === 'rent'"
-          :selected-address="selectedAddress"
-          :selected-latitude="selectedLatitude || undefined"
-          :selected-longitude="selectedLongitude || undefined"
-          :current-user="currentUser"
-          :spot-id="editingSpotId || undefined"
-          @back="goHome"
-          @success="() => { editingSpotId = null; stage = 'rent-success' }"
-          @open-map="() => stage = 'map-selection'"
-          @update-address="(addr) => { selectedAddress = addr }"
-        />
-
-        <MapSelectionScreen
-          v-else-if="stage === 'map-selection'"
-          @back="() => stage = 'rent'"
-          @select-address="(addr, lat, lng) => { 
-            selectedAddress = addr; 
-            selectedLatitude = lat || null; 
-            selectedLongitude = lng || null; 
-            stage = 'rent'; 
-          }"
-        />
+        <template v-else-if="stage === 'rent' || stage === 'map-selection'">
+          <div class="app__rent-flow">
+          <RentOutScreen
+            v-show="stage === 'rent'"
+            :selected-address="selectedAddress"
+            :selected-latitude="selectedLatitude || undefined"
+            :selected-longitude="selectedLongitude || undefined"
+            :current-user="currentUser"
+            :spot-id="editingSpotId || undefined"
+            @back="goHome"
+            @success="() => { editingSpotId = null; stage = 'rent-success' }"
+            @open-map="() => stage = 'map-selection'"
+            @update-address="(addr) => { selectedAddress = addr }"
+          />
+          <div v-show="stage === 'map-selection'" class="app__rent-flow-map">
+          <MapSelectionScreen
+            @back="() => stage = 'rent'"
+            @select-address="(addr, lat, lng) => { 
+              selectedAddress = addr; 
+              selectedLatitude = lat || null; 
+              selectedLongitude = lng || null; 
+              stage = 'rent'; 
+            }"
+          />
+          </div>
+          </div>
+        </template>
 
         <ProfileScreen
           v-else-if="stage === 'profile'"
@@ -2547,6 +2551,20 @@ onMounted(async () => {
 .app__content:has(.search-screen),
 .app__content:has(.rent-out) {
   padding-bottom: 0;
+}
+
+.app__rent-flow {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.app__rent-flow-map {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
 }
 
 .app__nav {

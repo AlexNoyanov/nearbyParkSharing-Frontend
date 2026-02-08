@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { mediaApi, type MediaUploadResponse } from '../services/mediaApi'
 import { spotsApi, type CreateSpotRequest } from '../services/spotsApi'
 import { MONTHLY_RENT_ENABLED } from '../services/rentConfig'
+import { searchAddress as geocodeAddress } from '../services/nominatimGeocoder'
 
 const props = defineProps<{
   selectedAddress?: string
@@ -50,9 +51,11 @@ const vehicleTypes = ref([
 
 const toggleVehicleType = (id: string) => {
   const type = vehicleTypes.value.find(t => t.id === id)
-  if (type) {
-    type.selected = !type.selected
-  }
+  if (!type) return
+  const selectedCount = vehicleTypes.value.filter(t => t.selected).length
+  // В каждом окне как минимум один чекбокс всегда должен быть активен
+  if (type.selected && selectedCount <= 1) return
+  type.selected = !type.selected
 }
 
 // Photos
@@ -285,20 +288,22 @@ const toggleDay = (day: string) => {
   }
 }
 
-// Place features
+// Place features (как минимум один всегда выбран)
 const features = ref([
   { id: 'covered', label: 'Крытая парковка', icon: 'house', selected: false },
   { id: 'security', label: 'Охрана', icon: 'shield', selected: false },
   { id: 'ev', label: 'Электрозарядка', icon: 'lightning', selected: false },
   { id: 'courtyard', label: 'Парковка во дворе', icon: 'building', selected: false },
-  { id: 'private', label: 'Частная территория', icon: 'lock', selected: false },
+  { id: 'private', label: 'Частная территория', icon: 'lock', selected: true },
 ])
 
 const toggleFeature = (id: string) => {
   const feature = features.value.find(f => f.id === id)
-  if (feature) {
-    feature.selected = !feature.selected
-  }
+  if (!feature) return
+  const selectedCount = features.value.filter(f => f.selected).length
+  // В каждом окне как минимум один чекбокс всегда должен быть активен
+  if (feature.selected && selectedCount <= 1) return
+  feature.selected = !feature.selected
 }
 
 // Description
@@ -387,7 +392,8 @@ const loadSpotData = async () => {
       toDate.value = spot.availableDateTo
     }
     
-    // Fill features
+    // Fill features (сброс, затем из spot; минимум один должен быть выбран)
+    features.value.forEach(f => { f.selected = false })
     if (spot.covered) {
       const coveredFeature = features.value.find(f => f.id === 'covered')
       if (coveredFeature) coveredFeature.selected = true
@@ -407,6 +413,10 @@ const loadSpotData = async () => {
     if (spot.privateTerritory) {
       const privateFeature = features.value.find(f => f.id === 'private')
       if (privateFeature) privateFeature.selected = true
+    }
+    if (!features.value.some(f => f.selected)) {
+      const first = features.value[0]
+      if (first) first.selected = true
     }
     
     // Fill description and access guide
@@ -511,7 +521,7 @@ const handleSubmit = async () => {
     const availableDays = selectedDays.value.map(day => dayMap[day] || 0).filter(d => d > 0)
     
     // Determine schedule type
-    const scheduleType: 'ALWAYS' | 'SCHEDULED' = permanentAvailability.value ? 'ALWAYS' : 'SCHEDULED'
+    const scheduleType: 'ALWAYS' | 'CUSTOM' = permanentAvailability.value ? 'ALWAYS' : 'CUSTOM'
     
     // Build request data
     // Coordinates will be set below from spotLatitude/spotLongitude or props
@@ -539,7 +549,7 @@ const handleSubmit = async () => {
     }
     
     // Add schedule details if not always available
-    if (scheduleType === 'SCHEDULED') {
+    if (scheduleType === 'CUSTOM') {
       if (fromTime.value) {
         requestData.availableFrom = fromTime.value
       }
@@ -598,19 +608,44 @@ const handleSubmit = async () => {
     if (!requestData.address || requestData.address.trim() === '') {
       throw new Error('Адрес обязателен для заполнения')
     }
+    if (!vehicleTypes.value.some(t => t.selected)) {
+      throw new Error('Выберите хотя бы один тип автомобиля')
+    }
+    if (!features.value.some(f => f.selected)) {
+      throw new Error('Выберите хотя бы одну особенность места')
+    }
     
-    // Use coordinates from loaded spot data, props, or fallback
+    // Use coordinates from loaded spot data, props, geocoding manual address, or fallback
     if (spotLatitude.value && spotLongitude.value) {
       requestData.latitude = spotLatitude.value
       requestData.longitude = spotLongitude.value
     } else if (props.selectedLatitude && props.selectedLongitude) {
       requestData.latitude = props.selectedLatitude
       requestData.longitude = props.selectedLongitude
-    } else if (!requestData.latitude || !requestData.longitude || requestData.latitude === 0 || requestData.longitude === 0) {
-      console.warn('[RentOut] Coordinates not provided, using default Moscow coordinates')
-      // Use Moscow center as fallback (user should ideally select on map)
-      requestData.latitude = 55.7558
-      requestData.longitude = 37.6173
+    } else {
+      // Адрес введён вручную — геокодируем, чтобы не подставлять центр Москвы
+      if (requestData.address.trim()) {
+        try {
+          const results = await geocodeAddress(requestData.address.trim(), 1)
+          const first = results[0]
+          if (first?.coords && first.coords.length >= 2) {
+            requestData.latitude = first.coords[0]
+            requestData.longitude = first.coords[1]
+          } else {
+            console.warn('[RentOut] Geocoding returned no results, using default Moscow coordinates')
+            requestData.latitude = 55.7558
+            requestData.longitude = 37.6173
+          }
+        } catch (e) {
+          console.warn('[RentOut] Geocoding failed:', e, '- using default Moscow coordinates')
+          requestData.latitude = 55.7558
+          requestData.longitude = 37.6173
+        }
+      } else {
+        console.warn('[RentOut] Coordinates not provided, using default Moscow coordinates')
+        requestData.latitude = 55.7558
+        requestData.longitude = 37.6173
+      }
     }
     
     // Validate that at least one price is set for enabled rent types
