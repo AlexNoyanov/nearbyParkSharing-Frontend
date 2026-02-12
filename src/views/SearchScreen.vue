@@ -301,7 +301,7 @@ const loadSpotsFromApiDebounced = () => {
   }, 500) // Wait 500ms after user stops moving the map
 }
 
-// Load spots from API
+// Load spots from API — по видимой области карты (bbox), чтобы отображались все места на экране, а не только в центре
 const loadSpotsFromApi = async () => {
   if (!map) return
 
@@ -311,48 +311,67 @@ const loadSpotsFromApi = async () => {
   isLoadingSpots.value = true
 
   try {
-    const center = map.getCenter()
-    const centerLat = Number(center[0].toFixed(6))
-    const centerLng = Number(center[1].toFixed(6))
+    const bounds = map.getBounds()
+    if (bounds && Array.isArray(bounds[0]) && Array.isArray(bounds[1])) {
+      const minLat = Number(bounds[0][0])
+      const minLng = Number(bounds[0][1])
+      const maxLat = Number(bounds[1][0])
+      const maxLng = Number(bounds[1][1])
+      const zoom = map.getZoom()
+      console.log('[SearchScreen] Map bounds (bbox):', { minLat, maxLat, minLng, maxLng, zoom })
 
-    // Dynamic radius based on zoom level
-    const zoom = map.getZoom()
-    const radiusMeters = zoom >= 15 ? 1500 : zoom >= 13 ? 3000 : zoom >= 11 ? 5000 : 10000
-
-    console.log('[SearchScreen] Map center:', { centerLat, centerLng, radiusMeters, zoom })
-
-    const searchParams: Parameters<typeof spotsApi.searchSpots>[0] = {
-      centerLat,
-      centerLng,
-      radiusMeters,
-    }
-
-    // При первом открытии: только availableNow + координаты
-    // После применения фильтров: rentType + даты/время
-    if (!filtersApplied.value) {
-      searchParams.availableNow = true
-      console.log('[SearchScreen] ✓ Default mode: availableNow=true + coordinates only')
-    } else {
-      const currentRentType = getCurrentRentType()
-      searchParams.rentType = currentRentType
-
-      if (currentRentType === 'HOURLY') {
-        searchParams.date = filterDate.value
-        searchParams.timeFrom = filterTimeFrom.value
-        searchParams.timeTo = filterTimeTo.value
-      } else {
-        searchParams.dateFrom = filterDateFrom.value
-        searchParams.dateTo = filterDateTo.value
+      const searchParams: Parameters<typeof spotsApi.searchSpots>[0] = {
+        minLat,
+        maxLat,
+        minLng,
+        maxLng,
       }
-      console.log('[SearchScreen] ✓ Filters mode: rentType + dates/time')
+      if (!filtersApplied.value) {
+        searchParams.availableNow = true
+      } else {
+        const currentRentType = getCurrentRentType()
+        searchParams.rentType = currentRentType
+        if (currentRentType === 'HOURLY') {
+          searchParams.date = filterDate.value
+          searchParams.timeFrom = filterTimeFrom.value
+          searchParams.timeTo = filterTimeTo.value
+        } else {
+          searchParams.dateFrom = filterDateFrom.value
+          searchParams.dateTo = filterDateTo.value
+        }
+      }
+      console.log('[SearchScreen] Final search params (bbox):', searchParams)
+      const spots = await spotsApi.searchSpots(searchParams)
+      console.log('[SearchScreen] Spots loaded:', spots.length)
+      apiSpots.value = spots.map(spotToLocation)
+    } else {
+      // Fallback: center + увеличенный радиус, чтобы не терять места по краям
+      const center = map.getCenter()
+      const centerLat = Number(center[0].toFixed(6))
+      const centerLng = Number(center[1].toFixed(6))
+      const zoom = map.getZoom()
+      const radiusMeters = zoom >= 15 ? 2500 : zoom >= 13 ? 5000 : zoom >= 11 ? 8000 : 15000
+      const searchParams: Parameters<typeof spotsApi.searchSpots>[0] = {
+        centerLat,
+        centerLng,
+        radiusMeters,
+      }
+      if (!filtersApplied.value) searchParams.availableNow = true
+      else {
+        const currentRentType = getCurrentRentType()
+        searchParams.rentType = currentRentType
+        if (currentRentType === 'HOURLY') {
+          searchParams.date = filterDate.value
+          searchParams.timeFrom = filterTimeFrom.value
+          searchParams.timeTo = filterTimeTo.value
+        } else {
+          searchParams.dateFrom = filterDateFrom.value
+          searchParams.dateTo = filterDateTo.value
+        }
+      }
+      const spots = await spotsApi.searchSpots(searchParams)
+      apiSpots.value = spots.map(spotToLocation)
     }
-
-    console.log('[SearchScreen] Final search params:', searchParams)
-
-    const spots = await spotsApi.searchSpots(searchParams)
-
-    console.log('[SearchScreen] Spots loaded:', spots.length)
-    apiSpots.value = spots.map(spotToLocation)
   } catch (error) {
     console.error('[SearchScreen] Failed to load spots:', error)
     apiSpots.value = []

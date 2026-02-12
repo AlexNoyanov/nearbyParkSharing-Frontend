@@ -128,7 +128,24 @@ const isRegistrationFlow = ref<boolean>(false)
 const selectedAddress = ref<string>('')
 const selectedLatitude = ref<number | null>(null)
 const selectedLongitude = ref<number | null>(null)
-const selectedLocation = ref<{ id: string; address: string; lat: number; lng: number; priceHour: string; priceDay: string; priceMonth: string } | null>(null)
+const selectedLocation = ref<{
+  id: string
+  address: string
+  lat: number
+  lng: number
+  priceHour: string
+  priceDay: string
+  priceMonth: string
+  photos?: string[]
+  description?: string
+  covered?: boolean
+  hasSecurity?: boolean
+  hasEvCharging?: boolean
+  openSpace?: boolean
+  inYard?: boolean
+  privateTerritory?: boolean
+  hasCctv?: boolean
+} | null>(null)
 const fullScreenMapLocation = ref<{ lat: number; lng: number; address?: string } | null>(null)
 const userCar = ref<{ id: string; brand: string; model: string; number: string; region?: string; color?: string; isForeign: boolean } | null>(null)
 const userCars = ref<Array<{ id: string; brand: string; model: string; number: string; region?: string; color?: string; isForeign: boolean }>>([])
@@ -173,6 +190,101 @@ type OwnerRequest = {
 
 const ownerRequests = ref<OwnerRequest[]>([])
 const selectedOwnerRequest = ref<OwnerRequest | null>(null)
+
+// Map API booking status to frontend OwnerRequest status
+function mapLeaseStatusToOwner(apiStatus: string): OwnerRequestStatus {
+  switch (apiStatus) {
+    case 'WAITING_CONFIRMATION': return 'awaiting'
+    case 'WAITING_START': return 'confirmed'
+    case 'ACTIVE': return 'active'
+    case 'FINISHED': return 'completed'
+    case 'CANCELED': return 'cancelled'
+    default: return 'awaiting'
+  }
+}
+
+// Map API booking status to frontend Booking status
+function mapRentalStatusToBooking(apiStatus: string): Booking['status'] {
+  switch (apiStatus) {
+    case 'WAITING_CONFIRMATION': return 'awaiting'
+    case 'WAITING_START': return 'confirmed'
+    case 'ACTIVE': return 'active'
+    case 'FINISHED': return 'completed'
+    case 'CANCELED': return 'cancelled'
+    default: return 'awaiting'
+  }
+}
+
+// Parse ISO datetime to date and time strings
+function parseStartEnd(startAt: string, endAt: string): { startDate: string; startTime: string; endDate: string; endTime: string } {
+  const start = new Date(startAt)
+  const end = new Date(endAt)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return {
+    startDate: `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`,
+    startTime: `${pad(start.getHours())}:${pad(start.getMinutes())}`,
+    endDate: `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}`,
+    endTime: `${pad(end.getHours())}:${pad(end.getMinutes())}`,
+  }
+}
+
+// Load owner requests (leases) from API — so landlord can see and confirm bookings
+const loadOwnerRequests = async () => {
+  const token = localStorage.getItem('auth_token')
+  if (!token) return
+  try {
+    const res = await bookingsApi.getMyLeases(false, { size: 100 })
+    const list = res.content || []
+    ownerRequests.value = list.map((item: any) => {
+      const { startDate, startTime, endDate, endTime } = parseStartEnd(item.startAt, item.endAt)
+      const renter = item.renter ?? item.renterName
+      const renterName = renter
+        ? (typeof renter === 'string' ? renter : (renter.firstName || renter.username || 'Клиент'))
+        : 'Клиент'
+      return {
+        id: item.id,
+        address: item.spot?.address ?? '',
+        startDate,
+        endDate,
+        startTime,
+        endTime,
+        renterName,
+        status: mapLeaseStatusToOwner(item.status),
+      }
+    })
+  } catch (e) {
+    console.error('[App] loadOwnerRequests failed:', e)
+  }
+}
+
+// Load my bookings (rentals) from API — so list and WAITING_CONFIRMATION persist after refresh
+const loadBookings = async () => {
+  const token = localStorage.getItem('auth_token')
+  if (!token) return
+  try {
+    const res = await bookingsApi.getMyRentals(false, { size: 100 })
+    const list = res.content || []
+    bookings.value = list.map((item: any) => {
+      const { startDate, startTime, endDate, endTime } = parseStartEnd(item.startAt, item.endAt)
+      const rentalType = (item.rentType || 'HOURLY').toLowerCase() as 'hourly' | 'daily' | 'monthly'
+      return {
+        id: item.id,
+        address: item.spot?.address ?? '',
+        startDate,
+        endDate,
+        startTime,
+        endTime,
+        rentalType,
+        createdAt: new Date(item.createdAt || 0),
+        status: mapRentalStatusToBooking(item.status),
+        parkingSpotId: item.spot?.id,
+      }
+    })
+    bookingsCount.value = bookings.value.filter(b => b.status !== 'cancelled').length
+  } catch (e) {
+    console.error('[App] loadBookings failed:', e)
+  }
+}
 
 // Feature toggle states - will be updated as features are checked
 const featureStates = ref<Record<FeatureKey, boolean | null>>({
@@ -226,24 +338,30 @@ const profileActiveIcon = recolorSvg(profileIconSvg, greyHex, purpleHex)
 const chatInactiveIcon = chatIconSvg
 const chatActiveIcon = recolorSvg(chatIconSvg, greyHex, purpleHex)
 
-const bottomNavItems = computed(() => [
-  { id: 'home', label: 'Главная', icon: homeInactiveIcon, activeIcon: homeActiveIcon },
-  { id: 'search', label: 'Поиск', icon: searchInactiveIcon, activeIcon: searchActiveIcon },
-  { id: 'rent', label: 'Сдать', icon: rentInactiveIcon, activeIcon: rentActiveIcon },
-  {
-    id: 'profile',
-    label: 'Профиль',
-    icon: profileInactiveIcon,
-    activeIcon: profileActiveIcon,
-  },
-  {
-    id: 'chat',
-    label: 'Чаты',
-    icon: chatInactiveIcon,
-    activeIcon: chatActiveIcon,
-    badge: '3',
-  },
-])
+// Badge на «Чаты» показываем только при наличии чатов и только если есть непрочитанные (пока нет API непрочитанных — не показываем)
+const chatUnreadCount = ref(0)
+const bottomNavItems = computed(() => {
+  const hasChats = (bookingsCount.value > 0 || ownerRequests.value.length > 0)
+  const badge = hasChats && chatUnreadCount.value > 0 ? String(chatUnreadCount.value) : undefined
+  return [
+    { id: 'home', label: 'Главная', icon: homeInactiveIcon, activeIcon: homeActiveIcon },
+    { id: 'search', label: 'Поиск', icon: searchInactiveIcon, activeIcon: searchActiveIcon },
+    { id: 'rent', label: 'Сдать', icon: rentInactiveIcon, activeIcon: rentActiveIcon },
+    {
+      id: 'profile',
+      label: 'Профиль',
+      icon: profileInactiveIcon,
+      activeIcon: profileActiveIcon,
+    },
+    {
+      id: 'chat',
+      label: 'Чаты',
+      icon: chatInactiveIcon,
+      activeIcon: chatActiveIcon,
+      badge,
+    },
+  ]
+})
 
 const isNavVisible = computed(() => 
   stage.value !== 'onboarding1' && 
@@ -470,108 +588,12 @@ const goToCallVerification = async (arg1: string, arg2?: string) => {
   }
 }
 
-const handleAuthSuccess = (user: User) => {
+const handleAuthSuccess = async (user: User) => {
   localStorage.removeItem(PREVIEW_AS_ZAHARIK_KEY)
   currentUser.value = user
   userName.value = user.name
-
-   // Инициализируем заявки на бронирование для владельца места
-  if (user.phone === '+79990001122') {
-    ownerRequests.value = [
-      {
-        id: 'owner-req-1',
-        address: 'Москва, Тверская, 15',
-        startDate: '2025-12-15',
-        endDate: '2025-12-15',
-        startTime: '10:00',
-        endTime: '14:00',
-        renterName: 'Михаил',
-        status: 'awaiting',
-      },
-      {
-        id: 'owner-req-2',
-        address: 'Москва, Тверская, 15',
-        startDate: '2025-12-15',
-        endDate: '2025-12-15',
-        startTime: '16:00',
-        endTime: '20:00',
-        renterName: 'Елена',
-        status: 'cancelled',
-      },
-      {
-        id: 'owner-req-3',
-        address: 'Москва, Тверская, 15',
-        startDate: '2025-12-14',
-        endDate: '2025-12-14',
-        startTime: '09:00',
-        endTime: '12:00',
-        renterName: 'Дмитрий',
-        status: 'completed',
-      },
-      {
-        id: 'owner-req-4',
-        address: 'Москва, Тверская, 15',
-        startDate: '2025-12-16',
-        endDate: '2025-12-16',
-        startTime: '14:00',
-        endTime: '18:00',
-        renterName: 'Алексей',
-        status: 'active',
-      },
-      {
-        id: 'owner-req-5',
-        address: 'Москва, Тверская, 15',
-        startDate: '2025-12-17',
-        endDate: '2025-12-17',
-        startTime: '10:00',
-        endTime: '18:00',
-        renterName: 'Иван',
-        status: 'confirmed',
-      },
-    ]
-    bookings.value = []
-    bookingsCount.value = 0
-  } else if (user.phone === '+79990001133') {
-    // Новый клиент с подтвержденным бронированием
-    ownerRequests.value = []
-    bookings.value = [
-      {
-        id: 'booking-1',
-        address: 'ул. Льва Толстого, 18',
-        startDate: '2025-12-20',
-        endDate: '2025-12-20',
-        startTime: '10:00',
-        endTime: '14:00',
-        rentalType: 'hourly',
-        createdAt: new Date('2025-12-19'),
-        status: 'confirmed',
-        parkingSpotId: 'skyline',
-      },
-    ]
-    bookingsCount.value = 1
-  } else if (user.phone === '+79990001144') {
-    // Клиент с ожидающим подтверждения бронированием
-    ownerRequests.value = []
-    bookings.value = [
-      {
-        id: 'booking-2',
-        address: 'ул. Тверская, 15',
-        startDate: '2025-12-21',
-        endDate: '2025-12-21',
-        startTime: '10:00',
-        endTime: '12:00',
-        rentalType: 'hourly',
-        createdAt: new Date('2025-12-20'),
-        status: 'awaiting',
-        parkingSpotId: 'skyline',
-      },
-    ]
-    bookingsCount.value = 1
-  } else {
-    ownerRequests.value = []
-    bookings.value = []
-    bookingsCount.value = 0
-  }
+  await loadBookings()
+  await loadOwnerRequests()
 
   // After successful call verification, always go to home
   // (both for registration and login flows)
@@ -1046,16 +1068,17 @@ const selectedChatBooking = ref<{ address?: string; date?: string; time?: string
 const selectedChatBookingId = ref<string | undefined>(undefined) // Booking ID для получения chatId
 const previousStageBeforeChat = ref<Stage | null>(null) // Сохраняем экран, с которого открыли чат
 
-const handleOwnerRequestConfirm = () => {
+const handleOwnerRequestConfirm = async () => {
   if (!selectedOwnerRequest.value) return
-
-  // Устанавливаем статус 'confirmed' (Ожидает начала аренды) вместо 'active'
-  ownerRequests.value = ownerRequests.value.map((req) =>
-    req.id === selectedOwnerRequest.value?.id ? { ...req, status: 'confirmed' } : req,
-  )
-
-  // Navigate to booking confirmed screen
-  stage.value = 'owner-booking-confirmed'
+  try {
+    await bookingsApi.confirmBooking(selectedOwnerRequest.value.id)
+    ownerRequests.value = ownerRequests.value.map((req) =>
+      req.id === selectedOwnerRequest.value?.id ? { ...req, status: 'confirmed' } : req,
+    )
+    stage.value = 'owner-booking-confirmed'
+  } catch (e) {
+    console.error('[App] confirm booking failed:', e)
+  }
 }
 
 const handleOwnerBookingConfirmedOk = () => {
@@ -1146,26 +1169,25 @@ const handleChatListBack = () => {
   }
 }
 
-const handleOwnerRequestDecline = () => {
+const handleOwnerRequestDecline = async () => {
   if (!selectedOwnerRequest.value) return
-
-  // 1. Обновляем статус заявки на 'cancelled'
-  ownerRequests.value = ownerRequests.value.map((req) =>
-    req.id === selectedOwnerRequest.value?.id ? { ...req, status: 'cancelled' } : req,
-  )
-
-  // 2. Настраиваем данные для чата с информацией об отмене (для отправки сообщения)
-  selectedChatName.value = selectedOwnerRequest.value.renterName
-  selectedChatBooking.value = {
-    address: selectedOwnerRequest.value.address,
-    date: selectedOwnerRequest.value.startDate,
-    time: `${selectedOwnerRequest.value.startTime} — ${selectedOwnerRequest.value.endTime}`,
-    price: '₽160',
-    status: 'Отменено',
+  try {
+    await bookingsApi.cancelBooking(selectedOwnerRequest.value.id)
+    ownerRequests.value = ownerRequests.value.map((req) =>
+      req.id === selectedOwnerRequest.value?.id ? { ...req, status: 'cancelled' } : req,
+    )
+    selectedChatName.value = selectedOwnerRequest.value.renterName
+    selectedChatBooking.value = {
+      address: selectedOwnerRequest.value.address,
+      date: selectedOwnerRequest.value.startDate,
+      time: `${selectedOwnerRequest.value.startTime} — ${selectedOwnerRequest.value.endTime}`,
+      price: '₽160',
+      status: 'Отменено',
+    }
+    stage.value = 'owner-cancelled-booking'
+  } catch (e) {
+    console.error('[App] cancel booking failed:', e)
   }
-  
-  // 3. Показываем экран с отмененным бронированием (сообщение в чат будет отправлено автоматически)
-  stage.value = 'owner-cancelled-booking'
 }
 
 const handleOpenDetails = async (parking: ParkingSpot) => {
@@ -1419,6 +1441,16 @@ const handleChangePhone = () => {
   stage.value = 'change-phone'
 }
 
+const handleProfileEditName = () => {
+  previousStage.value = stage.value
+  stage.value = 'help-support'
+}
+
+const handleProfileSettings = () => {
+  previousStage.value = stage.value
+  stage.value = 'help-support'
+}
+
 const handleHelpSupport = () => {
   previousStage.value = stage.value
   stage.value = 'help-support'
@@ -1633,6 +1665,29 @@ const handleBook = async (bookingData: {
     return
   }
 
+  // Валидация дат: не прошедшая дата и год в разумных пределах (баги 8–9)
+  const now = new Date()
+  const currentYear = now.getFullYear()
+  const maxYear = currentYear + 2
+  const start = new Date(bookingData.startDate + 'T' + (bookingData.startTime || '00:00'))
+  const end = new Date(bookingData.endDate + 'T' + (bookingData.endTime || '23:59'))
+  const startYear = start.getFullYear()
+  const endYear = end.getFullYear()
+  if (start < now) {
+    loadingMessage.value = 'Ошибка'
+    loadingSubtitle.value = 'Дата начала не может быть в прошлом'
+    stage.value = 'loading'
+    setTimeout(() => { stage.value = 'rent-booking-dates' }, 2000)
+    return
+  }
+  if (startYear < currentYear || startYear > maxYear || endYear < currentYear || endYear > maxYear) {
+    loadingMessage.value = 'Ошибка'
+    loadingSubtitle.value = `Укажите год с ${currentYear} по ${maxYear}`
+    stage.value = 'loading'
+    setTimeout(() => { stage.value = 'rent-booking-dates' }, 2000)
+    return
+  }
+
   // Показываем экран загрузки с текстом "Направляем запрос на оплату"
   loadingMessage.value = 'Направляем запрос'
   loadingSubtitle.value = 'на оплату'
@@ -1817,9 +1872,18 @@ const handleSelectMapLocation = async (location: { id: string; address: string; 
       address: fullSpot.address,
       lat: fullSpot.latitude,
       lng: fullSpot.longitude,
-      priceHour: fullSpot.pricePerHour ? `${fullSpot.pricePerHour}₽/ч` : '—',
-      priceDay: fullSpot.pricePerDay ? `${fullSpot.pricePerDay}₽/день` : '—',
-      priceMonth: fullSpot.pricePerMonth ? `${fullSpot.pricePerMonth}₽/мес` : '—',
+      priceHour: fullSpot.pricePerHour != null ? `${fullSpot.pricePerHour}₽/ч` : '—',
+      priceDay: fullSpot.pricePerDay != null ? `${fullSpot.pricePerDay}₽/день` : '—',
+      priceMonth: fullSpot.pricePerMonth != null ? `${fullSpot.pricePerMonth}₽/мес` : '—',
+      photos: fullSpot.photos,
+      description: fullSpot.description,
+      covered: fullSpot.covered,
+      hasSecurity: fullSpot.hasSecurity,
+      hasEvCharging: fullSpot.hasEvCharging,
+      openSpace: fullSpot.openSpace,
+      inYard: fullSpot.inYard,
+      privateTerritory: fullSpot.privateTerritory,
+      hasCctv: fullSpot.hasCctv,
     }
     console.log('[App] Setting stage to rent-map-details, selectedLocation:', selectedLocation.value)
     stage.value = 'rent-map-details'
@@ -1830,7 +1894,7 @@ const handleSelectMapLocation = async (location: { id: string; address: string; 
     if (stage.value === 'search') {
       previousStage.value = 'search'
     }
-    // Fallback: use the basic info we have
+    // Fallback: use the basic info we have (no photos/description/features)
     selectedLocation.value = {
       id: location.id,
       address: location.address,
@@ -1966,6 +2030,12 @@ watch(stage, async (newStage) => {
   if (newStage === 'profile') {
     await loadProfileData()
   }
+
+  // Refresh bookings and owner requests when entering home (so WAITING_CONFIRMATION persist after refresh)
+  if (newStage === 'home') {
+    await loadBookings()
+    await loadOwnerRequests()
+  }
   
   // Load cars when booking dates screen is opened (if not already loaded)
   if (newStage === 'rent-booking-dates') {
@@ -2041,27 +2111,8 @@ onMounted(async () => {
   const hasToken = await runStartupAuth()
 
   if (hasToken && currentUser.value) {
-    const user = currentUser.value
-    if (user.phone === '+79990001122') {
-      ownerRequests.value = [
-        {
-          id: 'owner-req-1',
-          address: 'Москва, Тверская, 15',
-          startDate: '2025-12-15',
-          endDate: '2025-12-15',
-          startTime: '10:00',
-          endTime: '14:00',
-          renterName: 'Михаил',
-          status: 'awaiting',
-        },
-      ]
-      bookings.value = []
-      bookingsCount.value = 0
-    } else {
-      ownerRequests.value = []
-      bookings.value = []
-      bookingsCount.value = 0
-    }
+    await loadBookings()
+    await loadOwnerRequests()
     const onboarding1Enabled = await isFeatureEnabled('onboarding1')
     if (onboarding1Enabled) {
       stage.value = 'home'
@@ -2369,14 +2420,14 @@ onMounted(async () => {
           :user-car="userCar"
           :payment-card="selectedPaymentCard"
           @back="goHome"
-          @edit-name="() => {}"
+          @edit-name="handleProfileEditName"
           @edit-phone="handleChangePhone"
           @edit-car="handleChangeCar"
           @edit-payment="handleChangePaymentCard"
           @help-support="handleHelpSupport"
           @login-another="goToLogin"
           @logout="handleLogout"
-          @settings="() => {}"
+          @settings="handleProfileSettings"
         />
 
 

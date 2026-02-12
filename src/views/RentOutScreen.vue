@@ -320,6 +320,11 @@ onMounted(async () => {
   }
 })
 
+// При появлении spotId (например после навигации) загружаем данные объявления, чтобы не терять фото и описание
+watch(() => props.spotId, (id) => {
+  if (id) loadSpotData()
+})
+
 const loadSpotData = async () => {
   if (!props.spotId) return
   

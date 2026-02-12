@@ -41,6 +41,12 @@ const rentalType = ref<'hourly' | 'daily' | 'monthly'>('hourly')
 const today = new Date().toISOString().split('T')[0]
 const startDate = ref(today)
 const endDate = ref(today)
+// Максимальная дата для бронирования: не более чем через 2 года (валидация года)
+const maxBookingDate = (() => {
+  const d = new Date()
+  d.setFullYear(d.getFullYear() + 2)
+  return d.toISOString().split('T')[0]
+})()
 const startTime = ref('10:00')
 const endTime = ref('12:00')
 const termsAccepted = ref(false)
@@ -311,6 +317,7 @@ onMounted(() => {
                   type="date"
                   class="booking-dates__date-input"
                   :min="today"
+                  :max="maxBookingDate"
                 />
               </div>
             </div>
@@ -336,6 +343,7 @@ onMounted(() => {
                   type="date"
                   class="booking-dates__date-input"
                   :min="today"
+                  :max="maxBookingDate"
                 />
               </div>
               <div class="booking-dates__date-field">
@@ -345,6 +353,7 @@ onMounted(() => {
                   type="date"
                   class="booking-dates__date-input"
                   :min="startDate || today"
+                  :max="maxBookingDate"
                 />
               </div>
             </div>
@@ -360,6 +369,7 @@ onMounted(() => {
                   type="date"
                   class="booking-dates__date-input"
                   :min="today"
+                  :max="maxBookingDate"
                 />
               </div>
               <div class="booking-dates__date-field">
@@ -369,6 +379,7 @@ onMounted(() => {
                   type="date"
                   class="booking-dates__date-input"
                   :min="startDate || today"
+                  :max="maxBookingDate"
                 />
               </div>
             </div>
