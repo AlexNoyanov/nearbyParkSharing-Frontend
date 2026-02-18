@@ -114,7 +114,22 @@ type Stage =
   | 'terms-of-use'
   | 'privacy-policy'
 
-const stage = ref<Stage>('loading')
+function getNormalizedHash(): string {
+  if (typeof window === 'undefined') return ''
+  const h = (window.location.hash || '').trim().toLowerCase()
+  // поддерживаем варианты: #privacy, #privacy-policy, #/privacy-policy, #privacy/, ...
+  return h.replace(/^#\/?/, '').replace(/\/+$/, '')
+}
+
+/** Начальный экран по hash — чтобы по ссылкам #terms / #privacy сразу показывать страницы без онбординга */
+function getInitialStage(): Stage {
+  const norm = getNormalizedHash()
+  if (norm === 'terms' || norm === 'terms-of-use') return 'terms-of-use'
+  if (norm === 'privacy' || norm === 'privacy-policy') return 'privacy-policy'
+  return 'loading'
+}
+
+const stage = ref<Stage>(getInitialStage())
 const selectedParking = ref<ParkingSpot | null>(null)
 const showCancelModal = ref(false)
 const showExtendModal = ref(false)
@@ -1470,16 +1485,16 @@ const handleHelpSupportBack = () => {
 const TERMS_HASH = '#terms'
 
 function isTermsHash(): boolean {
-  const h = typeof window !== 'undefined' ? window.location.hash : ''
-  return h === '#terms' || h === '#/terms' || h === '#terms-of-use' || h.replace(/^#\/?/, '') === 'terms'
+  const norm = getNormalizedHash()
+  return norm === 'terms' || norm === 'terms-of-use'
 }
 
 /** Hash для публичной ссылки на политику конфиденциальности: #privacy */
 const PRIVACY_HASH = '#privacy'
 
 function isPrivacyHash(): boolean {
-  const h = typeof window !== 'undefined' ? window.location.hash : ''
-  return h === '#privacy' || h === '#/privacy' || h === '#privacy-policy' || h.replace(/^#\/?/, '') === 'privacy'
+  const norm = getNormalizedHash()
+  return norm === 'privacy' || norm === 'privacy-policy'
 }
 
 const handleOpenTermsOfUse = () => {
@@ -2131,27 +2146,29 @@ watch(stage, async (newStage) => {
 })
 
 onMounted(async () => {
-  // Публичная ссылка на правила: при открытии по #terms сразу показываем «Публичная оферта»
+  // Публичная ссылка на правила: показываем сразу без авторизации, авторизацию проверяем в фоне
   if (isTermsHash()) {
-    const hasToken = await runStartupAuth()
     stage.value = 'terms-of-use'
     previousStage.value = null
-    if (hasToken && currentUser.value) {
-      await loadBookings()
-      await loadOwnerRequests()
-    }
+    runStartupAuth().then(async (hasToken) => {
+      if (hasToken && currentUser.value) {
+        await loadBookings()
+        await loadOwnerRequests()
+      }
+    })
     return
   }
 
-  // Публичная ссылка на политику конфиденциальности: при открытии по #privacy
+  // Публичная ссылка на политику конфиденциальности: показываем сразу без авторизации
   if (isPrivacyHash()) {
-    const hasToken = await runStartupAuth()
     stage.value = 'privacy-policy'
     previousStage.value = null
-    if (hasToken && currentUser.value) {
-      await loadBookings()
-      await loadOwnerRequests()
-    }
+    runStartupAuth().then(async (hasToken) => {
+      if (hasToken && currentUser.value) {
+        await loadBookings()
+        await loadOwnerRequests()
+      }
+    })
     return
   }
 
