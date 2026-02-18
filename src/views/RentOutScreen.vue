@@ -325,6 +325,33 @@ watch(() => props.spotId, (id) => {
   if (id) loadSpotData()
 })
 
+/** Нормализует время из API в HH:mm для input type="time". Поддерживает ISO, HH:mm:ss и HH:mm. */
+function parseTimeFromApi(value: string): string {
+  if (!value || typeof value !== 'string') return '08:00'
+  const s = value.trim()
+  // ISO формат (2024-01-15T08:00:00Z или 2024-01-15T08:00:00): парсим и берём локальное время
+  if (s.includes('T')) {
+    try {
+      const d = new Date(s)
+      if (!Number.isNaN(d.getTime())) {
+        const h = d.getHours()
+        const m = d.getMinutes()
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+      }
+    } catch {
+      // fallback
+    }
+  }
+  // HH:mm или HH:mm:ss — берём первые 5 символов
+  const match = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?/)
+  if (match) {
+    const h = Math.min(23, Math.max(0, parseInt(match[1], 10)))
+    const m = Math.min(59, Math.max(0, parseInt(match[2], 10)))
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  }
+  return '08:00'
+}
+
 const loadSpotData = async () => {
   if (!props.spotId) return
   
@@ -379,10 +406,10 @@ const loadSpotData = async () => {
     // Fill schedule
     permanentAvailability.value = spot.scheduleType === 'ALWAYS'
     if (spot.availableFrom) {
-      fromTime.value = spot.availableFrom
+      fromTime.value = parseTimeFromApi(spot.availableFrom)
     }
     if (spot.availableTo) {
-      toTime.value = spot.availableTo
+      toTime.value = parseTimeFromApi(spot.availableTo)
     }
     if (spot.availableDays && spot.availableDays.length > 0) {
       const dayMap: Record<number, string> = {

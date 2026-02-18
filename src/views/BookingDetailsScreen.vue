@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { featuredParkings, type ParkingSpot } from '../data/parkings'
+import { spotsApi } from '../services/spotsApi'
 
 type Booking = {
   id: string
@@ -29,6 +30,27 @@ const emit = defineEmits<{
   (e: 'extend-parking'): void
 }>()
 
+// Особенности из API (только реально включённые у спота), чтобы не показывать все чекбоксы активными
+const spotFeaturesFromApi = ref<Array<{ id: string; label: string; icon: string }>>([])
+
+watch(() => props.booking.parkingSpotId, async (spotId) => {
+  spotFeaturesFromApi.value = []
+  if (!spotId) return
+  try {
+    const spot = await spotsApi.getSpotById(spotId)
+    const list: Array<{ id: string; label: string; icon: string }> = []
+    if (spot.covered) list.push({ id: 'covered', label: 'Крытая парковка', icon: 'house' })
+    if (spot.hasSecurity) list.push({ id: 'security', label: 'Охрана', icon: 'shield' })
+    if (spot.hasEvCharging) list.push({ id: 'ev', label: 'Электрозарядка', icon: 'lightning' })
+    if (spot.inYard) list.push({ id: 'courtyard', label: 'Парковка во дворе', icon: 'courtyard' })
+    if (spot.privateTerritory) list.push({ id: 'private', label: 'Частная территория', icon: 'private' })
+    if (spot.hasCctv) list.push({ id: 'cctv', label: 'Видеонаблюдение', icon: 'cctv' })
+    spotFeaturesFromApi.value = list
+  } catch {
+    // оставляем пустой список или fallback на mock
+  }
+}, { immediate: true })
+
 const parkingSpot = computed((): ParkingSpot | null => {
   if (props.booking.parkingSpotId) {
     return featuredParkings.find((p: ParkingSpot) => p.id === props.booking.parkingSpotId) || null
@@ -37,6 +59,12 @@ const parkingSpot = computed((): ParkingSpot | null => {
     props.booking.address.includes(p.address) || 
     p.address.includes(props.booking.address)
   ) || null
+})
+
+// Для блока «Особенности» используем данные из API, иначе fallback на mock
+const displayFeatures = computed(() => {
+  if (spotFeaturesFromApi.value.length > 0) return spotFeaturesFromApi.value
+  return parkingSpot.value?.features ?? []
 })
 
 const formatDate = (dateStr: string): string => {
@@ -391,12 +419,12 @@ onUnmounted(() => {
         <p class="booking-details__description-text">{{ parkingSpot.description }}</p>
       </div>
 
-      <!-- Features -->
-      <div v-if="parkingSpot && parkingSpot.features" class="booking-details__features">
+      <!-- Features: из API спота (только включённые), чтобы не отображать все чекбоксы активными -->
+      <div v-if="displayFeatures.length" class="booking-details__features">
         <h2 class="booking-details__features-title">Особенности</h2>
         <div class="booking-details__features-grid">
           <div 
-            v-for="feature in parkingSpot.features" 
+            v-for="feature in displayFeatures" 
             :key="feature.id"
             class="booking-details__feature-item"
           >

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { authApi } from '../services/authApi'
+import { authApi, getTestZaharikToken, PREVIEW_AS_ZAHARIK_KEY, PREVIEW_ZAHARIK_USER } from '../services/authApi'
 import { testMode } from '../services/testMode'
 import { mockUsers, type User } from '../services/mockAuth'
 import backIconSvg from '../assets/icons/icon-back.svg?raw'
@@ -55,11 +55,38 @@ const getInitData = (): string => {
   return ''
 }
 
+/** Номер для тестового входа: +7 (888) 888-88-88 — вход с тестовым Telegram-токеном (zaharik). */
+const TEST_PHONE_DIGITS = '78888888888'
+
 const handleSubmit = async () => {
   isLoading.value = true
   error.value = ''
 
   try {
+    const phoneDigits = phone.value.replace(/\D/g, '')
+
+    // Тестовый вход: +7 (888) 888-88-88 — используем тестовый токен и входим без звонка
+    if (phoneDigits === TEST_PHONE_DIGITS) {
+      const testToken = getTestZaharikToken()
+      if (!testToken) {
+        error.value = 'Тестовый токен не настроен (VITE_TEST_ZAHARIK_TOKEN).'
+        isLoading.value = false
+        return
+      }
+      localStorage.setItem(PREVIEW_AS_ZAHARIK_KEY, '1')
+      localStorage.setItem('auth_token', testToken)
+      const testUser: User = {
+        id: PREVIEW_ZAHARIK_USER.id,
+        name: PREVIEW_ZAHARIK_USER.firstName || PREVIEW_ZAHARIK_USER.username,
+        phone: PREVIEW_ZAHARIK_USER.phoneNumber,
+      }
+      if (props.onAuthSuccess) {
+        props.onAuthSuccess(testUser)
+      }
+      isLoading.value = false
+      return
+    }
+
     // Test mode: use mock users for login
     if (testMode.isEnabled()) {
       console.log('[LoginScreen] Test mode: Using mock authentication')

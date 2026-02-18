@@ -1704,11 +1704,15 @@ const handleBook = async (bookingData: {
       rentType: rentType,
     }
 
-    // Для почасовой аренды - используем date, timeFrom, timeTo
+    // Для почасовой аренды - конвертируем местное время в UTC и отправляем date, timeFrom, timeTo в UTC
+    // (бэкенд интерпретирует время как UTC и сохраняет в БД; иначе местное 17:00 попадало бы как 17:00Z)
     if (rentType === 'HOURLY') {
-      createBookingRequest.date = bookingData.startDate
-      createBookingRequest.timeFrom = bookingData.startTime
-      createBookingRequest.timeTo = bookingData.endTime
+      const startLocal = new Date(bookingData.startDate + 'T' + (bookingData.startTime || '00:00'))
+      const endLocal = new Date(bookingData.endDate + 'T' + (bookingData.endTime || '23:59'))
+      const pad = (n: number) => String(n).padStart(2, '0')
+      createBookingRequest.date = startLocal.toISOString().slice(0, 10)
+      createBookingRequest.timeFrom = startLocal.toISOString().slice(11, 16)
+      createBookingRequest.timeTo = endLocal.toISOString().slice(11, 16)
     }
     // Для посуточной/помесячной аренды - используем dateFrom, dateTo
     else {

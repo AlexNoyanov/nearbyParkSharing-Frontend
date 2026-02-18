@@ -36,17 +36,34 @@ const searchSuggestions = ref<Array<{ address: string; coords: [number, number] 
 const showSuggestions = ref(false)
 let suggestTimeout: number | null = null
 
-// Gallery state for preview
+// Gallery state for preview: загружаем реальные фото спота при выборе метки на карте
 const previewGalleryContainer = ref<HTMLElement | null>(null)
-const previewPhotos = [parkingLotImage, parkingLotImage, parkingLotImage]
+const previewSpotPhotos = ref<string[]>([])
+const previewPhotos = computed(() => {
+  if (previewSpotPhotos.value.length > 0) return previewSpotPhotos.value
+  return [parkingLotImage, parkingLotImage, parkingLotImage]
+})
 const previewCurrentPhotoIndex = ref(0)
+
+watch(selectedPreviewLocation, async (loc) => {
+  previewSpotPhotos.value = []
+  previewCurrentPhotoIndex.value = 0
+  if (!loc?.id) return
+  try {
+    const spot = await spotsApi.getSpotById(loc.id)
+    if (spot?.photos?.length) previewSpotPhotos.value = spot.photos
+  } catch {
+    // оставляем дефолтные фото
+  }
+})
 
 const handlePreviewGalleryScroll = () => {
   if (!previewGalleryContainer.value) return
   const container = previewGalleryContainer.value
   const width = container.offsetWidth || 1
   const index = Math.round(container.scrollLeft / width)
-  previewCurrentPhotoIndex.value = Math.max(0, Math.min(previewPhotos.length - 1, index))
+  const len = previewPhotos.value.length
+  previewCurrentPhotoIndex.value = Math.max(0, Math.min(len - 1, index))
 }
 
 // Filter state
