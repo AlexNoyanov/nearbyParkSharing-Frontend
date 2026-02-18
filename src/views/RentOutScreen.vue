@@ -352,6 +352,17 @@ function parseTimeFromApi(value: string): string {
   return '08:00'
 }
 
+/** Нормализует время для отправки в API (Swagger: "HH:mm"). */
+function normalizeTimeForApi(value: string | undefined | null): string | undefined {
+  if (!value || typeof value !== 'string') return undefined
+  const s = value.trim()
+  const match = s.match(/^(\d{1,2}):(\d{2})/)
+  if (!match) return undefined
+  const h = Math.min(23, Math.max(0, parseInt(match[1], 10)))
+  const m = Math.min(59, Math.max(0, parseInt(match[2], 10)))
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
 const loadSpotData = async () => {
   if (!props.spotId) return
   
@@ -493,6 +504,7 @@ const loadSpotData = async () => {
 // Submit
 const isSubmitting = ref(false)
 const canSubmit = computed(() => {
+  if (isLoadingSpot.value) return false
   const hasAddress = address.value.trim() !== ''
   
   // Проверяем, что для каждого активного типа аренды заполнена стоимость
@@ -509,6 +521,8 @@ const canSubmit = computed(() => {
 const showError = ref(false)
 
 const handleSubmit = async () => {
+  if (isLoadingSpot.value) return
+  if (isSubmitting.value) return
   if (!canSubmit.value) return
   
   // Check if photos are still uploading
@@ -582,12 +596,10 @@ const handleSubmit = async () => {
     
     // Add schedule details if not always available
     if (scheduleType === 'CUSTOM') {
-      if (fromTime.value) {
-        requestData.availableFrom = fromTime.value
-      }
-      if (toTime.value) {
-        requestData.availableTo = toTime.value
-      }
+      const availableFrom = normalizeTimeForApi(fromTime.value)
+      const availableTo = normalizeTimeForApi(toTime.value)
+      if (availableFrom) requestData.availableFrom = availableFrom
+      if (availableTo) requestData.availableTo = availableTo
       if (availableDays.length > 0) {
         requestData.availableDays = availableDays
       }
