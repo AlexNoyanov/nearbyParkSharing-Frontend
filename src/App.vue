@@ -1466,33 +1466,57 @@ const handleHelpSupportBack = () => {
   }
 }
 
+/** Hash для публичной ссылки на правила: #terms или #/terms */
+const TERMS_HASH = '#terms'
+
+function isTermsHash(): boolean {
+  const h = typeof window !== 'undefined' ? window.location.hash : ''
+  return h === '#terms' || h === '#/terms' || h === '#terms-of-use' || h.replace(/^#\/?/, '') === 'terms'
+}
+
+/** Hash для публичной ссылки на политику конфиденциальности: #privacy */
+const PRIVACY_HASH = '#privacy'
+
+function isPrivacyHash(): boolean {
+  const h = typeof window !== 'undefined' ? window.location.hash : ''
+  return h === '#privacy' || h === '#/privacy' || h === '#privacy-policy' || h.replace(/^#\/?/, '') === 'privacy'
+}
+
 const handleOpenTermsOfUse = () => {
   previousStage.value = 'rent-booking-dates'
   stage.value = 'terms-of-use'
+  if (typeof window !== 'undefined') window.location.hash = TERMS_HASH
 }
 
 const handleTermsOfUseBack = () => {
+  if (typeof window !== 'undefined' && window.location.hash) {
+    window.history.replaceState(null, '', window.location.pathname + window.location.search)
+  }
   const prevStage = previousStage.value
   if (prevStage) {
     stage.value = prevStage
     previousStage.value = null
   } else {
-    stage.value = 'rent-booking-dates'
+    stage.value = currentUser.value ? 'home' : 'onboarding1'
   }
 }
 
 const handleOpenPrivacyPolicy = () => {
   previousStage.value = 'rent-booking-dates'
   stage.value = 'privacy-policy'
+  if (typeof window !== 'undefined') window.location.hash = PRIVACY_HASH
 }
 
 const handlePrivacyPolicyBack = () => {
+  if (typeof window !== 'undefined' && window.location.hash) {
+    window.history.replaceState(null, '', window.location.pathname + window.location.search)
+  }
   const prevStage = previousStage.value
   if (prevStage) {
     stage.value = prevStage
     previousStage.value = null
   } else {
-    stage.value = 'rent-booking-dates'
+    stage.value = currentUser.value ? 'home' : 'onboarding1'
   }
 }
 
@@ -1709,7 +1733,6 @@ const handleBook = async (bookingData: {
     if (rentType === 'HOURLY') {
       const startLocal = new Date(bookingData.startDate + 'T' + (bookingData.startTime || '00:00'))
       const endLocal = new Date(bookingData.endDate + 'T' + (bookingData.endTime || '23:59'))
-      const pad = (n: number) => String(n).padStart(2, '0')
       createBookingRequest.date = startLocal.toISOString().slice(0, 10)
       createBookingRequest.timeFrom = startLocal.toISOString().slice(11, 16)
       createBookingRequest.timeTo = endLocal.toISOString().slice(11, 16)
@@ -2108,6 +2131,30 @@ watch(stage, async (newStage) => {
 })
 
 onMounted(async () => {
+  // Публичная ссылка на правила: при открытии по #terms сразу показываем «Публичная оферта»
+  if (isTermsHash()) {
+    const hasToken = await runStartupAuth()
+    stage.value = 'terms-of-use'
+    previousStage.value = null
+    if (hasToken && currentUser.value) {
+      await loadBookings()
+      await loadOwnerRequests()
+    }
+    return
+  }
+
+  // Публичная ссылка на политику конфиденциальности: при открытии по #privacy
+  if (isPrivacyHash()) {
+    const hasToken = await runStartupAuth()
+    stage.value = 'privacy-policy'
+    previousStage.value = null
+    if (hasToken && currentUser.value) {
+      await loadBookings()
+      await loadOwnerRequests()
+    }
+    return
+  }
+
   // Same action as "Начать использовать" button: run authentication first
   loadingMessage.value = 'Проверка входа...'
   loadingSubtitle.value = ''
@@ -2140,6 +2187,19 @@ onMounted(async () => {
     console.error('Error checking feature toggle:', error)
   }
 })
+
+// При изменении hash вручную (например вставка ссылки) — открывать правила или политику
+if (typeof window !== 'undefined') {
+  window.addEventListener('hashchange', () => {
+    if (isTermsHash() && stage.value !== 'terms-of-use') {
+      previousStage.value = stage.value || null
+      stage.value = 'terms-of-use'
+    } else if (isPrivacyHash() && stage.value !== 'privacy-policy') {
+      previousStage.value = stage.value || null
+      stage.value = 'privacy-policy'
+    }
+  })
+}
 </script>
 
 <template>

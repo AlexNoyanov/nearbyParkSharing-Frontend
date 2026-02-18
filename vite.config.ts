@@ -21,6 +21,23 @@ export default defineConfig({
           );
       },
     },
+    {
+      name: "serve-parkshare-spa",
+      configureServer(server) {
+        const handler = (req: any, _res: any, next: () => void) => {
+          const url = req.url ?? "";
+          if (
+            (url === "/parkshare" || url === "/parkshare/" || url.startsWith("/parkshare/")) &&
+            !url.startsWith("/parkshare/api")
+          ) {
+            req.url = url === "/parkshare" || url === "/parkshare/" ? "/" : "/" + url.slice("/parkshare".length);
+          }
+          next();
+        };
+        // Вставляем в начало, чтобы /parkshare и /parkshare/ отдавали SPA до проверки proxy/static
+        (server.middlewares as any).stack.unshift({ route: "", handle: handler });
+      },
+    },
   ],
   define: {
     // Polyfill for Node.js 'global' variable used by sockjs-client
@@ -29,10 +46,10 @@ export default defineConfig({
   server: {
     /**
      * Dev-only proxy to bypass backend CORS during local development.
-     * Frontend calls /parkshare/... (same-origin), Vite forwards to backend.
+     * Проксируем только /parkshare/api, чтобы по /parkshare и /parkshare/#terms отдавалась SPA.
      */
     proxy: {
-      "/parkshare": {
+      "/parkshare/api": {
         target: "https://test-app-iuwehfvnlw23275vb.koalanearby.com",
         changeOrigin: true,
         secure: false,

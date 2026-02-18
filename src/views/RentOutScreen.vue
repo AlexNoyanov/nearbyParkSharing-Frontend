@@ -344,7 +344,7 @@ function parseTimeFromApi(value: string): string {
   }
   // HH:mm или HH:mm:ss — берём первые 5 символов
   const match = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?/)
-  if (match) {
+  if (match && match[1] != null && match[2] != null) {
     const h = Math.min(23, Math.max(0, parseInt(match[1], 10)))
     const m = Math.min(59, Math.max(0, parseInt(match[2], 10)))
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
@@ -357,7 +357,7 @@ function normalizeTimeForApi(value: string | undefined | null): string | undefin
   if (!value || typeof value !== 'string') return undefined
   const s = value.trim()
   const match = s.match(/^(\d{1,2}):(\d{2})/)
-  if (!match) return undefined
+  if (!match || match[1] == null || match[2] == null) return undefined
   const h = Math.min(23, Math.max(0, parseInt(match[1], 10)))
   const m = Math.min(59, Math.max(0, parseInt(match[2], 10)))
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
