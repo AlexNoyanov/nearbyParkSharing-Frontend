@@ -295,6 +295,24 @@ const loadBookings = async () => {
         parkingSpotId: item.spot?.id,
       }
     })
+    // Авто-старт: если время начала уже наступило, переводим WAITING_START → ACTIVE на бэкенде
+    for (const b of bookings.value) {
+      if (b.status !== 'confirmed') continue
+      const startMs = new Date(b.startDate + 'T' + (b.startTime || '00:00')).getTime()
+      if (Date.now() >= startMs - 60000) {
+        try {
+          await bookingsApi.startBooking(b.id)
+          bookings.value = bookings.value.map((x) =>
+            x.id === b.id ? { ...x, status: 'active' as const } : x,
+          )
+          if (selectedBooking.value?.id === b.id) {
+            selectedBooking.value = { ...selectedBooking.value, status: 'active' as const }
+          }
+        } catch (_) {
+          // игнорируем (возможно уже стартовало или ошибка сети)
+        }
+      }
+    }
     bookingsCount.value = bookings.value.filter(b => b.status !== 'cancelled').length
   } catch (e) {
     console.error('[App] loadBookings failed:', e)
@@ -1211,9 +1229,20 @@ const handleOpenDetails = async (parking: ParkingSpot) => {
 }
 
 const handleOpenBookingFromList = async (booking: Booking) => {
-  // Открываем экран деталей бронирования
   selectedBooking.value = booking
   stage.value = 'booking-details'
+  // Если время начала уже наступило — переводим в активные на бэкенде
+  if (booking.status === 'confirmed') {
+    const startMs = new Date(booking.startDate + 'T' + (booking.startTime || '00:00')).getTime()
+    if (Date.now() >= startMs - 60000) {
+      try {
+        await bookingsApi.startBooking(booking.id)
+        const updated = { ...booking, status: 'active' as const }
+        bookings.value = bookings.value.map((x) => (x.id === booking.id ? updated : x))
+        selectedBooking.value = updated
+      } catch (_) {}
+    }
+  }
 }
 
 const handleOpenBookingDetails = async (booking: Booking) => {
@@ -1223,6 +1252,18 @@ const handleOpenBookingDetails = async (booking: Booking) => {
     return
   }
   selectedBooking.value = booking
+  // Если время начала уже наступило — переводим в активные на бэкенде
+  if (booking.status === 'confirmed') {
+    const startMs = new Date(booking.startDate + 'T' + (booking.startTime || '00:00')).getTime()
+    if (Date.now() >= startMs - 60000) {
+      try {
+        await bookingsApi.startBooking(booking.id)
+        const updated = { ...booking, status: 'active' as const }
+        bookings.value = bookings.value.map((x) => (x.id === booking.id ? updated : x))
+        selectedBooking.value = updated
+      } catch (_) {}
+    }
+  }
   const enabled = await isFeatureEnabled('booking-details')
   console.log('[App] Feature booking-details enabled:', enabled)
   if (enabled) {
@@ -1235,47 +1276,65 @@ const handleOpenBookingDetails = async (booking: Booking) => {
   }
 }
 
-const handleStartParking = () => {
+const handleStartParking = async () => {
   if (!selectedBooking.value) return
-  // Переходим на экран раннего бронирования
+  const b = selectedBooking.value
+  if (b.status !== 'confirmed') return
+  const startMs = new Date(b.startDate + 'T' + (b.startTime || '00:00')).getTime()
+  const now = Date.now()
+  // Если время начала уже наступило (или в пределах 1 мин) — сразу вызываем API старта
+  if (now >= startMs - 60000) {
+    try {
+      loadingMessage.value = 'Начинаем парковку...'
+      loadingSubtitle.value = ''
+      stage.value = 'loading'
+      await bookingsApi.startBooking(b.id)
+      const updated = { ...b, status: 'active' as const }
+      bookings.value = bookings.value.map((x) => (x.id === b.id ? updated : x))
+      selectedBooking.value = updated
+      stage.value = 'booking-details'
+    } catch (e) {
+      console.error('[App] startBooking failed:', e)
+      loadingMessage.value = 'Ошибка'
+      loadingSubtitle.value = (e as Error)?.message || 'Не удалось начать парковку'
+      setTimeout(() => { stage.value = 'booking-details' }, 2000)
+    }
+    return
+  }
+  // Раньше времени — экран раннего старта (доплата или подождать)
   stage.value = 'early-booking'
-  console.log('[App] Opening early booking screen for booking:', selectedBooking.value.id)
+  console.log('[App] Opening early booking screen for booking:', b.id)
 }
 
 const handleEarlyBookingBack = () => {
   stage.value = 'booking-details'
 }
 
-const handleEarlyBookingPayAndStart = () => {
+const handleEarlyBookingPayAndStart = async () => {
   if (!selectedBooking.value) return
-  
-  // Показываем экран загрузки с текстом "Оплата успешно"
-  loadingMessage.value = 'Оплата успешно'
-  loadingSubtitle.value = ''
-  stage.value = 'loading'
-  
-  // Через 2 секунды возвращаемся на экран деталей бронирования
-  setTimeout(() => {
-    if (!selectedBooking.value) return
-    // Обновляем статус бронирования на 'active'
-    const updatedBooking = { ...selectedBooking.value, status: 'active' as const }
-    bookings.value = bookings.value.map((b) =>
-      b.id === selectedBooking.value?.id ? updatedBooking : b,
-    )
+  const b = selectedBooking.value
+  try {
+    loadingMessage.value = 'Оплата успешно'
+    loadingSubtitle.value = ''
+    stage.value = 'loading'
+    await bookingsApi.startBooking(b.id)
+    const updatedBooking = { ...b, status: 'active' as const }
+    bookings.value = bookings.value.map((x) => (x.id === b.id ? updatedBooking : x))
     selectedBooking.value = updatedBooking
-    
-    // Обновляем статус в selectedChatBooking, если чат открыт или будет открыт
     if (selectedChatBooking.value) {
-      selectedChatBooking.value = {
-        ...selectedChatBooking.value,
-        status: 'Активное'
-      }
+      selectedChatBooking.value = { ...selectedChatBooking.value, status: 'Активное' }
     }
-    
-    // Переходим на экран деталей бронирования
-    stage.value = 'booking-details'
-    console.log('[App] Paid and started parking for booking:', selectedBooking.value.id)
-  }, 2000)
+    setTimeout(() => {
+      stage.value = 'booking-details'
+      console.log('[App] Paid and started parking for booking:', b.id)
+    }, 1500)
+  } catch (e) {
+    console.error('[App] startBooking (early) failed:', e)
+    loadingMessage.value = 'Ошибка'
+    loadingSubtitle.value = (e as Error)?.message || 'Не удалось начать парковку'
+    stage.value = 'loading'
+    setTimeout(() => { stage.value = 'early-booking' }, 2000)
+  }
 }
 
 const handleEarlyBookingWaitForScheduled = () => {
@@ -1743,11 +1802,32 @@ const handleBook = async (bookingData: {
       rentType: rentType,
     }
 
-    // Для почасовой аренды - конвертируем местное время в UTC и отправляем date, timeFrom, timeTo в UTC
-    // (бэкенд интерпретирует время как UTC и сохраняет в БД; иначе местное 17:00 попадало бы как 17:00Z)
+    // Для почасовой аренды — конвертируем местное время пользователя в UTC.
+    // Бэкенд интерпретирует date/timeFrom/timeTo как UTC; иначе 17:00 GMT+5 уходило бы как 17:00Z (в БД 22:00 GMT+5).
+    // Собираем локальную дату через конструктор (год, месяц, день, час, мин), чтобы не зависеть от парсинга "YYYY-MM-DDTHH:mm".
     if (rentType === 'HOURLY') {
-      const startLocal = new Date(bookingData.startDate + 'T' + (bookingData.startTime || '00:00'))
-      const endLocal = new Date(bookingData.endDate + 'T' + (bookingData.endTime || '23:59'))
+      const startParts = bookingData.startDate.split('-').map(Number)
+      const startTimeParts = (bookingData.startTime || '00:00').split(':').map(Number)
+      const endParts = bookingData.endDate.split('-').map(Number)
+      const endTimeParts = (bookingData.endTime || '23:59').split(':').map(Number)
+      const startLocal = new Date(
+        startParts[0] ?? 0,
+        (startParts[1] ?? 1) - 1,
+        startParts[2] ?? 1,
+        startTimeParts[0] ?? 0,
+        startTimeParts[1] ?? 0,
+        0,
+        0,
+      )
+      const endLocal = new Date(
+        endParts[0] ?? 0,
+        (endParts[1] ?? 1) - 1,
+        endParts[2] ?? 1,
+        endTimeParts[0] ?? 0,
+        endTimeParts[1] ?? 0,
+        0,
+        0,
+      )
       createBookingRequest.date = startLocal.toISOString().slice(0, 10)
       createBookingRequest.timeFrom = startLocal.toISOString().slice(11, 16)
       createBookingRequest.timeTo = endLocal.toISOString().slice(11, 16)
