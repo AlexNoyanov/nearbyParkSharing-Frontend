@@ -65,6 +65,8 @@ export interface CreateBookingRequest {
   spotId: string
   carId: string
   rentType: RentType
+  // Client timezone offset in minutes relative to UTC, as string (e.g. "180" for GMT+3)
+  utcOffset?: string
   // For HOURLY
   date?: string // YYYY-MM-DD
   timeFrom?: string // HH:mm

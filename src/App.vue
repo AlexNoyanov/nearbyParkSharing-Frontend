@@ -1802,35 +1802,21 @@ const handleBook = async (bookingData: {
       rentType: rentType,
     }
 
-    // Для почасовой аренды — конвертируем местное время пользователя в UTC.
-    // Бэкенд интерпретирует date/timeFrom/timeTo как UTC; иначе 17:00 GMT+5 уходило бы как 17:00Z (в БД 22:00 GMT+5).
-    // Собираем локальную дату через конструктор (год, месяц, день, час, мин), чтобы не зависеть от парсинга "YYYY-MM-DDTHH:mm".
+    // utcOffset — смещение клиентского часового пояса в формате ZoneOffset, как ожидает бэкенд (например, "+03:00").
+    // JS getTimezoneOffset() возвращает минуты ПОЗАДИ UTC (для GMT+3 это -180), поэтому меняем знак и форматируем.
+    const offsetMinutes = -new Date().getTimezoneOffset()
+    const sign = offsetMinutes >= 0 ? '+' : '-'
+    const absMinutes = Math.abs(offsetMinutes)
+    const hours = Math.floor(absMinutes / 60)
+    const minutes = absMinutes % 60
+    createBookingRequest.utcOffset = `${sign}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+
+    // Для почасовой аренды отправляем в API локальные дату и время, как указал пользователь.
+    // Бэкенд по Swagger принимает поля date, timeFrom, timeTo (без таймзоны) и сам конвертирует их в UTC (startAt/endAt).
     if (rentType === 'HOURLY') {
-      const startParts = bookingData.startDate.split('-').map(Number)
-      const startTimeParts = (bookingData.startTime || '00:00').split(':').map(Number)
-      const endParts = bookingData.endDate.split('-').map(Number)
-      const endTimeParts = (bookingData.endTime || '23:59').split(':').map(Number)
-      const startLocal = new Date(
-        startParts[0] ?? 0,
-        (startParts[1] ?? 1) - 1,
-        startParts[2] ?? 1,
-        startTimeParts[0] ?? 0,
-        startTimeParts[1] ?? 0,
-        0,
-        0,
-      )
-      const endLocal = new Date(
-        endParts[0] ?? 0,
-        (endParts[1] ?? 1) - 1,
-        endParts[2] ?? 1,
-        endTimeParts[0] ?? 0,
-        endTimeParts[1] ?? 0,
-        0,
-        0,
-      )
-      createBookingRequest.date = startLocal.toISOString().slice(0, 10)
-      createBookingRequest.timeFrom = startLocal.toISOString().slice(11, 16)
-      createBookingRequest.timeTo = endLocal.toISOString().slice(11, 16)
+      createBookingRequest.date = bookingData.startDate
+      createBookingRequest.timeFrom = bookingData.startTime
+      createBookingRequest.timeTo = bookingData.endTime
     }
     // Для посуточной/помесячной аренды - используем dateFrom, dateTo
     else {
