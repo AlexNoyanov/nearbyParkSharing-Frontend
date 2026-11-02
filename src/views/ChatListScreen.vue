@@ -20,6 +20,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'back'): void
   (e: 'open-chat', booking: Booking): void
+  (e: 'open-support-chat'): void
 }>()
 
 const filterType = ref<'all' | 'active'>('all')
@@ -139,6 +140,14 @@ onMounted(async () => {
     </div>
 
     <div ref="contentRef" class="chat-list__content">
+      <button type="button" class="chat-list__support" @click="emit('open-support-chat')">
+        <span class="chat-list__support-mark">ИИ</span>
+        <span class="chat-list__support-copy">
+          <span class="chat-list__support-title">ИИ-техподдержка</span>
+          <span class="chat-list__support-text">Отвечает по базе знаний ParkShare на этом компьютере</span>
+        </span>
+      </button>
+
       <div v-if="filteredBookings.length > 0" class="chat-list__bookings">
         <article
           v-for="booking in filteredBookings"
@@ -289,7 +298,54 @@ onMounted(async () => {
   overflow-y: auto;
   padding: 16px 24px;
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.chat-list__support {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 428px;
+  padding: 14px 16px;
+  border: none;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  text-align: left;
+}
+
+.chat-list__support-mark {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #9333ea, #2563eb);
+  color: #ffffff;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.chat-list__support-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-list__support-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: #1f2937;
+}
+
+.chat-list__support-text {
+  font-size: 12px;
+  color: #6b7280;
 }
 
 .chat-list__bookings {

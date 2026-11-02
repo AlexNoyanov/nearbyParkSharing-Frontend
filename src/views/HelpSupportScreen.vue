@@ -13,6 +13,7 @@ type FAQItem = {
 const emit = defineEmits<{
   (e: 'back'): void
   (e: 'contact-support'): void
+  (e: 'open-support-chat'): void
 }>()
 
 const selectedCategory = ref<FAQCategory>('all')
@@ -195,6 +196,13 @@ onMounted(async () => {
         <p class="help-support__support-title">Не нашли ответ?</p>
         <p class="help-support__support-subtitle">Напишите в службу поддержки</p>
         
+        <button
+          type="button"
+          class="help-support__ai-button"
+          @click="emit('open-support-chat')"
+        >
+          Спросить ИИ-техподдержку
+        </button>
         <button
           type="button"
           class="help-support__contact-button"
@@ -452,6 +460,23 @@ onMounted(async () => {
   line-height: 2.16;
   color: #4B5563;
   text-align: center;
+}
+
+.help-support__ai-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #9333ea 0%, #2563eb 100%);
+  color: #ffffff;
+  cursor: pointer;
+  font-family: Inter, sans-serif;
+  font-weight: 600;
+  font-size: 14px;
 }
 
 .help-support__contact-button {

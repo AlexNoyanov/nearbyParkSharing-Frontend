@@ -13,6 +13,8 @@ interface ImportMetaEnv {
   readonly VITE_FIREBASE_MEASUREMENT_ID?: string
   /** Тестовый JWT для учётной записи zaharik (режим «Просто посмотреть»). Задать в .env.local */
   readonly VITE_TEST_ZAHARIK_TOKEN?: string
+  /** База ИИ-поддержки. Пусто — тот же адрес, что у приложения (/api/support). */
+  readonly VITE_SUPPORT_API_URL?: string
 }
 
 interface ImportMeta {

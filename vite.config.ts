@@ -49,6 +49,10 @@ export default defineConfig({
      * Проксируем только /parkshare/api, чтобы по /parkshare и /parkshare/#terms отдавалась SPA.
      */
     proxy: {
+      "/api/support": {
+        target: "http://127.0.0.1:8787",
+        changeOrigin: true,
+      },
       "/parkshare/api": {
         target: "https://test-app-iuwehfvnlw23275vb.koalanearby.com",
         changeOrigin: true,

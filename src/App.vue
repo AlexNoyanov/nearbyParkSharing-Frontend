@@ -60,6 +60,7 @@ import BookingExtendedScreen from './views/BookingExtendedScreen.vue'
 import ProfileScreen from './views/ProfileScreen.vue'
 import ChangePhoneScreen from './views/ChangePhoneScreen.vue'
 import HelpSupportScreen from './views/HelpSupportScreen.vue'
+import SupportChatScreen from './views/SupportChatScreen.vue'
 import UnpublishSpotScreen from './views/UnpublishSpotScreen.vue'
 import TermsOfUseScreen from './views/TermsOfUseScreen.vue'
 import PrivacyPolicyScreen from './views/PrivacyPolicyScreen.vue'
@@ -109,6 +110,7 @@ type Stage =
   | 'rental-completion'
   | 'booking-extended'
   | 'help-support'
+  | 'support-chat'
   | 'my-spots'
   | 'unpublish-spot'
   | 'terms-of-use'
@@ -126,6 +128,7 @@ function getInitialStage(): Stage {
   const norm = getNormalizedHash()
   if (norm === 'terms' || norm === 'terms-of-use') return 'terms-of-use'
   if (norm === 'privacy' || norm === 'privacy-policy') return 'privacy-policy'
+  if (norm === 'support') return 'support-chat'
   return 'loading'
 }
 
@@ -419,6 +422,7 @@ const isNavVisible = computed(() =>
   stage.value !== 'payment-cards' &&
   stage.value !== 'placeholder' &&
   stage.value !== 'chat' &&
+  stage.value !== 'support-chat' &&
   stage.value !== 'owner-request-confirmation' &&
   stage.value !== 'owner-request-decline' &&
   stage.value !== 'owner-booking-confirmed' &&
@@ -1540,6 +1544,34 @@ const handleHelpSupportBack = () => {
   }
 }
 
+function isSupportHash(): boolean {
+  return getNormalizedHash() === 'support'
+}
+
+const openSupportChat = () => {
+  if (stage.value !== 'support-chat') previousStage.value = stage.value
+  stage.value = 'support-chat'
+  navSelection.value = 'chat'
+}
+
+const handleSupportChatBack = () => {
+  if (isSupportHash() && typeof window !== 'undefined') {
+    history.replaceState(null, '', window.location.pathname + window.location.search)
+  }
+  const prevStage = previousStage.value
+  previousStage.value = null
+  if (prevStage && prevStage !== 'support-chat' && prevStage !== 'loading') {
+    stage.value = prevStage
+    return
+  }
+  if (currentUser.value) {
+    stage.value = 'home'
+    navSelection.value = 'home'
+    return
+  }
+  stage.value = 'onboarding1'
+}
+
 /** Hash для публичной ссылки на правила: #terms или #/terms */
 const TERMS_HASH = '#terms'
 
@@ -2238,6 +2270,13 @@ onMounted(async () => {
     return
   }
 
+  if (isSupportHash()) {
+    stage.value = 'support-chat'
+    previousStage.value = null
+    navSelection.value = 'chat'
+    return
+  }
+
   // Same action as "Начать использовать" button: run authentication first
   loadingMessage.value = 'Проверка входа...'
   loadingSubtitle.value = ''
@@ -2280,6 +2319,10 @@ if (typeof window !== 'undefined') {
     } else if (isPrivacyHash() && stage.value !== 'privacy-policy') {
       previousStage.value = stage.value || null
       stage.value = 'privacy-policy'
+    } else if (isSupportHash() && stage.value !== 'support-chat') {
+      previousStage.value = stage.value || null
+      stage.value = 'support-chat'
+      navSelection.value = 'chat'
     }
   })
 }
@@ -2589,6 +2632,12 @@ if (typeof window !== 'undefined') {
           v-else-if="stage === 'help-support'"
           @back="handleHelpSupportBack"
           @contact-support="handleHelpSupportBack"
+          @open-support-chat="openSupportChat"
+        />
+
+        <SupportChatScreen
+          v-else-if="stage === 'support-chat'"
+          @back="handleSupportChatBack"
         />
 
         <ChatListScreen
@@ -2597,6 +2646,7 @@ if (typeof window !== 'undefined') {
           :owner-requests="ownerRequests"
           @back="handleChatListBack"
           @open-chat="handleOpenChatFromList"
+          @open-support-chat="openSupportChat"
         />
 
         <BookingListScreen
@@ -2746,6 +2796,7 @@ if (typeof window !== 'undefined') {
 }
 
 .app__content:has(.chat),
+.app__content:has(.support-chat),
 .app__content:has(.search-screen),
 .app__content:has(.rent-out) {
   padding-bottom: 0;
